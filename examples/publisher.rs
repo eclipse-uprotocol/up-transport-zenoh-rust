@@ -18,7 +18,7 @@ use uprotocol_sdk::{
     transport::datamodel::UTransport,
     uprotocol::{Data, UEntity, UPayload, UPayloadFormat, UPriority, UResource, UUri},
 };
-use uprotocol_zenoh_rust::ULinkZenoh;
+use uprotocol_zenoh::ULinkZenoh;
 use zenoh::config::Config;
 
 #[async_std::main]

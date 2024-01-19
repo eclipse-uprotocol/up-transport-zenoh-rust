@@ -18,7 +18,7 @@ use uprotocol_sdk::{
     uri::builder::resourcebuilder::UResourceBuilder,
     uuid::builder::UUIDv8Builder,
 };
-use uprotocol_zenoh_rust::ULinkZenoh;
+use uprotocol_zenoh::ULinkZenoh;
 use zenoh::config::Config;
 
 #[async_std::main]

@@ -1,5 +1,5 @@
 [package]
-name = "uprotocol_zenoh_rust"
+name = "uprotocol_zenoh"
 version = "0.1.0"
 edition = "2021"
 
@@ -12,11 +12,11 @@ pedantic = "deny"
 
 [dependencies]
 # Official one
-#uprotocol-sdk = { git = "https://github.com/eclipse-uprotocol/uprotocol-rust.git", branch = "main" }
+#uprotocol-sdk = { git = "https://github.com/eclipse-uprotocol/up-rust", branch = "main" }
 # ZettaScale one
-uprotocol-sdk = { git = "https://github.com/ZettaScaleLabs/uprotocol-rust.git", branch = "support_rpcserver" }
+uprotocol-sdk = { git = "https://github.com/ZettaScaleLabs/up-rust.git", branch = "support_rpcserver" }
 # Debug
-#uprotocol-sdk = { path = "../uprotocol-rust" }
+#uprotocol-sdk = { path = "../up-rust" }
 prost = "0.12"
 prost-types = "0.12"
 cloudevents-sdk = { version = "0.7.0" }

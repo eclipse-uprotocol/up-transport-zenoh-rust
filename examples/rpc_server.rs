@@ -21,7 +21,7 @@ use uprotocol_sdk::{
     uprotocol::{Data, UEntity, UMessage, UMessageType, UPayload, UPayloadFormat, UStatus, UUri},
     uri::builder::resourcebuilder::UResourceBuilder,
 };
-use uprotocol_zenoh_rust::ULinkZenoh;
+use uprotocol_zenoh::ULinkZenoh;
 use zenoh::config::Config;
 
 #[async_std::main]
