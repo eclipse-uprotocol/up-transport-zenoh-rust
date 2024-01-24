@@ -24,7 +24,7 @@ use uprotocol_sdk::{
     transport::{datamodel::UTransport, validator::Validators},
     uprotocol::{
         Data, UAttributes, UCode, UEntity, UMessage, UMessageType, UPayload, UPayloadFormat,
-        UPriority, UStatus, UUri, Uuid,
+        UPriority, UStatus, UUri,
     },
     uri::{
         serializer::{MicroUriSerializer, UriSerializer},
@@ -94,11 +94,6 @@ impl ULinkZenoh {
             // https://github.com/eclipse-uprotocol/uprotocol-spec/blob/main/basics/qos.adoc
             UPriority::UpriorityUnspecified => Priority::DataLow,
         }
-    }
-
-    // TODO: We need a standard way in uprotocol-rust to change UUID to String
-    fn uuid_to_string(uuid: &Uuid) -> String {
-        format!("{}:{}", uuid.msb, uuid.lsb)
     }
 
     async fn send_publish(
@@ -172,9 +167,13 @@ impl ULinkZenoh {
             ));
         };
         // Get reqid
-        let reqid = ULinkZenoh::uuid_to_string(&attributes.reqid.ok_or(
-            UStatus::fail_with_code(UCode::InvalidArgument, "reqid doesn't exist"),
-        )?);
+        let reqid: String = attributes
+            .reqid
+            .ok_or(UStatus::fail_with_code(
+                UCode::InvalidArgument,
+                "reqid doesn't exist",
+            ))?
+            .into();
 
         // Add attachment and payload
         let mut attachment = AttachmentBuilder::new();
@@ -202,7 +201,6 @@ impl ULinkZenoh {
             .clone();
 
         // Send data
-        // TODO: Unable to use unwrap in with_attachment (Attachment doesn't have Debug trait)
         query
             .reply(reply)
             .with_attachment(attachment.build())
@@ -386,10 +384,7 @@ impl RpcServer for ULinkZenoh {
                 payload: Some(u_payload),
             };
             if let Some(reqid) = u_attribute.reqid {
-                query_map
-                    .lock()
-                    .unwrap()
-                    .insert(ULinkZenoh::uuid_to_string(&reqid), query);
+                query_map.lock().unwrap().insert(reqid.into(), query);
             } else {
                 listener(Err(UStatus::fail_with_code(
                     UCode::Internal,
