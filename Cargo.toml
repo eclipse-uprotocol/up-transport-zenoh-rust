@@ -11,16 +11,10 @@ pedantic = "deny"
 #nursery = "deny"
 
 [dependencies]
-# Official one
-#uprotocol-sdk = { git = "https://github.com/eclipse-uprotocol/up-rust", branch = "main" }
-# ZettaScale one
-uprotocol-sdk = { git = "https://github.com/ZettaScaleLabs/up-rust.git", branch = "support_rpcserver" }
-# Debug
-#uprotocol-sdk = { path = "../up-rust" }
+uprotocol-sdk = { git = "https://github.com/eclipse-uprotocol/up-rust", branch = "main" }
 prost = "0.12"
 prost-types = "0.12"
 cloudevents-sdk = { version = "0.7.0" }
-#zenoh = { git = "https://github.com/eclipse-zenoh/zenoh.git", branch = 'master', features = ["unstable"]}
 zenoh = { version = "0.10.1-rc", features = ["unstable"]}
 async-trait = "0.1"
 async-std = "1.12.0"
