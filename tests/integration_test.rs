@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use async_std::task::{self, block_on};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time;
 use uprotocol_sdk::{
     rpc::{RpcClient, RpcServer},
@@ -181,9 +181,7 @@ async fn test_publish_and_subscribe() {
 #[async_std::test]
 async fn test_rpc_server_client() {
     let upclient_client = UPClientZenoh::new(Config::default()).await.unwrap();
-    let upclient_server = Arc::new(Mutex::new(
-        UPClientZenoh::new(Config::default()).await.unwrap(),
-    ));
+    let upclient_server = Arc::new(UPClientZenoh::new(Config::default()).await.unwrap());
     let client_data = String::from("This is the client data");
     let server_data = String::from("This is the server data");
     let uuri = create_rpcserver_uuri();
@@ -218,13 +216,7 @@ async fn test_rpc_server_client() {
                 let mut uattributes = attributes.unwrap();
                 uattributes.set_type(UMessageType::UmessageTypeResponse);
                 // Send back result
-                block_on(
-                    upclient_server_cloned
-                        .lock()
-                        .unwrap()
-                        .send(uuri, upayload, uattributes),
-                )
-                .unwrap();
+                block_on(upclient_server_cloned.send(uuri, upayload, uattributes)).unwrap();
             }
             Err(ustatus) => {
                 panic!("Internal Error: {:?}", ustatus);
@@ -232,8 +224,6 @@ async fn test_rpc_server_client() {
         }
     };
     upclient_server
-        .lock()
-        .unwrap()
         .register_rpc_listener(uuri.clone(), Box::new(callback))
         .await
         .unwrap();

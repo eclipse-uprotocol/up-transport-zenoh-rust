@@ -13,7 +13,7 @@
 //
 use async_std::task::{self, block_on};
 use chrono::Utc;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time;
 use uprotocol_sdk::{
     rpc::RpcServer,
@@ -27,9 +27,7 @@ use zenoh::config::Config;
 #[async_std::main]
 async fn main() {
     println!("uProtocol RPC server example");
-    let rpc_server = Arc::new(Mutex::new(
-        UPClientZenoh::new(Config::default()).await.unwrap(),
-    ));
+    let rpc_server = Arc::new(UPClientZenoh::new(Config::default()).await.unwrap());
 
     // create uuri
     // TODO: Need to check whether the way to create ID is correct?
@@ -73,13 +71,7 @@ async fn main() {
                 let mut uattributes = attributes.unwrap();
                 uattributes.set_type(UMessageType::UmessageTypeResponse);
                 // Send back result
-                block_on(
-                    rpc_server_cloned
-                        .lock()
-                        .unwrap()
-                        .send(uuri, upayload, uattributes),
-                )
-                .unwrap();
+                block_on(rpc_server_cloned.send(uuri, upayload, uattributes)).unwrap();
             }
             Err(ustatus) => {
                 println!("Internal Error: {:?}", ustatus);
@@ -89,8 +81,6 @@ async fn main() {
 
     println!("Register the listener...");
     rpc_server
-        .lock()
-        .unwrap()
         .register_rpc_listener(uuri, Box::new(callback))
         .await
         .unwrap();
