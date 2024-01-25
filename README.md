@@ -27,4 +27,5 @@ cargo run --example rpc_client
 ```
 
 # Note
-The project is based on [uprotocol-rust](https://github.com/eclipse-uprotocol/uprotocol-rust/tree/uprotocol_1.5)
+
+The implementation follows the spec defined in [up-l1/zenoh](https://github.com/eclipse-uprotocol/up-spec/blob/main/up-l1/zenoh.adoc).
