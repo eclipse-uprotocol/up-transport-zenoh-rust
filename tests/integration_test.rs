@@ -25,7 +25,7 @@ use uprotocol_sdk::{
     uri::builder::resourcebuilder::UResourceBuilder,
     uuid::builder::UUIDv8Builder,
 };
-use uprotocol_zenoh::ULinkZenoh;
+use uprotocol_zenoh::UPClientZenoh;
 use zenoh::config::Config;
 
 // TODO: Need to check whether the way to create ID is correct?
@@ -66,25 +66,25 @@ fn create_rpcserver_uuri() -> UUri {
 
 #[async_std::test]
 async fn test_utransport_register_and_unregister() {
-    let ulinkzenoh = ULinkZenoh::new(Config::default()).await.unwrap();
+    let upclient = UPClientZenoh::new(Config::default()).await.unwrap();
     let uuri = create_utransport_uuri();
 
     // Compare the return string
-    let listener_string = ulinkzenoh
+    let listener_string = upclient
         .register_listener(uuri.clone(), Box::new(|_| {}))
         .await
         .unwrap();
     assert_eq!(listener_string, "0100162e04d20100_0");
 
     // Able to ungister
-    let result = ulinkzenoh
+    let result = upclient
         .unregister_listener(uuri.clone(), &listener_string)
         .await
         .unwrap();
     assert_eq!(result, ());
 
     // Unable to ungister
-    let result = ulinkzenoh
+    let result = upclient
         .unregister_listener(uuri.clone(), &listener_string)
         .await;
     assert_eq!(
@@ -98,25 +98,25 @@ async fn test_utransport_register_and_unregister() {
 
 #[async_std::test]
 async fn test_rpcserver_register_and_unregister() {
-    let ulinkzenoh = ULinkZenoh::new(Config::default()).await.unwrap();
+    let upclient = UPClientZenoh::new(Config::default()).await.unwrap();
     let uuri = create_rpcserver_uuri();
 
     // Compare the return string
-    let listener_string = ulinkzenoh
+    let listener_string = upclient
         .register_rpc_listener(uuri.clone(), Box::new(|_| {}))
         .await
         .unwrap();
     assert_eq!(listener_string, "0100162e04d20100_0");
 
     // Able to ungister
-    let result = ulinkzenoh
+    let result = upclient
         .unregister_rpc_listener(uuri.clone(), &listener_string)
         .await
         .unwrap();
     assert_eq!(result, ());
 
     // Unable to ungister
-    let result = ulinkzenoh
+    let result = upclient
         .unregister_rpc_listener(uuri.clone(), &listener_string)
         .await;
     assert_eq!(
@@ -131,7 +131,7 @@ async fn test_rpcserver_register_and_unregister() {
 #[async_std::test]
 async fn test_publish_and_subscribe() {
     let target_data = String::from("Hello World!");
-    let ulinkzenoh = ULinkZenoh::new(Config::default()).await.unwrap();
+    let upclient = UPClientZenoh::new(Config::default()).await.unwrap();
     let uuri = create_utransport_uuri();
 
     // Register the listener
@@ -149,7 +149,7 @@ async fn test_publish_and_subscribe() {
         }
         Err(ustatus) => println!("Internal Error: {:?}", ustatus),
     };
-    let listener_string = ulinkzenoh
+    let listener_string = upclient
         .register_listener(uuri.clone(), Box::new(listener))
         .await
         .unwrap();
@@ -163,7 +163,7 @@ async fn test_publish_and_subscribe() {
         format: UPayloadFormat::UpayloadFormatText as i32,
         data: Some(Data::Value(target_data.as_bytes().to_vec())),
     };
-    ulinkzenoh
+    upclient
         .send(uuri.clone(), payload, attributes.clone())
         .await
         .unwrap();
@@ -172,7 +172,7 @@ async fn test_publish_and_subscribe() {
     task::sleep(time::Duration::from_millis(1000)).await;
 
     // Cleanup
-    ulinkzenoh
+    upclient
         .unregister_listener(uuri.clone(), &listener_string)
         .await
         .unwrap();
@@ -180,16 +180,16 @@ async fn test_publish_and_subscribe() {
 
 #[async_std::test]
 async fn test_rpc_server_client() {
-    let ulinkzenoh_client = ULinkZenoh::new(Config::default()).await.unwrap();
-    let ulinkzenoh_server = Arc::new(Mutex::new(
-        ULinkZenoh::new(Config::default()).await.unwrap(),
+    let upclient_client = UPClientZenoh::new(Config::default()).await.unwrap();
+    let upclient_server = Arc::new(Mutex::new(
+        UPClientZenoh::new(Config::default()).await.unwrap(),
     ));
     let client_data = String::from("This is the client data");
     let server_data = String::from("This is the server data");
     let uuri = create_rpcserver_uuri();
 
     // setup RpcServer callback
-    let ulinkzenoh_server_cloned = ulinkzenoh_server.clone();
+    let upclient_server_cloned = upclient_server.clone();
     let server_data_cloned = server_data.clone();
     let client_data_cloned = client_data.clone();
     let callback = move |result: Result<UMessage, UStatus>| {
@@ -218,11 +218,12 @@ async fn test_rpc_server_client() {
                 let mut uattributes = attributes.unwrap();
                 uattributes.set_type(UMessageType::UmessageTypeResponse);
                 // Send back result
-                block_on(ulinkzenoh_server_cloned.lock().unwrap().send(
-                    uuri,
-                    upayload,
-                    uattributes,
-                ))
+                block_on(
+                    upclient_server_cloned
+                        .lock()
+                        .unwrap()
+                        .send(uuri, upayload, uattributes),
+                )
                 .unwrap();
             }
             Err(ustatus) => {
@@ -230,7 +231,7 @@ async fn test_rpc_server_client() {
             }
         }
     };
-    ulinkzenoh_server
+    upclient_server
         .lock()
         .unwrap()
         .register_rpc_listener(uuri.clone(), Box::new(callback))
@@ -251,7 +252,7 @@ async fn test_rpc_server_client() {
         format: UPayloadFormat::UpayloadFormatText as i32,
         data: Some(Data::Value(client_data.as_bytes().to_vec())),
     };
-    let result = ulinkzenoh_client
+    let result = upclient_client
         .invoke_method(uuri, payload, attributes)
         .await;
 

@@ -1,6 +1,6 @@
-# uprotocol-rust-ulink-zenoh
+# up-client-zenoh-rust
 
-Rust uLink implementation for the Zenoh transport
+Rust UPClient implementation for the Zenoh transport
 
 # Build
 

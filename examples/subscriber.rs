@@ -17,7 +17,7 @@ use uprotocol_sdk::{
     transport::datamodel::UTransport,
     uprotocol::{Data, UEntity, UMessage, UResource, UStatus, UUri},
 };
-use uprotocol_zenoh::ULinkZenoh;
+use uprotocol_zenoh::UPClientZenoh;
 use zenoh::config::Config;
 
 fn callback(result: Result<UMessage, UStatus>) {
@@ -36,7 +36,7 @@ fn callback(result: Result<UMessage, UStatus>) {
 #[async_std::main]
 async fn main() {
     println!("uProtocol subscriber example");
-    let subscriber = ULinkZenoh::new(Config::default()).await.unwrap();
+    let subscriber = UPClientZenoh::new(Config::default()).await.unwrap();
 
     // create uuri
     // TODO: Need to check whether the way to create ID is correct?

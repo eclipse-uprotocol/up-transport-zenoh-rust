@@ -18,13 +18,13 @@ use uprotocol_sdk::{
     transport::datamodel::UTransport,
     uprotocol::{Data, UEntity, UPayload, UPayloadFormat, UPriority, UResource, UUri},
 };
-use uprotocol_zenoh::ULinkZenoh;
+use uprotocol_zenoh::UPClientZenoh;
 use zenoh::config::Config;
 
 #[async_std::main]
 async fn main() {
     println!("uProtocol publisher example");
-    let publisher = ULinkZenoh::new(Config::default()).await.unwrap();
+    let publisher = UPClientZenoh::new(Config::default()).await.unwrap();
 
     // create uuri
     // TODO: Need to check whether the way to create ID is correct?

@@ -18,13 +18,13 @@ use uprotocol_sdk::{
     uri::builder::resourcebuilder::UResourceBuilder,
     uuid::builder::UUIDv8Builder,
 };
-use uprotocol_zenoh::ULinkZenoh;
+use uprotocol_zenoh::UPClientZenoh;
 use zenoh::config::Config;
 
 #[async_std::main]
 async fn main() {
     println!("uProtocol RPC client example");
-    let rpc_client = ULinkZenoh::new(Config::default()).await.unwrap();
+    let rpc_client = UPClientZenoh::new(Config::default()).await.unwrap();
 
     // create uuri
     // TODO: Need to check whether the way to create ID is correct?

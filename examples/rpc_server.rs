@@ -21,14 +21,14 @@ use uprotocol_sdk::{
     uprotocol::{Data, UEntity, UMessage, UMessageType, UPayload, UPayloadFormat, UStatus, UUri},
     uri::builder::resourcebuilder::UResourceBuilder,
 };
-use uprotocol_zenoh::ULinkZenoh;
+use uprotocol_zenoh::UPClientZenoh;
 use zenoh::config::Config;
 
 #[async_std::main]
 async fn main() {
     println!("uProtocol RPC server example");
     let rpc_server = Arc::new(Mutex::new(
-        ULinkZenoh::new(Config::default()).await.unwrap(),
+        UPClientZenoh::new(Config::default()).await.unwrap(),
     ));
 
     // create uuri

@@ -40,7 +40,7 @@ use zenoh::{
 };
 
 pub struct ZenohListener {}
-pub struct ULinkZenoh {
+pub struct UPClientZenoh {
     session: Arc<Session>,
     subscriber_map: Arc<Mutex<HashMap<String, Subscriber<'static, ()>>>>,
     queryable_map: Arc<Mutex<HashMap<String, Queryable<'static, ()>>>>,
@@ -48,17 +48,17 @@ pub struct ULinkZenoh {
     callback_counter: AtomicU64,
 }
 
-impl ULinkZenoh {
+impl UPClientZenoh {
     /// # Errors
     /// Will return `Err` if unable to create Zenoh session
-    pub async fn new(config: Config) -> Result<ULinkZenoh, UStatus> {
+    pub async fn new(config: Config) -> Result<UPClientZenoh, UStatus> {
         let Ok(session) = zenoh::open(config).res().await else {
             return Err(UStatus::fail_with_code(
                 UCode::Internal,
                 "Unable to open Zenoh session",
             ));
         };
-        Ok(ULinkZenoh {
+        Ok(UPClientZenoh {
             session: Arc::new(session),
             subscriber_map: Arc::new(Mutex::new(HashMap::new())),
             queryable_map: Arc::new(Mutex::new(HashMap::new())),
@@ -112,7 +112,7 @@ impl ULinkZenoh {
         };
 
         // Serialized UAttributes into protobuf
-        let priority = ULinkZenoh::map_zenoh_priority(attributes.priority());
+        let priority = UPClientZenoh::map_zenoh_priority(attributes.priority());
         let mut attr = vec![];
         let Ok(()) = attributes.encode(&mut attr) else {
             return Err(UStatus::fail_with_code(
@@ -214,7 +214,7 @@ impl ULinkZenoh {
 }
 
 #[async_trait]
-impl RpcClient for ULinkZenoh {
+impl RpcClient for UPClientZenoh {
     async fn invoke_method(
         &self,
         topic: UUri,
@@ -237,7 +237,7 @@ impl RpcClient for ULinkZenoh {
         }
 
         // Get Zenoh key
-        let Ok(zenoh_key) = ULinkZenoh::to_zenoh_key_string(&topic) else {
+        let Ok(zenoh_key) = UPClientZenoh::to_zenoh_key_string(&topic) else {
             return Err(RpcMapperError::UnexpectedError(String::from(
                 "Unable to transform to Zenoh key",
             )));
@@ -309,7 +309,7 @@ impl RpcClient for ULinkZenoh {
 }
 
 #[async_trait]
-impl RpcServer for ULinkZenoh {
+impl RpcServer for UPClientZenoh {
     async fn register_rpc_listener(
         &self,
         method: UUri,
@@ -320,7 +320,7 @@ impl RpcServer for ULinkZenoh {
             .map_err(|_| UStatus::fail_with_code(UCode::InvalidArgument, "Invalid topic"))?;
 
         // Get Zenoh key
-        let zenoh_key = ULinkZenoh::to_zenoh_key_string(&method)?;
+        let zenoh_key = UPClientZenoh::to_zenoh_key_string(&method)?;
         // Generate listener string for users to delete
         let hashmap_key = format!(
             "{}_{:X}",
@@ -438,7 +438,7 @@ impl RpcServer for ULinkZenoh {
 }
 
 #[async_trait]
-impl UTransport for ULinkZenoh {
+impl UTransport for UPClientZenoh {
     async fn authenticate(&self, _entity: UEntity) -> Result<(), UStatus> {
         // TODO: Not implemented
         Err(UStatus::fail_with_code(
@@ -458,7 +458,7 @@ impl UTransport for ULinkZenoh {
             .map_err(|_| UStatus::fail_with_code(UCode::InvalidArgument, "Invalid topic"))?;
 
         // Get Zenoh key
-        let zenoh_key = ULinkZenoh::to_zenoh_key_string(&topic)?;
+        let zenoh_key = UPClientZenoh::to_zenoh_key_string(&topic)?;
 
         // Check the type of UAttributes (Publish / Request / Response)
         match UMessageType::try_from(attributes.r#type) {
@@ -503,7 +503,7 @@ impl UTransport for ULinkZenoh {
             .map_err(|_| UStatus::fail_with_code(UCode::InvalidArgument, "Invalid topic"))?;
 
         // Get Zenoh key
-        let zenoh_key = ULinkZenoh::to_zenoh_key_string(&topic)?;
+        let zenoh_key = UPClientZenoh::to_zenoh_key_string(&topic)?;
         // Generate listener string for users to delete
         let hashmap_key = format!(
             "{}_{:X}",
@@ -619,7 +619,7 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(
-            ULinkZenoh::to_zenoh_key_string(&uuri).unwrap(),
+            UPClientZenoh::to_zenoh_key_string(&uuri).unwrap(),
             String::from("0100162e04d20100")
         );
     }
