@@ -11,7 +11,7 @@ pedantic = "deny"
 #nursery = "deny"
 
 [dependencies]
-uprotocol-sdk = { git = "https://github.com/eclipse-uprotocol/up-rust", branch = "main" }
+up-rust = { git = "https://github.com/eclipse-uprotocol/up-rust", branch = "main" }
 prost = "0.12"
 prost-types = "0.12"
 cloudevents-sdk = { version = "0.7.0" }
