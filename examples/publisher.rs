@@ -13,16 +13,19 @@
 //
 use async_std::task;
 use std::time;
-use uprotocol_sdk::{
+use up_rust::{
     transport::builder::UAttributesBuilder,
     transport::datamodel::UTransport,
-    uprotocol::{Data, UEntity, UPayload, UPayloadFormat, UPriority, UResource, UUri},
+    uprotocol::{Data, UEntity, UMessage, UPayload, UPayloadFormat, UPriority, UResource, UUri},
 };
 use uprotocol_zenoh::UPClientZenoh;
 use zenoh::config::Config;
 
 #[async_std::main]
 async fn main() {
+    // initiate logging
+    env_logger::init();
+
     println!("uProtocol publisher example");
     let publisher = UPClientZenoh::new(Config::default()).await.unwrap();
 
@@ -34,30 +37,39 @@ async fn main() {
             version_major: Some(1),
             id: Some(1234),
             ..Default::default()
-        }),
+        })
+        .into(),
         resource: Some(UResource {
             name: "door".to_string(),
             instance: Some("front_left".to_string()),
             message: Some("Door".to_string()),
             id: Some(5678),
-        }),
+            ..Default::default()
+        })
+        .into(),
         ..Default::default()
     };
 
     // create uattributes
-    let attributes = UAttributesBuilder::publish(UPriority::UpriorityCs4).build();
+    let mut attributes = UAttributesBuilder::publish(UPriority::UPRIORITY_CS4).build();
+    attributes.sink = Some(uuri.clone()).into();
 
     let mut cnt: u64 = 0;
     loop {
         let data = format!("{}", cnt);
         let payload = UPayload {
             length: Some(0),
-            format: UPayloadFormat::UpayloadFormatText as i32,
+            format: UPayloadFormat::UPAYLOAD_FORMAT_TEXT.into(),
             data: Some(Data::Value(data.as_bytes().to_vec())),
+            ..Default::default()
         };
         println!("Sending {} to {}...", data, uuri.to_string());
         publisher
-            .send(uuri.clone(), payload, attributes.clone())
+            .send(UMessage {
+                attributes: Some(attributes.clone()).into(),
+                payload: Some(payload).into(),
+                ..Default::default()
+            })
             .await
             .unwrap();
         task::sleep(time::Duration::from_millis(1000)).await;

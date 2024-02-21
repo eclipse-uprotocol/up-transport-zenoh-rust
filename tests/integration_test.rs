@@ -14,16 +14,14 @@
 use async_std::task::{self, block_on};
 use std::sync::Arc;
 use std::time;
-use uprotocol_sdk::{
-    rpc::{RpcClient, RpcServer},
-    transport::builder::UAttributesBuilder,
-    transport::datamodel::UTransport,
+use up_rust::{
+    rpc::{CallOptionsBuilder, RpcClient, RpcServer},
+    transport::{builder::UAttributesBuilder, datamodel::UTransport},
     uprotocol::{
         Data, UCode, UEntity, UMessage, UMessageType, UPayload, UPayloadFormat, UPriority,
         UResource, UStatus, UUri,
     },
     uri::builder::resourcebuilder::UResourceBuilder,
-    uuid::builder::UUIDv8Builder,
 };
 use uprotocol_zenoh::UPClientZenoh;
 use zenoh::config::Config;
@@ -36,13 +34,16 @@ fn create_utransport_uuri() -> UUri {
             version_major: Some(1),
             id: Some(1234),
             ..Default::default()
-        }),
+        })
+        .into(),
         resource: Some(UResource {
             name: "door".to_string(),
             instance: Some("front_left".to_string()),
             message: Some("Door".to_string()),
             id: Some(5678),
-        }),
+            ..Default::default()
+        })
+        .into(),
         ..Default::default()
     }
 }
@@ -55,11 +56,13 @@ fn create_rpcserver_uuri() -> UUri {
             version_major: Some(1),
             id: Some(1234),
             ..Default::default()
-        }),
+        })
+        .into(),
         resource: Some(UResourceBuilder::for_rpc_request(
             Some("SimpleTest".to_string()),
             Some(5678),
-        )),
+        ))
+        .into(),
         ..Default::default()
     }
 }
@@ -90,7 +93,7 @@ async fn test_utransport_register_and_unregister() {
     assert_eq!(
         result,
         Err(UStatus::fail_with_code(
-            UCode::InvalidArgument,
+            UCode::INVALID_ARGUMENT,
             "Listener doesn't exist"
         ))
     )
@@ -122,7 +125,7 @@ async fn test_rpcserver_register_and_unregister() {
     assert_eq!(
         result,
         Err(UStatus::fail_with_code(
-            UCode::InvalidArgument,
+            UCode::INVALID_ARGUMENT,
             "Listener doesn't exist"
         ))
     )
@@ -141,13 +144,13 @@ async fn test_publish_and_subscribe() {
         Ok(msg) => {
             if let Data::Value(v) = msg.payload.unwrap().data.unwrap() {
                 let value = v.into_iter().map(|c| c as char).collect::<String>();
-                assert_eq!(msg.source.unwrap(), uuri_cloned);
+                assert_eq!(msg.attributes.unwrap().sink.unwrap(), uuri_cloned);
                 assert_eq!(value, data_cloned);
             } else {
                 panic!("The message should be Data::Value type.");
             }
         }
-        Err(ustatus) => println!("Internal Error: {:?}", ustatus),
+        Err(ustatus) => panic!("Internal Error: {:?}", ustatus),
     };
     let listener_string = upclient
         .register_listener(uuri.clone(), Box::new(listener))
@@ -155,16 +158,24 @@ async fn test_publish_and_subscribe() {
         .unwrap();
 
     // Create uattributes
-    let attributes = UAttributesBuilder::publish(UPriority::UpriorityCs4).build();
+    let mut attributes = UAttributesBuilder::publish(UPriority::UPRIORITY_CS4).build();
+    attributes.sink = Some(uuri.clone()).into();
+    // TODO: Check what source we should fill
+    attributes.source = Some(uuri.clone()).into();
 
     // Publish the data
     let payload = UPayload {
         length: Some(0),
-        format: UPayloadFormat::UpayloadFormatText as i32,
+        format: UPayloadFormat::UPAYLOAD_FORMAT_TEXT.into(),
         data: Some(Data::Value(target_data.as_bytes().to_vec())),
+        ..Default::default()
     };
     upclient
-        .send(uuri.clone(), payload, attributes.clone())
+        .send(UMessage {
+            attributes: Some(attributes.clone()).into(),
+            payload: Some(payload).into(),
+            ..Default::default()
+        })
         .await
         .unwrap();
 
@@ -194,12 +205,12 @@ async fn test_rpc_server_client() {
         match result {
             Ok(msg) => {
                 let UMessage {
-                    source,
                     attributes,
                     payload,
+                    ..
                 } = msg;
                 // Get the UUri
-                let uuri = source.unwrap();
+                let uuri = attributes.clone().unwrap().sink.unwrap();
                 // Build the payload to send back
                 if let Data::Value(v) = payload.unwrap().data.unwrap() {
                     let value = v.into_iter().map(|c| c as char).collect::<String>();
@@ -209,14 +220,22 @@ async fn test_rpc_server_client() {
                 }
                 let upayload = UPayload {
                     length: Some(0),
-                    format: UPayloadFormat::UpayloadFormatText as i32,
+                    format: UPayloadFormat::UPAYLOAD_FORMAT_TEXT.into(),
                     data: Some(Data::Value(server_data_cloned.as_bytes().to_vec())),
+                    ..Default::default()
                 };
                 // Set the attributes type to Response
                 let mut uattributes = attributes.unwrap();
-                uattributes.set_type(UMessageType::UmessageTypeResponse);
+                uattributes.type_ = UMessageType::UMESSAGE_TYPE_RESPONSE.into();
+                uattributes.sink = Some(uuri.clone()).into();
+                uattributes.source = Some(uuri.clone()).into();
                 // Send back result
-                block_on(upclient_server_cloned.send(uuri, upayload, uattributes)).unwrap();
+                block_on(upclient_server_cloned.send(UMessage {
+                    attributes: Some(uattributes).into(),
+                    payload: Some(upayload).into(),
+                    ..Default::default()
+                }))
+                .unwrap();
             }
             Err(ustatus) => {
                 panic!("Internal Error: {:?}", ustatus);
@@ -230,24 +249,26 @@ async fn test_rpc_server_client() {
     // Need some time for queryable to run
     task::sleep(time::Duration::from_millis(1000)).await;
 
-    // Create uattributes
-    // TODO: Check TTL (Should TTL map to Zenoh's timeout?)
-    let attributes = UAttributesBuilder::request(UPriority::UpriorityCs4, uuri.clone(), 100)
-        .with_reqid(UUIDv8Builder::new().build())
-        .build();
+    // TODO: Need to check whether we don't need uattributes.
+    //// Create uattributes
+    //// TODO: Check TTL (Should TTL map to Zenoh's timeout?)
+    //let attributes = UAttributesBuilder::request(UPriority::UPRIORITY_CS4, uuri.clone(), 100)
+    //    .with_reqid(UUIDv8Builder::new().build())
+    //    .build();
 
     // Run RpcClient
     let payload = UPayload {
         length: Some(0),
-        format: UPayloadFormat::UpayloadFormatText as i32,
+        format: UPayloadFormat::UPAYLOAD_FORMAT_TEXT.into(),
         data: Some(Data::Value(client_data.as_bytes().to_vec())),
+        ..Default::default()
     };
     let result = upclient_client
-        .invoke_method(uuri, payload, attributes)
+        .invoke_method(uuri, payload, CallOptionsBuilder::default().build())
         .await;
 
     // Process the result
-    if let Data::Value(v) = result.unwrap().data.unwrap() {
+    if let Data::Value(v) = result.unwrap().payload.unwrap().data.unwrap() {
         let value = v.into_iter().map(|c| c as char).collect::<String>();
         assert_eq!(server_data, value);
     } else {

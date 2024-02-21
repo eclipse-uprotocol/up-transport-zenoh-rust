@@ -11,18 +11,19 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use uprotocol_sdk::{
-    rpc::RpcClient,
-    transport::builder::UAttributesBuilder,
-    uprotocol::{Data, UEntity, UPayload, UPayloadFormat, UPriority, UUri},
+use up_rust::{
+    rpc::{CallOptionsBuilder, RpcClient},
+    uprotocol::{Data, UEntity, UPayload, UPayloadFormat, UUri},
     uri::builder::resourcebuilder::UResourceBuilder,
-    uuid::builder::UUIDv8Builder,
 };
 use uprotocol_zenoh::UPClientZenoh;
 use zenoh::config::Config;
 
 #[async_std::main]
 async fn main() {
+    // initiate logging
+    env_logger::init();
+
     println!("uProtocol RPC client example");
     let rpc_client = UPClientZenoh::new(Config::default()).await.unwrap();
 
@@ -34,34 +35,40 @@ async fn main() {
             version_major: Some(1),
             id: Some(1234),
             ..Default::default()
-        }),
+        })
+        .into(),
         resource: Some(UResourceBuilder::for_rpc_request(
             Some("getTime".to_string()),
             Some(5678),
-        )),
+        ))
+        .into(),
         ..Default::default()
     };
 
+    // TODO: Need to check whether we don't need uattributes.
     // create uattributes
-    // TODO: Check TTL (Should TTL map to Zenoh's timeout?)
-    let attributes = UAttributesBuilder::request(UPriority::UpriorityCs4, uuri.clone(), 100)
-        .with_reqid(UUIDv8Builder::new().build())
-        .build();
+    //// TODO: Check TTL (Should TTL map to Zenoh's timeout?)
+    //let attributes = UAttributesBuilder::request(UPriority::UPRIORITY_CS4, uuri.clone(), 100)
+    //    .with_reqid(UUIDv8Builder::new().build())
+    //    .build();
 
     // create uPayload
     let data = String::from("GetCurrentTime");
     let payload = UPayload {
         length: Some(0),
-        format: UPayloadFormat::UpayloadFormatText as i32,
+        format: UPayloadFormat::UPAYLOAD_FORMAT_TEXT.into(),
         data: Some(Data::Value(data.as_bytes().to_vec())),
+        ..Default::default()
     };
 
     // invoke RPC method
     println!("Send request to {}", uuri.to_string());
-    let result = rpc_client.invoke_method(uuri, payload, attributes).await;
+    let result = rpc_client
+        .invoke_method(uuri, payload, CallOptionsBuilder::default().build())
+        .await;
 
     // process the result
-    if let Data::Value(v) = result.unwrap().data.unwrap() {
+    if let Data::Value(v) = result.unwrap().payload.unwrap().data.unwrap() {
         let value = v.into_iter().map(|c| c as char).collect::<String>();
         println!("Receive {}", value);
     } else {
