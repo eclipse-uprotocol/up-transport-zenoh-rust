@@ -53,6 +53,8 @@ async fn main() {
     // create uattributes
     let mut attributes = UAttributesBuilder::publish(UPriority::UPRIORITY_CS4).build();
     attributes.sink = Some(uuri.clone()).into();
+    // TODO: We need to check how to set the source
+    attributes.source = Some(uuri.clone()).into();
 
     let mut cnt: u64 = 0;
     loop {
