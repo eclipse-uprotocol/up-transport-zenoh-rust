@@ -20,23 +20,30 @@ use std::{
     sync::{atomic::AtomicU64, Arc, Mutex},
 };
 use up_rust::{
-    uprotocol::{Data, UAttributes, UCode, UPayload, UPayloadFormat, UPriority, UStatus, UUri},
+    uprotocol::{UAttributes, UCode, UMessage, UPayloadFormat, UPriority, UStatus, UUri},
     uri::serializer::{MicroUriSerializer, UriSerializer},
 };
 use zenoh::{
     config::Config,
-    prelude::{r#async::*, Sample},
+    prelude::r#async::*,
     queryable::{Query, Queryable},
     sample::{Attachment, AttachmentBuilder},
     subscriber::Subscriber,
 };
 
+pub type UtransportListener = Box<dyn Fn(Result<UMessage, UStatus>) + Send + Sync + 'static>;
+
 pub struct ZenohListener {}
 pub struct UPClientZenoh {
     session: Arc<Session>,
+    // Able to unregister Subscriber
     subscriber_map: Arc<Mutex<HashMap<String, Subscriber<'static, ()>>>>,
+    // Able to unregister Queryable
     queryable_map: Arc<Mutex<HashMap<String, Queryable<'static, ()>>>>,
+    // Save the reqid to be able to send back response
     query_map: Arc<Mutex<HashMap<String, Query>>>,
+    // Save the callback for RPC response
+    rpc_callback_map: Arc<Mutex<HashMap<String, UtransportListener>>>,
     callback_counter: AtomicU64,
 }
 
@@ -55,10 +62,12 @@ impl UPClientZenoh {
             subscriber_map: Arc::new(Mutex::new(HashMap::new())),
             queryable_map: Arc::new(Mutex::new(HashMap::new())),
             query_map: Arc::new(Mutex::new(HashMap::new())),
+            rpc_callback_map: Arc::new(Mutex::new(HashMap::new())),
             callback_counter: AtomicU64::new(0),
         })
     }
 
+    // The UURI format should be "up/<UAuthority id or ip>/<the rest of UUri>"
     fn to_zenoh_key_string(uri: &UUri) -> Result<String, UStatus> {
         let micro_uuri = MicroUriSerializer::serialize(uri).map_err(|_| {
             UStatus::fail_with_code(
@@ -66,7 +75,17 @@ impl UPClientZenoh {
                 "Unable to serialize into micro format",
             )
         })?;
-        let micro_zenoh_key: String = micro_uuri
+        let mut micro_zenoh_key = String::from("up/");
+        // The part of UUri which is larger than 8 bytes belongs to uAuthority
+        // If it exists, we prepend it before the Zenoh key
+        if micro_uuri.len() > 8 {
+            micro_zenoh_key += &micro_uuri[8..]
+                .iter()
+                .fold(String::new(), |s, c| s + &format!("{c:02x}"));
+            micro_zenoh_key += "/";
+        }
+        // The rest part of UUri
+        micro_zenoh_key += &micro_uuri[..8]
             .iter()
             .fold(String::new(), |s, c| s + &format!("{c:02x}"));
         Ok(micro_zenoh_key)
@@ -206,112 +225,6 @@ impl UPClientZenoh {
         */
         Ok(uattributes)
     }
-
-    async fn send_publish(
-        &self,
-        zenoh_key: &str,
-        payload: UPayload,
-        attributes: UAttributes,
-    ) -> Result<(), UStatus> {
-        // Get the data from UPayload
-        let Some(Data::Value(buf)) = payload.data else {
-            // TODO: Assume we only have Value here, no reference for shared memory
-            return Err(UStatus::fail_with_code(
-                UCode::INVALID_ARGUMENT,
-                "Invalid data",
-            ));
-        };
-
-        // Serialized UAttributes into protobuf
-        let Ok(attachment) = UPClientZenoh::uattributes_to_attachment(&attributes) else {
-            return Err(UStatus::fail_with_code(
-                UCode::INVALID_ARGUMENT,
-                "Invalid uAttributes",
-            ));
-        };
-
-        let priority =
-            UPClientZenoh::map_zenoh_priority(attributes.priority.enum_value().map_err(|_| {
-                UStatus::fail_with_code(UCode::INVALID_ARGUMENT, "Invalid priority")
-            })?);
-
-        let putbuilder = self
-            .session
-            .put(zenoh_key, buf)
-            .encoding(Encoding::WithSuffix(
-                KnownEncoding::AppCustom,
-                payload.format.value().to_string().into(),
-            ))
-            .priority(priority)
-            .with_attachment(attachment.build());
-
-        // Send data
-        putbuilder
-            .res()
-            .await
-            .map_err(|_| UStatus::fail_with_code(UCode::INTERNAL, "Unable to send with Zenoh"))?;
-
-        Ok(())
-    }
-
-    async fn send_response(
-        &self,
-        zenoh_key: &str,
-        payload: UPayload,
-        attributes: UAttributes,
-    ) -> Result<(), UStatus> {
-        // Get the data from UPayload
-        let Some(Data::Value(buf)) = payload.data else {
-            // TODO: Assume we only have Value here, no reference for shared memory
-            return Err(UStatus::fail_with_code(
-                UCode::INVALID_ARGUMENT,
-                "Invalid data",
-            ));
-        };
-
-        // Serialized UAttributes into protobuf
-        let Ok(attachment) = UPClientZenoh::uattributes_to_attachment(&attributes) else {
-            return Err(UStatus::fail_with_code(
-                UCode::INVALID_ARGUMENT,
-                "Invalid uAttributes",
-            ));
-        };
-        // Get reqid
-        let reqid = attributes.reqid.to_string();
-
-        // Send back query
-        let value = Value::new(buf.into()).encoding(Encoding::WithSuffix(
-            KnownEncoding::AppCustom,
-            payload.format.value().to_string().into(),
-        ));
-        let reply = Ok(Sample::new(
-            KeyExpr::new(zenoh_key.to_string()).map_err(|_| {
-                UStatus::fail_with_code(UCode::INTERNAL, "Unable to create Zenoh key")
-            })?,
-            value,
-        ));
-        let query = self
-            .query_map
-            .lock()
-            .unwrap()
-            .get(&reqid)
-            .ok_or(UStatus::fail_with_code(
-                UCode::INTERNAL,
-                "query doesn't exist",
-            ))?
-            .clone();
-
-        // Send data
-        query
-            .reply(reply)
-            .with_attachment(attachment.build())
-            .map_err(|_| UStatus::fail_with_code(UCode::INTERNAL, "Unable to add attachment"))?
-            .res()
-            .await
-            .map_err(|_| UStatus::fail_with_code(UCode::INTERNAL, "Unable to reply with Zenoh"))?;
-
-        Ok(())
-    }
 }
 
 #[cfg(test)]
@@ -342,7 +255,7 @@ mod tests {
         };
         assert_eq!(
             UPClientZenoh::to_zenoh_key_string(&uuri).unwrap(),
-            String::from("0100162e04d20100")
+            String::from("up/0100162e04d20100")
         );
     }
 }

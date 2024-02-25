@@ -59,11 +59,17 @@ async fn main() {
                     ..
                 } = msg;
                 // Get the UUri
-                let uuri = attributes.clone().unwrap().sink.unwrap();
+                let source = attributes.clone().unwrap().source.unwrap();
+                let sink = attributes.clone().unwrap().sink.unwrap();
                 // Build the payload to send back
                 if let Data::Value(v) = payload.unwrap().data.unwrap() {
                     let value = v.into_iter().map(|c| c as char).collect::<String>();
-                    println!("Receive {} from {}", value, uuri.to_string());
+                    println!(
+                        "Receive {} from {} to {}",
+                        value,
+                        source.to_string(),
+                        sink.to_string()
+                    );
                 }
                 // Get current time
                 let upayload = UPayload {
@@ -75,8 +81,8 @@ async fn main() {
                 // Set the attributes type to Response
                 let mut uattributes = attributes.unwrap();
                 uattributes.type_ = UMessageType::UMESSAGE_TYPE_RESPONSE.into();
-                uattributes.sink = Some(uuri.clone()).into();
-                uattributes.source = Some(uuri.clone()).into();
+                uattributes.sink = Some(source.clone()).into();
+                uattributes.source = Some(sink.clone()).into();
                 // Send back result
                 block_on(rpc_server_cloned.send(UMessage {
                     attributes: Some(uattributes).into(),
