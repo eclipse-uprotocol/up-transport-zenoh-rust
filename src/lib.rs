@@ -15,6 +15,7 @@ pub mod rpc;
 pub mod utransport;
 
 use protobuf::{Enum, Message};
+use std::io::Write;
 use std::{
     collections::HashMap,
     sync::{atomic::AtomicU64, Arc, Mutex},
@@ -43,7 +44,7 @@ pub struct UPClientZenoh {
     // Save the reqid to be able to send back response
     query_map: Arc<Mutex<HashMap<String, Query>>>,
     // Save the callback for RPC response
-    rpc_callback_map: Arc<Mutex<HashMap<String, UtransportListener>>>,
+    rpc_callback_map: Arc<Mutex<HashMap<String, Arc<UtransportListener>>>>,
     callback_counter: AtomicU64,
 }
 
@@ -67,27 +68,59 @@ impl UPClientZenoh {
         })
     }
 
+    // TODO: Workaround function. Should be added in up-rust
+    fn get_uauth_from_uuri(uri: &UUri) -> Result<String, UStatus> {
+        let mut buf = vec![];
+        if let Some(authority) = uri.authority.as_ref() {
+            if authority.has_id() {
+                let id = authority.id().to_vec();
+                let len = u8::try_from(id.len()).map_err(|_| {
+                    UStatus::fail_with_code(UCode::INVALID_ARGUMENT, "Wrong authority")
+                })?;
+                buf.write(&[len]).map_err(|_| {
+                    UStatus::fail_with_code(UCode::INVALID_ARGUMENT, "Wrong authority")
+                })?;
+                buf.write_all(&id).map_err(|_| {
+                    UStatus::fail_with_code(UCode::INVALID_ARGUMENT, "Wrong authority")
+                })?;
+            } else if authority.has_ip() {
+                let ip = authority.ip().to_vec();
+                buf.write_all(&ip).map_err(|_| {
+                    UStatus::fail_with_code(UCode::INVALID_ARGUMENT, "Wrong authority")
+                })?;
+            }
+        }
+        Ok(buf
+            .iter()
+            .fold(String::new(), |s, c| s + &format!("{c:02x}")))
+    }
+
     // The UURI format should be "up/<UAuthority id or ip>/<the rest of UUri>"
     fn to_zenoh_key_string(uri: &UUri) -> Result<String, UStatus> {
-        let micro_uuri = MicroUriSerializer::serialize(uri).map_err(|_| {
-            UStatus::fail_with_code(
-                UCode::INVALID_ARGUMENT,
-                "Unable to serialize into micro format",
-            )
-        })?;
         let mut micro_zenoh_key = String::from("up/");
-        // The part of UUri which is larger than 8 bytes belongs to uAuthority
-        // If it exists, we prepend it before the Zenoh key
-        if micro_uuri.len() > 8 {
-            micro_zenoh_key += &micro_uuri[8..]
+        if uri.authority.is_some() && uri.entity.is_none() && uri.resource.is_none() {
+            micro_zenoh_key += &UPClientZenoh::get_uauth_from_uuri(uri)?;
+            micro_zenoh_key += "/**";
+        } else {
+            let micro_uuri = MicroUriSerializer::serialize(uri).map_err(|_| {
+                UStatus::fail_with_code(
+                    UCode::INVALID_ARGUMENT,
+                    "Unable to serialize into micro format",
+                )
+            })?;
+            // The part of UUri which is larger than 8 bytes belongs to uAuthority
+            // If it exists, we prepend it before the Zenoh key
+            if micro_uuri.len() > 8 {
+                micro_zenoh_key += &micro_uuri[8..]
+                    .iter()
+                    .fold(String::new(), |s, c| s + &format!("{c:02x}"));
+                micro_zenoh_key += "/";
+            }
+            // The rest part of UUri
+            micro_zenoh_key += &micro_uuri[..8]
                 .iter()
                 .fold(String::new(), |s, c| s + &format!("{c:02x}"));
-            micro_zenoh_key += "/";
         }
-        // The rest part of UUri
-        micro_zenoh_key += &micro_uuri[..8]
-            .iter()
-            .fold(String::new(), |s, c| s + &format!("{c:02x}"));
         Ok(micro_zenoh_key)
     }
 
@@ -230,7 +263,7 @@ impl UPClientZenoh {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use up_rust::uprotocol::{UEntity, UResource, UUri};
+    use up_rust::uprotocol::{uri::uauthority::Number, UAuthority, UEntity, UResource, UUri};
 
     #[test]
     fn test_to_zenoh_key_string() {
@@ -256,6 +289,20 @@ mod tests {
         assert_eq!(
             UPClientZenoh::to_zenoh_key_string(&uuri).unwrap(),
             String::from("up/0100162e04d20100")
+        );
+        // create special uuri for test
+        let uuri = UUri {
+            authority: Some(UAuthority {
+                name: Some("UAuthName".to_string()),
+                number: Some(Number::Id("UAuthID".to_string().into_bytes())),
+                ..Default::default()
+            })
+            .into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            UPClientZenoh::to_zenoh_key_string(&uuri).unwrap(),
+            String::from("up/0755417574684944/**")
         );
     }
 }

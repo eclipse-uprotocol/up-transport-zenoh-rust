@@ -49,6 +49,8 @@ async fn main() {
         .into(),
         ..Default::default()
     };
+    let default_uuri = UUri::default();
+    println!(">>> {:?}", default_uuri);
 
     // create uattributes
     let mut attributes = UAttributesBuilder::publish(UPriority::UPRIORITY_CS4).build();

@@ -11,9 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::UPClientZenoh;
+use crate::{UPClientZenoh, UtransportListener};
 use async_trait::async_trait;
-use std::{sync::atomic::Ordering, time::Duration};
+use std::{
+    sync::{atomic::Ordering, Arc},
+    time::Duration,
+};
 use up_rust::{
     transport::{datamodel::UTransport, validator::Validators},
     uprotocol::{
@@ -104,11 +107,19 @@ impl UPClientZenoh {
         ));
 
         // Retrieve the callback
+        let resp_listener_str = attributes
+            .source
+            .0
+            .ok_or(UStatus::fail_with_code(
+                UCode::INVALID_ARGUMENT,
+                "Lack of source address",
+            ))?
+            .to_string();
         let resp_callback = self
             .rpc_callback_map
             .lock()
             .unwrap()
-            .remove(zenoh_key)
+            .remove(&resp_listener_str)
             .ok_or(UStatus::fail_with_code(
                 UCode::INTERNAL,
                 "Unable to get callback",
@@ -251,7 +262,7 @@ impl UPClientZenoh {
     async fn register_publish_listener(
         &self,
         topic: UUri,
-        listener: Box<dyn Fn(Result<UMessage, UStatus>) + Send + Sync + 'static>,
+        listener: Arc<UtransportListener>,
     ) -> Result<String, UStatus> {
         // Get Zenoh key
         let zenoh_key = UPClientZenoh::to_zenoh_key_string(&topic)?;
@@ -329,7 +340,7 @@ impl UPClientZenoh {
     async fn register_request_listener(
         &self,
         topic: UUri,
-        listener: Box<dyn Fn(Result<UMessage, UStatus>) + Send + Sync + 'static>,
+        listener: Arc<UtransportListener>,
     ) -> Result<String, UStatus> {
         // Get Zenoh key
         let zenoh_key = UPClientZenoh::to_zenoh_key_string(&topic)?;
@@ -505,37 +516,74 @@ impl UTransport for UPClientZenoh {
         topic: UUri,
         listener: Box<dyn Fn(Result<UMessage, UStatus>) + Send + Sync + 'static>,
     ) -> Result<String, UStatus> {
-        // Do the validation
-        UriValidator::validate(&topic)
-            .map_err(|_| UStatus::fail_with_code(UCode::INVALID_ARGUMENT, "Invalid topic"))?;
-
-        if UriValidator::is_rpc_response(&topic) {
-            // Get Zenoh key
-            let zenoh_key = UPClientZenoh::to_zenoh_key_string(&topic)?;
-            // TODO: the response topic should not be the same as the request topic
-
-            self.rpc_callback_map
-                .lock()
-                .unwrap()
-                .insert(zenoh_key.clone(), listener);
-
-            Ok(zenoh_key)
-        } else if UriValidator::is_rpc_method(&topic) {
+        let listener = Arc::new(listener);
+        if topic.authority.is_some() && topic.entity.is_none() && topic.resource.is_none() {
+            // This is special UUri which means we need to register both listeners
             // RPC request
-            self.register_request_listener(topic, listener).await
-        } else {
+            let mut listener_str = self
+                .register_request_listener(topic.clone(), listener.clone())
+                .await?;
             // Normal publish
-            self.register_publish_listener(topic, listener).await
+            listener_str += "&";
+            listener_str += &self
+                .register_publish_listener(topic, listener.clone())
+                .await?;
+            Ok(listener_str)
+        } else {
+            // Do the validation
+            UriValidator::validate(&topic)
+                .map_err(|_| UStatus::fail_with_code(UCode::INVALID_ARGUMENT, "Invalid topic"))?;
+
+            if UriValidator::is_rpc_response(&topic) {
+                let resp_listener_str = topic.to_string();
+                self.rpc_callback_map
+                    .lock()
+                    .unwrap()
+                    .insert(resp_listener_str.clone(), listener.clone());
+
+                Ok(resp_listener_str)
+            } else if UriValidator::is_rpc_method(&topic) {
+                // RPC request
+                self.register_request_listener(topic, listener.clone())
+                    .await
+            } else {
+                // Normal publish
+                self.register_publish_listener(topic, listener.clone())
+                    .await
+            }
         }
     }
 
     async fn unregister_listener(&self, topic: UUri, listener: &str) -> Result<(), UStatus> {
-        // Do the validation
-        UriValidator::validate(&topic)
-            .map_err(|_| UStatus::fail_with_code(UCode::INVALID_ARGUMENT, "Invalid topic"))?;
-        // TODO: Check whether we still need topic or not (Compare topic with listener?)
+        let mut pub_listener_str: Option<&str> = None;
+        let mut req_listener_str: Option<&str> = None;
+        let mut resp_listener_str: Option<&str> = None;
 
-        if UriValidator::is_rpc_response(&topic) {
+        if topic.authority.is_some() && topic.entity.is_none() && topic.resource.is_none() {
+            // This is special UUri which means we need to unregister both listeners
+            let listener_vec = listener.split('&').collect::<Vec<_>>();
+            if listener_vec.len() != 2 {
+                return Err(UStatus::fail_with_code(
+                    UCode::INVALID_ARGUMENT,
+                    "Invalid listener string",
+                ));
+            }
+            req_listener_str = Some(listener_vec[0]);
+            pub_listener_str = Some(listener_vec[1]);
+        } else {
+            // Do the validation
+            UriValidator::validate(&topic)
+                .map_err(|_| UStatus::fail_with_code(UCode::INVALID_ARGUMENT, "Invalid topic"))?;
+
+            if UriValidator::is_rpc_response(&topic) {
+                resp_listener_str = Some(listener);
+            } else if UriValidator::is_rpc_method(&topic) {
+                req_listener_str = Some(listener);
+            } else {
+                pub_listener_str = Some(listener);
+            }
+        }
+        if resp_listener_str.is_some() {
             // RPC response
             if self
                 .rpc_callback_map
@@ -549,7 +597,8 @@ impl UTransport for UPClientZenoh {
                     "RPC response callback doesn't exist",
                 ));
             }
-        } else if UriValidator::is_rpc_method(&topic) {
+        }
+        if req_listener_str.is_some() {
             // RPC request
             if self
                 .queryable_map
@@ -563,7 +612,8 @@ impl UTransport for UPClientZenoh {
                     "RPC request listener doesn't exist",
                 ));
             }
-        } else {
+        }
+        if pub_listener_str.is_some() {
             // Normal publish
             if self
                 .subscriber_map
