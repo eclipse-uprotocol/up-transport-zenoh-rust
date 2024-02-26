@@ -149,7 +149,7 @@ impl UPClientZenoh {
 
     fn uattributes_to_attachment(uattributes: &UAttributes) -> anyhow::Result<AttachmentBuilder> {
         let mut attachment = AttachmentBuilder::new();
-        attachment.insert("attr", &uattributes.write_to_bytes()?);
+        attachment.insert("uattr", &uattributes.write_to_bytes()?);
         /* TODO: We send the whole uattributes directly for the time being and do the benchmark later.
         attachment.insert("id", &uattributes.id.write_to_bytes()?);
         attachment.insert(
@@ -187,7 +187,7 @@ impl UPClientZenoh {
     fn attachment_to_uattributes(attachment: &Attachment) -> anyhow::Result<UAttributes> {
         let uattributes = UAttributes::parse_from_bytes(
             attachment
-                .get(&"attr".as_bytes())
+                .get(&"uattr".as_bytes())
                 .ok_or(UStatus::fail_with_code(
                     UCode::INTERNAL,
                     "Unable to get uAttributes",
@@ -294,7 +294,7 @@ mod tests {
         let uuri = UUri {
             authority: Some(UAuthority {
                 name: Some("UAuthName".to_string()),
-                number: Some(Number::Id("UAuthID".to_string().into_bytes())),
+                number: Some(Number::Id(vec![01, 02, 03, 10, 11, 12])),
                 ..Default::default()
             })
             .into(),
@@ -302,7 +302,7 @@ mod tests {
         };
         assert_eq!(
             UPClientZenoh::to_zenoh_key_string(&uuri).unwrap(),
-            String::from("up/0755417574684944/**")
+            String::from("up/060102030a0b0c/**")
         );
     }
 }
