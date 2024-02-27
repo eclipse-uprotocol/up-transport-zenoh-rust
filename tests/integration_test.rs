@@ -18,8 +18,8 @@ use up_rust::{
     rpc::{CallOptionsBuilder, RpcClient, RpcServer},
     transport::{builder::UAttributesBuilder, datamodel::UTransport},
     uprotocol::{
-        Data, UCode, UEntity, UMessage, UMessageType, UPayload, UPayloadFormat, UPriority,
-        UResource, UStatus, UUri,
+        uri::uauthority::Number, Data, UAuthority, UCode, UEntity, UMessage, UMessageType,
+        UPayload, UPayloadFormat, UPriority, UResource, UStatus, UUri,
     },
     uri::builder::resourcebuilder::UResourceBuilder,
 };
@@ -62,6 +62,19 @@ fn create_rpcserver_uuri() -> UUri {
             Some("SimpleTest".to_string()),
             Some(5678),
         ))
+        .into(),
+        ..Default::default()
+    }
+}
+
+// TODO: Need to check whether the way to create ID is correct?
+fn create_special_uuri() -> UUri {
+    UUri {
+        authority: Some(UAuthority {
+            name: Some("UAuthName".to_string()),
+            number: Some(Number::Id(vec![01, 02, 03, 10, 11, 12])),
+            ..Default::default()
+        })
         .into(),
         ..Default::default()
     }
@@ -127,6 +140,41 @@ async fn test_rpcserver_register_and_unregister() {
         Err(UStatus::fail_with_code(
             UCode::INVALID_ARGUMENT,
             "RPC request listener doesn't exist"
+        ))
+    )
+}
+
+#[async_std::test]
+async fn test_utransport_special_uuri_register_and_unregister() {
+    let upclient = UPClientZenoh::new(Config::default()).await.unwrap();
+    let uuri = create_special_uuri();
+
+    // Compare the return string
+    let listener_string = upclient
+        .register_listener(uuri.clone(), Box::new(|_| {}))
+        .await
+        .unwrap();
+    assert_eq!(
+        listener_string,
+        "up/060102030a0b0c/**_0&up/060102030a0b0c/**_1&up/060102030a0b0c/**_2"
+    );
+
+    // Able to ungister
+    let result = upclient
+        .unregister_listener(uuri.clone(), &listener_string)
+        .await
+        .unwrap();
+    assert_eq!(result, ());
+
+    // Unable to ungister
+    let result = upclient
+        .unregister_listener(uuri.clone(), &listener_string)
+        .await;
+    assert_eq!(
+        result,
+        Err(UStatus::fail_with_code(
+            UCode::INVALID_ARGUMENT,
+            "RPC response callback doesn't exist"
         ))
     )
 }

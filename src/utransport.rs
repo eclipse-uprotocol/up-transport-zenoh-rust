@@ -119,11 +119,12 @@ impl UPClientZenoh {
             .rpc_callback_map
             .lock()
             .unwrap()
-            .remove(&resp_listener_str)
+            .get(&resp_listener_str)
             .ok_or(UStatus::fail_with_code(
                 UCode::INTERNAL,
                 "Unable to get callback",
-            ))?;
+            ))?
+            .clone();
         let zenoh_callback = move |reply: Reply| {
             let msg = match reply.sample {
                 Ok(sample) => {
@@ -519,8 +520,19 @@ impl UTransport for UPClientZenoh {
         let listener = Arc::new(listener);
         if topic.authority.is_some() && topic.entity.is_none() && topic.resource.is_none() {
             // This is special UUri which means we need to register both listeners
+            // RPC response
+            let mut listener_str = format!(
+                "{}_{:X}",
+                String::from("up/") + &UPClientZenoh::get_uauth_from_uuri(&topic)? + "/**",
+                self.callback_counter.fetch_add(1, Ordering::SeqCst)
+            );
+            self.rpc_callback_map
+                .lock()
+                .unwrap()
+                .insert(listener_str.clone(), listener.clone());
             // RPC request
-            let mut listener_str = self
+            listener_str += "&";
+            listener_str += &self
                 .register_request_listener(topic.clone(), listener.clone())
                 .await?;
             // Normal publish
@@ -535,6 +547,7 @@ impl UTransport for UPClientZenoh {
                 .map_err(|_| UStatus::fail_with_code(UCode::INVALID_ARGUMENT, "Invalid topic"))?;
 
             if UriValidator::is_rpc_response(&topic) {
+                // RPC response
                 let resp_listener_str = topic.to_string();
                 self.rpc_callback_map
                     .lock()
@@ -562,14 +575,15 @@ impl UTransport for UPClientZenoh {
         if topic.authority.is_some() && topic.entity.is_none() && topic.resource.is_none() {
             // This is special UUri which means we need to unregister both listeners
             let listener_vec = listener.split('&').collect::<Vec<_>>();
-            if listener_vec.len() != 2 {
+            if listener_vec.len() != 3 {
                 return Err(UStatus::fail_with_code(
                     UCode::INVALID_ARGUMENT,
                     "Invalid listener string",
                 ));
             }
-            req_listener_str = Some(listener_vec[0]);
-            pub_listener_str = Some(listener_vec[1]);
+            resp_listener_str = Some(listener_vec[0]);
+            req_listener_str = Some(listener_vec[1]);
+            pub_listener_str = Some(listener_vec[2]);
         } else {
             // Do the validation
             UriValidator::validate(&topic)
@@ -583,7 +597,7 @@ impl UTransport for UPClientZenoh {
                 pub_listener_str = Some(listener);
             }
         }
-        if resp_listener_str.is_some() {
+        if let Some(listener) = resp_listener_str {
             // RPC response
             if self
                 .rpc_callback_map
@@ -598,7 +612,7 @@ impl UTransport for UPClientZenoh {
                 ));
             }
         }
-        if req_listener_str.is_some() {
+        if let Some(listener) = req_listener_str {
             // RPC request
             if self
                 .queryable_map
@@ -613,7 +627,7 @@ impl UTransport for UPClientZenoh {
                 ));
             }
         }
-        if pub_listener_str.is_some() {
+        if let Some(listener) = pub_listener_str {
             // Normal publish
             if self
                 .subscriber_map

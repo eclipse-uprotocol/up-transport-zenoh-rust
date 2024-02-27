@@ -30,23 +30,11 @@ impl RpcClient for UPClientZenoh {
         &self,
         topic: UUri,
         payload: UPayload,
-        _options: CallOptions,
+        options: CallOptions,
     ) -> RpcClientResult {
         // Validate UUri
         UriValidator::validate(&topic)
             .map_err(|_| RpcMapperError::UnexpectedError(String::from("Wrong UUri")))?;
-
-        // TODO: Comment it and check whether uAttributes is not necessary.
-        //// Validate UAttributes
-        //{
-        //    // TODO: Check why the validator doesn't have Send
-        //    let validator = Validators::Request.validator();
-        //    if let Err(e) = validator.validate(&attributes) {
-        //        return Err(RpcMapperError::UnexpectedError(format!(
-        //            "Wrong UAttributes {e:?}",
-        //        )));
-        //    }
-        //}
 
         // Get Zenoh key
         let Ok(zenoh_key) = UPClientZenoh::to_zenoh_key_string(&topic) else {
@@ -63,13 +51,19 @@ impl RpcClient for UPClientZenoh {
             )));
         };
 
-        // TODO: Check how to generate uAttributes, ex: source, reqid...
+        // Generate UAttributes
         let mut uattributes = UAttributes::new();
         let mut source = topic.clone();
         source.resource = Some(UResourceBuilder::for_rpc_response()).into();
         uattributes.source = Some(source).into();
         uattributes.sink = Some(topic).into();
         uattributes.reqid = Some(UUIDBuilder::new().build()).into();
+        // TODO: how to map CallOptions timeout into uAttributes
+        uattributes.token = if let Some(token) = options.token() {
+            Some(token.to_string())
+        } else {
+            None
+        };
         let Ok(attachment) = UPClientZenoh::uattributes_to_attachment(&uattributes) else {
             return Err(RpcMapperError::UnexpectedError(String::from(
                 "Invalid uAttributes",
