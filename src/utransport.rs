@@ -167,9 +167,9 @@ impl UPClientZenoh {
                         ..Default::default()
                     })
                 }
-                Err(_) => Err(UStatus::fail_with_code(
+                Err(e) => Err(UStatus::fail_with_code(
                     UCode::INTERNAL,
-                    "Error while parsing Zenoh reply",
+                    format!("Error while parsing Zenoh reply: {e:?}"),
                 )),
             };
             resp_callback(msg);
@@ -255,7 +255,10 @@ impl UPClientZenoh {
             .await
             .map_err(|e| {
                 log::error!("Unable to reply with Zenoh: {e:?}");
-                UStatus::fail_with_code(UCode::INTERNAL, "Unable to reply with Zenoh")
+                UStatus::fail_with_code(
+                    UCode::INTERNAL,
+                    format!("Unable to reply with Zenoh: {e:?}"),
+                )
             })?;
 
         Ok(())
@@ -519,7 +522,7 @@ impl UTransport for UPClientZenoh {
     ) -> Result<String, UStatus> {
         let listener = Arc::new(listener);
         if topic.authority.is_some() && topic.entity.is_none() && topic.resource.is_none() {
-            // This is special UUri which means we need to register both listeners
+            // This is special UUri which means we need to register for all of Publish, Request, and Response
             // RPC response
             let mut listener_str = format!(
                 "{}_{:X}",

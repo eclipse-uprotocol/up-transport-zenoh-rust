@@ -16,8 +16,8 @@ use async_trait::async_trait;
 use std::time::Duration;
 use up_rust::{
     rpc::{CallOptions, RpcClient, RpcClientResult, RpcMapperError, RpcServer},
-    transport::datamodel::UTransport,
-    uprotocol::{Data, UAttributes, UMessage, UPayload, UStatus, UUri},
+    transport::{builder::UAttributesBuilder, datamodel::UTransport},
+    uprotocol::{Data, UMessage, UPayload, UPriority, UStatus, UUri},
     uri::{builder::resourcebuilder::UResourceBuilder, validator::UriValidator},
     uuid::builder::UUIDBuilder,
 };
@@ -52,11 +52,13 @@ impl RpcClient for UPClientZenoh {
         };
 
         // Generate UAttributes
-        let mut uattributes = UAttributes::new();
+        // TODO: Check the ttl
+        let mut uattributes =
+            UAttributesBuilder::request(UPriority::UPRIORITY_CS4, topic.clone(), 255).build();
+        // TODO: How to create the source address for Response
         let mut source = topic.clone();
         source.resource = Some(UResourceBuilder::for_rpc_response()).into();
         uattributes.source = Some(source).into();
-        uattributes.sink = Some(topic).into();
         uattributes.reqid = Some(UUIDBuilder::new().build()).into();
         // TODO: how to map CallOptions timeout into uAttributes
         uattributes.token = if let Some(token) = options.token() {
@@ -116,9 +118,9 @@ impl RpcClient for UPClientZenoh {
                     ..Default::default()
                 })
             }
-            Err(_) => Err(RpcMapperError::UnexpectedError(String::from(
-                "Error while parsing Zenoh reply",
-            ))),
+            Err(e) => Err(RpcMapperError::UnexpectedError(String::from(format!(
+                "Error while parsing Zenoh reply: {e:?}"
+            )))),
         }
     }
 }
