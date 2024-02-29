@@ -13,7 +13,7 @@
 //
 use crate::UPClientZenoh;
 use async_trait::async_trait;
-use std::time::Duration;
+use std::{string::ToString, time::Duration};
 use up_rust::{
     rpc::{CallOptions, RpcClient, RpcClientResult, RpcMapperError, RpcServer},
     transport::{builder::UAttributesBuilder, datamodel::UTransport},
@@ -61,11 +61,7 @@ impl RpcClient for UPClientZenoh {
         uattributes.source = Some(source).into();
         uattributes.reqid = Some(UUIDBuilder::new().build()).into();
         // TODO: how to map CallOptions timeout into uAttributes
-        uattributes.token = if let Some(token) = options.token() {
-            Some(token.to_string())
-        } else {
-            None
-        };
+        uattributes.token = options.token().map(ToString::to_string);
         let Ok(attachment) = UPClientZenoh::uattributes_to_attachment(&uattributes) else {
             return Err(RpcMapperError::UnexpectedError(String::from(
                 "Invalid uAttributes",
@@ -118,9 +114,9 @@ impl RpcClient for UPClientZenoh {
                     ..Default::default()
                 })
             }
-            Err(e) => Err(RpcMapperError::UnexpectedError(String::from(format!(
+            Err(e) => Err(RpcMapperError::UnexpectedError(format!(
                 "Error while parsing Zenoh reply: {e:?}"
-            )))),
+            ))),
         }
     }
 }

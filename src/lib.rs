@@ -34,6 +34,8 @@ use zenoh::{
 
 pub type UtransportListener = Box<dyn Fn(Result<UMessage, UStatus>) + Send + Sync + 'static>;
 
+const UATTRIBUTE_VERSION: u8 = 1;
+
 pub struct ZenohListener {}
 pub struct UPClientZenoh {
     session: Arc<Session>,
@@ -95,12 +97,10 @@ impl UPClientZenoh {
             .fold(String::new(), |s, c| s + &format!("{c:02x}")))
     }
 
-    // The UURI format should be "up/<UAuthority id or ip>/<the rest of UUri>"
+    // The UURI format should be "upr/<UAuthority id or ip>/<the rest of remote UUri>" or "upl/<local UUri>"
     fn to_zenoh_key_string(uri: &UUri) -> Result<String, UStatus> {
-        let mut micro_zenoh_key = String::from("up/");
         if uri.authority.is_some() && uri.entity.is_none() && uri.resource.is_none() {
-            micro_zenoh_key += &UPClientZenoh::get_uauth_from_uuri(uri)?;
-            micro_zenoh_key += "/**";
+            Ok(String::from("upr/") + &UPClientZenoh::get_uauth_from_uuri(uri)? + "/**")
         } else {
             let micro_uuri = MicroUriSerializer::serialize(uri).map_err(|_| {
                 UStatus::fail_with_code(
@@ -108,20 +108,23 @@ impl UPClientZenoh {
                     "Unable to serialize into micro format",
                 )
             })?;
-            // The part of UUri which is larger than 8 bytes belongs to uAuthority
-            // If it exists, we prepend it before the Zenoh key
-            if micro_uuri.len() > 8 {
-                micro_zenoh_key += &micro_uuri[8..]
-                    .iter()
-                    .fold(String::new(), |s, c| s + &format!("{c:02x}"));
-                micro_zenoh_key += "/";
-            }
-            // The rest part of UUri
+            // If the UUri is larger than 8 bytes, then it should be remote UUri with UAuthority
+            // We should prepend it to the Zenoh key.
+            let mut micro_zenoh_key = if micro_uuri.len() > 8 {
+                String::from("upr/")
+                    + &micro_uuri[8..]
+                        .iter()
+                        .fold(String::new(), |s, c| s + &format!("{c:02x}"))
+                    + "/"
+            } else {
+                String::from("upl/")
+            };
+            // The rest part of UUri (UEntity + UResource)
             micro_zenoh_key += &micro_uuri[..8]
                 .iter()
                 .fold(String::new(), |s, c| s + &format!("{c:02x}"));
+            Ok(micro_zenoh_key)
         }
-        Ok(micro_zenoh_key)
     }
 
     #[allow(clippy::match_same_arms)]
@@ -149,7 +152,8 @@ impl UPClientZenoh {
 
     fn uattributes_to_attachment(uattributes: &UAttributes) -> anyhow::Result<AttachmentBuilder> {
         let mut attachment = AttachmentBuilder::new();
-        attachment.insert("uattr", &uattributes.write_to_bytes()?);
+        attachment.insert("", &UATTRIBUTE_VERSION.to_le_bytes());
+        attachment.insert("", &uattributes.write_to_bytes()?);
         /* TODO: We send the whole uattributes directly for the time being and do the benchmark later.
         attachment.insert("id", &uattributes.id.write_to_bytes()?);
         attachment.insert(
@@ -185,15 +189,33 @@ impl UPClientZenoh {
     }
 
     fn attachment_to_uattributes(attachment: &Attachment) -> anyhow::Result<UAttributes> {
-        let uattributes = UAttributes::parse_from_bytes(
-            attachment
-                .get(&"uattr".as_bytes())
-                .ok_or(UStatus::fail_with_code(
+        let mut attachment_iter = attachment.iter();
+        if let Some((_, value)) = attachment_iter.next() {
+            let version = *value.as_slice().first().ok_or(UStatus::fail_with_code(
+                UCode::INTERNAL,
+                "uAttributes version is empty",
+            ))?;
+            if version != 1 {
+                return Err(UStatus::fail_with_code(
                     UCode::INTERNAL,
-                    "Unable to get uAttributes",
-                ))?
-                .as_slice(),
-        )?;
+                    "uAttributes version should be 1",
+                )
+                .into());
+            }
+        } else {
+            return Err(UStatus::fail_with_code(
+                UCode::INTERNAL,
+                "Unable to get the uAttributes version",
+            )
+            .into());
+        }
+        let uattributes = if let Some((_, value)) = attachment_iter.next() {
+            UAttributes::parse_from_bytes(value.as_slice())?
+        } else {
+            return Err(
+                UStatus::fail_with_code(UCode::INTERNAL, "Unable to get the uAttributes").into(),
+            );
+        };
         /* TODO: We send the whole uattributes directly for the time being and do the benchmark later.
         let mut uattributes = UAttributes::new();
         if let Some(id) = attachment.get(&"id".as_bytes()) {
@@ -288,7 +310,7 @@ mod tests {
         };
         assert_eq!(
             UPClientZenoh::to_zenoh_key_string(&uuri).unwrap(),
-            String::from("up/0100162e04d20100")
+            String::from("upl/0100162e04d20100")
         );
         // create special uuri for test
         let uuri = UUri {
@@ -302,7 +324,7 @@ mod tests {
         };
         assert_eq!(
             UPClientZenoh::to_zenoh_key_string(&uuri).unwrap(),
-            String::from("up/060102030a0b0c/**")
+            String::from("upr/060102030a0b0c/**")
         );
     }
 }

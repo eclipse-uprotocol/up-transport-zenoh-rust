@@ -265,11 +265,11 @@ impl UPClientZenoh {
     }
     async fn register_publish_listener(
         &self,
-        topic: UUri,
+        topic: &UUri,
         listener: Arc<UtransportListener>,
     ) -> Result<String, UStatus> {
         // Get Zenoh key
-        let zenoh_key = UPClientZenoh::to_zenoh_key_string(&topic)?;
+        let zenoh_key = UPClientZenoh::to_zenoh_key_string(topic)?;
         // Generate listener string for users to delete
         let hashmap_key = format!(
             "{}_{:X}",
@@ -343,11 +343,11 @@ impl UPClientZenoh {
 
     async fn register_request_listener(
         &self,
-        topic: UUri,
+        topic: &UUri,
         listener: Arc<UtransportListener>,
     ) -> Result<String, UStatus> {
         // Get Zenoh key
-        let zenoh_key = UPClientZenoh::to_zenoh_key_string(&topic)?;
+        let zenoh_key = UPClientZenoh::to_zenoh_key_string(topic)?;
         // Generate listener string for users to delete
         let hashmap_key = format!(
             "{}_{:X}",
@@ -430,6 +430,28 @@ impl UPClientZenoh {
                 "Unable to register callback with Zenoh",
             ));
         }
+
+        Ok(hashmap_key)
+    }
+
+    fn register_response_listener(
+        &self,
+        topic: &UUri,
+        listener: Arc<UtransportListener>,
+    ) -> Result<String, UStatus> {
+        // Get Zenoh key
+        let zenoh_key = UPClientZenoh::to_zenoh_key_string(topic)?;
+        // Generate listener string for users to delete
+        let hashmap_key = format!(
+            "{}_{:X}",
+            zenoh_key,
+            self.callback_counter.fetch_add(1, Ordering::SeqCst)
+        );
+
+        self.rpc_callback_map
+            .lock()
+            .unwrap()
+            .insert(hashmap_key.clone(), listener);
 
         Ok(hashmap_key)
     }
@@ -524,24 +546,16 @@ impl UTransport for UPClientZenoh {
         if topic.authority.is_some() && topic.entity.is_none() && topic.resource.is_none() {
             // This is special UUri which means we need to register for all of Publish, Request, and Response
             // RPC response
-            let mut listener_str = format!(
-                "{}_{:X}",
-                String::from("up/") + &UPClientZenoh::get_uauth_from_uuri(&topic)? + "/**",
-                self.callback_counter.fetch_add(1, Ordering::SeqCst)
-            );
-            self.rpc_callback_map
-                .lock()
-                .unwrap()
-                .insert(listener_str.clone(), listener.clone());
+            let mut listener_str = self.register_response_listener(&topic, listener.clone())?;
             // RPC request
             listener_str += "&";
             listener_str += &self
-                .register_request_listener(topic.clone(), listener.clone())
+                .register_request_listener(&topic, listener.clone())
                 .await?;
             // Normal publish
             listener_str += "&";
             listener_str += &self
-                .register_publish_listener(topic, listener.clone())
+                .register_publish_listener(&topic, listener.clone())
                 .await?;
             Ok(listener_str)
         } else {
@@ -551,20 +565,14 @@ impl UTransport for UPClientZenoh {
 
             if UriValidator::is_rpc_response(&topic) {
                 // RPC response
-                let resp_listener_str = topic.to_string();
-                self.rpc_callback_map
-                    .lock()
-                    .unwrap()
-                    .insert(resp_listener_str.clone(), listener.clone());
-
-                Ok(resp_listener_str)
+                self.register_response_listener(&topic, listener.clone())
             } else if UriValidator::is_rpc_method(&topic) {
                 // RPC request
-                self.register_request_listener(topic, listener.clone())
+                self.register_request_listener(&topic, listener.clone())
                     .await
             } else {
                 // Normal publish
-                self.register_publish_listener(topic, listener.clone())
+                self.register_publish_listener(&topic, listener.clone())
                     .await
             }
         }
