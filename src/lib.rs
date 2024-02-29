@@ -154,37 +154,6 @@ impl UPClientZenoh {
         let mut attachment = AttachmentBuilder::new();
         attachment.insert("", &UATTRIBUTE_VERSION.to_le_bytes());
         attachment.insert("", &uattributes.write_to_bytes()?);
-        /* TODO: We send the whole uattributes directly for the time being and do the benchmark later.
-        attachment.insert("id", &uattributes.id.write_to_bytes()?);
-        attachment.insert(
-            "type_",
-            &uattributes
-                .type_
-                .enum_value()
-                .map_err(|_| UStatus::fail_with_code(UCode::INTERNAL, "Unable to parse type"))?
-                .to_type_string(),
-        );
-        attachment.insert("source", &uattributes.source.write_to_bytes()?);
-        attachment.insert("sink", &uattributes.sink.write_to_bytes()?);
-        // TODO: Check whether request & response need priority or not
-        attachment.insert("priority", &uattributes.priority.value().to_string());
-        if let Some(ttl) = uattributes.ttl {
-            attachment.insert("ttl", &ttl.to_string());
-        }
-        if let Some(plevel) = uattributes.permission_level {
-            attachment.insert("permission_level", &plevel.to_string());
-        }
-        if let Some(commstatus) = uattributes.commstatus {
-            attachment.insert("commstatus", &commstatus.to_string());
-        }
-        attachment.insert("reqid", &uattributes.reqid.write_to_bytes()?);
-        if let Some(token) = uattributes.token.clone() {
-            attachment.insert("token", &token);
-        }
-        if let Some(traceparent) = uattributes.traceparent.clone() {
-            attachment.insert("traceparent", &traceparent);
-        }
-        */
         Ok(attachment)
     }
 
@@ -216,68 +185,6 @@ impl UPClientZenoh {
                 UStatus::fail_with_code(UCode::INTERNAL, "Unable to get the uAttributes").into(),
             );
         };
-        /* TODO: We send the whole uattributes directly for the time being and do the benchmark later.
-        let mut uattributes = UAttributes::new();
-        if let Some(id) = attachment.get(&"id".as_bytes()) {
-            let uuid = UUID::parse_from_bytes(&id)?;
-            uattributes.id = Some(uuid).into();
-        } else {
-            return Err(UStatus::fail_with_code(UCode::INTERNAL, "Unable to parse id").into());
-        }
-        if let Some(type_) = attachment.get(&"type_".as_bytes()) {
-            let uuid = UMessageType::from_type_string(type_.to_string());
-            uattributes.type_ = uuid.into();
-        } else {
-            return Err(UStatus::fail_with_code(UCode::INTERNAL, "Unable to parse type_").into());
-        }
-        if let Some(source) = attachment.get(&"source".as_bytes()) {
-            let source = UUri::parse_from_bytes(&source)?;
-            uattributes.source = Some(source).into();
-        } else {
-            return Err(UStatus::fail_with_code(UCode::INTERNAL, "Unable to parse source").into());
-        }
-        if let Some(sink) = attachment.get(&"sink".as_bytes()) {
-            let sink = UUri::parse_from_bytes(&sink)?;
-            uattributes.sink = Some(sink).into();
-        } else {
-            return Err(UStatus::fail_with_code(UCode::INTERNAL, "Unable to parse sink").into());
-        }
-        if let Some(priority) = attachment.get(&"priority".as_bytes()) {
-            let priority =
-                UPriority::from_i32(String::from_utf8(priority.to_vec())?.parse()?).ok_or(
-                    UStatus::fail_with_code(UCode::INTERNAL, "Wrong priority type"),
-                )?;
-            uattributes.priority = priority.into();
-        } else {
-            return Err(
-                UStatus::fail_with_code(UCode::INTERNAL, "Unable to parse priority").into(),
-            );
-        }
-        if let Some(ttl) = attachment.get(&"ttl".as_bytes()) {
-            let ttl = String::from_utf8(ttl.to_vec())?.parse::<i32>()?;
-            uattributes.ttl = Some(ttl);
-        }
-        if let Some(permission_level) = attachment.get(&"permission_level".as_bytes()) {
-            let permission_level = String::from_utf8(permission_level.to_vec())?.parse::<i32>()?;
-            uattributes.permission_level = Some(permission_level);
-        }
-        if let Some(commstatus) = attachment.get(&"commstatus".as_bytes()) {
-            let commstatus = String::from_utf8(commstatus.to_vec())?.parse::<i32>()?;
-            uattributes.commstatus = Some(commstatus);
-        }
-        if let Some(reqid) = attachment.get(&"reqid".as_bytes()) {
-            let reqid = UUID::parse_from_bytes(&reqid)?;
-            uattributes.reqid = Some(reqid).into();
-        }
-        if let Some(token) = attachment.get(&"token".as_bytes()) {
-            let token = token.to_string();
-            uattributes.token = Some(token);
-        }
-        if let Some(traceparent) = attachment.get(&"traceparent".as_bytes()) {
-            let traceparent = traceparent.to_string();
-            uattributes.traceparent = Some(traceparent);
-        }
-        */
         Ok(uattributes)
     }
 }

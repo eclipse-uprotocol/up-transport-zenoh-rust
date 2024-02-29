@@ -38,12 +38,11 @@ impl UPClientZenoh {
         attributes: UAttributes,
     ) -> Result<(), UStatus> {
         // Get the data from UPayload
-        let Some(Data::Value(buf)) = payload.data else {
+        let buf = if let Some(Data::Value(buf)) = payload.data {
+            buf
+        } else {
             // TODO: Assume we only have Value here, no reference for shared memory
-            return Err(UStatus::fail_with_code(
-                UCode::INVALID_ARGUMENT,
-                "Invalid data",
-            ));
+            vec![]
         };
 
         // Serialized UAttributes into protobuf
@@ -85,12 +84,11 @@ impl UPClientZenoh {
         attributes: UAttributes,
     ) -> Result<(), UStatus> {
         // Get the data from UPayload
-        let Some(Data::Value(buf)) = payload.data else {
+        let buf = if let Some(Data::Value(buf)) = payload.data {
+            buf
+        } else {
             // TODO: Assume we only have Value here, no reference for shared memory
-            return Err(UStatus::fail_with_code(
-                UCode::INVALID_ARGUMENT,
-                "Invalid data",
-            ));
+            vec![]
         };
 
         // Serialized UAttributes into protobuf
@@ -199,13 +197,11 @@ impl UPClientZenoh {
         attributes: UAttributes,
     ) -> Result<(), UStatus> {
         // Get the data from UPayload
-        let Some(Data::Value(buf)) = payload.data else {
-            log::error!("send_response: Invalide data");
+        let buf = if let Some(Data::Value(buf)) = payload.data {
+            buf
+        } else {
             // TODO: Assume we only have Value here, no reference for shared memory
-            return Err(UStatus::fail_with_code(
-                UCode::INVALID_ARGUMENT,
-                "Invalid data",
-            ));
+            vec![]
         };
 
         // Serialized UAttributes into protobuf
