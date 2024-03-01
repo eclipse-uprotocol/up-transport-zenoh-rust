@@ -16,8 +16,8 @@ use async_trait::async_trait;
 use std::{string::ToString, time::Duration};
 use up_rust::{
     rpc::{CallOptions, RpcClient, RpcClientResult, RpcMapperError, RpcServer},
-    transport::{builder::UAttributesBuilder, datamodel::UTransport},
-    uprotocol::{Data, UMessage, UPayload, UPriority, UStatus, UUri},
+    transport::{builder::UMessageBuilder, datamodel::UTransport},
+    uprotocol::{Data, UMessage, UPayload, UStatus, UUri},
     uri::{builder::resourcebuilder::UResourceBuilder, validator::UriValidator},
     uuid::builder::UUIDBuilder,
 };
@@ -52,16 +52,30 @@ impl RpcClient for UPClientZenoh {
         };
 
         // Generate UAttributes
-        // TODO: Check the ttl
-        let mut uattributes =
-            UAttributesBuilder::request(UPriority::UPRIORITY_CS4, topic.clone(), 255).build();
-        // TODO: How to create the source address for Response
+        let uuid_builder = UUIDBuilder::new();
+        let reqid = UUIDBuilder::new().build();
+        // Create response address
         let mut source = topic.clone();
         source.resource = Some(UResourceBuilder::for_rpc_response()).into();
-        uattributes.source = Some(source).into();
-        uattributes.reqid = Some(UUIDBuilder::new().build()).into();
-        // TODO: how to map CallOptions timeout into uAttributes
-        uattributes.token = options.token().map(ToString::to_string);
+        // TODO: Check the ttl
+        let umessage = if let Some(token) = options.token() {
+            UMessageBuilder::request(&topic, &source, &reqid, 255)
+                .with_token(&token.to_string())
+                .build(&uuid_builder)
+        } else {
+            UMessageBuilder::request(&topic, &source, &reqid, 255).build(&uuid_builder)
+        };
+        // Extract uAttributes
+        let Ok(UMessage {
+            attributes: uattributes,
+            ..
+        }) = umessage
+        else {
+            return Err(RpcMapperError::UnexpectedError(String::from(
+                "Unable to create uAttributes",
+            )));
+        };
+        // Put into attachment
         let Ok(attachment) = UPClientZenoh::uattributes_to_attachment(&uattributes) else {
             return Err(RpcMapperError::UnexpectedError(String::from(
                 "Invalid uAttributes",
@@ -103,7 +117,7 @@ impl RpcClient for UPClientZenoh {
                 };
                 // TODO: Need to check attributes is correct or not
                 Ok(UMessage {
-                    attributes: Some(uattributes).into(),
+                    attributes: uattributes,
                     payload: Some(UPayload {
                         length: Some(0),
                         format: encoding.into(),

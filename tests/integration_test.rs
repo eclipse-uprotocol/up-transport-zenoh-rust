@@ -15,12 +15,13 @@ use async_std::task::{self, block_on};
 use std::{sync::Arc, time};
 use up_rust::{
     rpc::{CallOptionsBuilder, RpcClient, RpcServer},
-    transport::{builder::UAttributesBuilder, datamodel::UTransport},
+    transport::{builder::UMessageBuilder, datamodel::UTransport},
     uprotocol::{
         uri::uauthority::Number, Data, UAuthority, UCode, UEntity, UMessage, UMessageType,
-        UPayload, UPayloadFormat, UPriority, UResource, UStatus, UUri,
+        UPayload, UPayloadFormat, UResource, UStatus, UUri,
     },
     uri::builder::resourcebuilder::UResourceBuilder,
+    uuid::builder::UUIDBuilder,
 };
 use uprotocol_zenoh::UPClientZenoh;
 use zenoh::config::Config;
@@ -188,7 +189,7 @@ async fn test_publish_and_subscribe() {
         Ok(msg) => {
             if let Data::Value(v) = msg.payload.unwrap().data.unwrap() {
                 let value = v.into_iter().map(|c| c as char).collect::<String>();
-                assert_eq!(msg.attributes.unwrap().sink.unwrap(), uuri_cloned);
+                assert_eq!(msg.attributes.unwrap().source.unwrap(), uuri_cloned);
                 assert_eq!(value, data_cloned);
             } else {
                 panic!("The message should be Data::Value type.");
@@ -201,27 +202,14 @@ async fn test_publish_and_subscribe() {
         .await
         .unwrap();
 
-    // Create uattributes
-    let mut attributes = UAttributesBuilder::publish(UPriority::UPRIORITY_CS4).build();
-    attributes.sink = Some(uuri.clone()).into();
-    // TODO: Check what source we should fill
-    attributes.source = Some(uuri.clone()).into();
-
-    // Publish the data
-    let payload = UPayload {
-        length: Some(0),
-        format: UPayloadFormat::UPAYLOAD_FORMAT_TEXT.into(),
-        data: Some(Data::Value(target_data.as_bytes().to_vec())),
-        ..Default::default()
-    };
-    upclient
-        .send(UMessage {
-            attributes: Some(attributes.clone()).into(),
-            payload: Some(payload).into(),
-            ..Default::default()
-        })
-        .await
+    let umessage = UMessageBuilder::publish(&uuri)
+        .build_with_payload(
+            &UUIDBuilder::new(),
+            target_data.as_bytes().to_vec().into(),
+            UPayloadFormat::UPAYLOAD_FORMAT_TEXT,
+        )
         .unwrap();
+    upclient.send(umessage).await.unwrap();
 
     // Waiting for the subscriber to receive data
     task::sleep(time::Duration::from_millis(1000)).await;
@@ -379,27 +367,14 @@ async fn test_register_listener_with_special_uuri() {
         let mut publish_uuri = create_utransport_uuri();
         publish_uuri.authority = Some(create_authority()).into();
 
-        // Create uattributes
-        let mut attributes = UAttributesBuilder::publish(UPriority::UPRIORITY_CS4).build();
-        attributes.sink = Some(publish_uuri.clone()).into();
-        // TODO: Check what source we should fill
-        attributes.source = Some(publish_uuri.clone()).into();
-
-        // Publish the data
-        let payload = UPayload {
-            length: Some(0),
-            format: UPayloadFormat::UPAYLOAD_FORMAT_TEXT.into(),
-            data: Some(Data::Value(publish_data.as_bytes().to_vec())),
-            ..Default::default()
-        };
-        upclient2
-            .send(UMessage {
-                attributes: Some(attributes.clone()).into(),
-                payload: Some(payload).into(),
-                ..Default::default()
-            })
-            .await
+        let umessage = UMessageBuilder::publish(&publish_uuri)
+            .build_with_payload(
+                &UUIDBuilder::new(),
+                publish_data.as_bytes().to_vec().into(),
+                UPayloadFormat::UPAYLOAD_FORMAT_TEXT,
+            )
             .unwrap();
+        upclient2.send(umessage).await.unwrap();
 
         // Waiting for the subscriber to receive data
         task::sleep(time::Duration::from_millis(1000)).await;
