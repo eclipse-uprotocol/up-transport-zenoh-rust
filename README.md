@@ -6,7 +6,7 @@ Rust UPClient implementation for the Zenoh transport
 
 ```shell
 # Check clippy
-cargo clippy
+cargo clippy --all-targets
 # Build
 cargo build
 # Run test
