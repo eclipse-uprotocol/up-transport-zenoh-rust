@@ -26,10 +26,10 @@ fn callback(result: Result<UMessage, UStatus>) {
             let uri = msg.attributes.unwrap().source.unwrap().to_string();
             if let Data::Value(v) = msg.payload.unwrap().data.unwrap() {
                 let value = v.into_iter().map(|c| c as char).collect::<String>();
-                println!("Receiving {} from {}", value, uri);
+                println!("Receiving {value} from {uri}");
             }
         }
-        Err(ustatus) => println!("Internal Error: {:?}", ustatus),
+        Err(ustatus) => println!("Internal Error: {ustatus:?}"),
     }
 }
 

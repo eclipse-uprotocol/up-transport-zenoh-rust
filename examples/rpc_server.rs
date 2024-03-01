@@ -64,12 +64,7 @@ async fn main() {
                 // Build the payload to send back
                 if let Data::Value(v) = payload.unwrap().data.unwrap() {
                     let value = v.into_iter().map(|c| c as char).collect::<String>();
-                    println!(
-                        "Receive {} from {} to {}",
-                        value,
-                        source.to_string(),
-                        sink.to_string()
-                    );
+                    println!("Receive {value} from {source} to {sink}");
                 }
                 // Get current time
                 let upayload = UPayload {
@@ -92,7 +87,7 @@ async fn main() {
                 .unwrap();
             }
             Err(ustatus) => {
-                println!("Internal Error: {:?}", ustatus);
+                println!("Internal Error: {ustatus:?}");
             }
         }
     };

@@ -223,7 +223,7 @@ mod tests {
         let uuri = UUri {
             authority: Some(UAuthority {
                 name: Some("UAuthName".to_string()),
-                number: Some(Number::Id(vec![01, 02, 03, 10, 11, 12])),
+                number: Some(Number::Id(vec![1, 2, 3, 10, 11, 12])),
                 ..Default::default()
             })
             .into(),

@@ -58,14 +58,14 @@ async fn main() {
 
     let mut cnt: u64 = 0;
     loop {
-        let data = format!("{}", cnt);
+        let data = format!("{cnt}");
         let payload = UPayload {
             length: Some(0),
             format: UPayloadFormat::UPAYLOAD_FORMAT_TEXT.into(),
             data: Some(Data::Value(data.as_bytes().to_vec())),
             ..Default::default()
         };
-        println!("Sending {} to {}...", data, uuri.to_string());
+        println!("Sending {data} to {uuri}...");
         publisher
             .send(UMessage {
                 attributes: Some(attributes.clone()).into(),

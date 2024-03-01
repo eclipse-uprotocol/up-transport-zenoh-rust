@@ -67,7 +67,7 @@ fn create_rpcserver_uuri() -> UUri {
 fn create_authority() -> UAuthority {
     UAuthority {
         name: Some("UAuthName".to_string()),
-        number: Some(Number::Id(vec![01, 02, 03, 10, 11, 12])),
+        number: Some(Number::Id(vec![1, 2, 3, 10, 11, 12])),
         ..Default::default()
     }
 }
@@ -92,11 +92,10 @@ async fn test_utransport_register_and_unregister() {
     assert_eq!(listener_string, "upl/0100162e04d20100_0");
 
     // Able to ungister
-    let result = upclient
+    upclient
         .unregister_listener(uuri.clone(), &listener_string)
         .await
         .unwrap();
-    assert_eq!(result, ());
 
     // Unable to ungister
     let result = upclient
@@ -108,7 +107,7 @@ async fn test_utransport_register_and_unregister() {
             UCode::INVALID_ARGUMENT,
             "Publish listener doesn't exist"
         ))
-    )
+    );
 }
 
 #[async_std::test]
@@ -124,11 +123,10 @@ async fn test_rpcserver_register_and_unregister() {
     assert_eq!(listener_string, "upl/0100162e04d20100_0");
 
     // Able to ungister
-    let result = upclient
+    upclient
         .unregister_rpc_listener(uuri.clone(), &listener_string)
         .await
         .unwrap();
-    assert_eq!(result, ());
 
     // Unable to ungister
     let result = upclient
@@ -140,7 +138,7 @@ async fn test_rpcserver_register_and_unregister() {
             UCode::INVALID_ARGUMENT,
             "RPC request listener doesn't exist"
         ))
-    )
+    );
 }
 
 #[async_std::test]
@@ -159,11 +157,10 @@ async fn test_utransport_special_uuri_register_and_unregister() {
     );
 
     // Able to ungister
-    let result = upclient
+    upclient
         .unregister_listener(uuri.clone(), &listener_string)
         .await
         .unwrap();
-    assert_eq!(result, ());
 
     // Unable to ungister
     let result = upclient
@@ -175,7 +172,7 @@ async fn test_utransport_special_uuri_register_and_unregister() {
             UCode::INVALID_ARGUMENT,
             "RPC response callback doesn't exist"
         ))
-    )
+    );
 }
 
 #[async_std::test]
@@ -197,7 +194,7 @@ async fn test_publish_and_subscribe() {
                 panic!("The message should be Data::Value type.");
             }
         }
-        Err(ustatus) => panic!("Internal Error: {:?}", ustatus),
+        Err(ustatus) => panic!("Internal Error: {ustatus:?}"),
     };
     let listener_string = upclient
         .register_listener(uuri.clone(), Box::new(listener))
@@ -286,7 +283,7 @@ async fn test_rpc_server_client() {
                 .unwrap();
             }
             Err(ustatus) => {
-                panic!("Internal Error: {:?}", ustatus);
+                panic!("Internal Error: {ustatus:?}");
             }
         }
     };
@@ -370,7 +367,7 @@ async fn test_register_listener_with_special_uuri() {
                 }
             }
         }
-        Err(ustatus) => panic!("Internal Error: {:?}", ustatus),
+        Err(ustatus) => panic!("Internal Error: {ustatus:?}"),
     };
     let listener_string = upclient1
         .register_listener(listener_uuri.clone(), Box::new(listener))
