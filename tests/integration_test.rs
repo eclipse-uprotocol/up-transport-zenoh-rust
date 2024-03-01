@@ -15,12 +15,13 @@ use async_std::task::{self, block_on};
 use std::{sync::Arc, time};
 use up_rust::{
     rpc::{CallOptionsBuilder, RpcClient, RpcServer},
-    transport::{builder::UAttributesBuilder, datamodel::UTransport},
+    transport::{builder::UMessageBuilder, datamodel::UTransport},
     uprotocol::{
         uri::uauthority::Number, Data, UAuthority, UCode, UEntity, UMessage, UMessageType,
-        UPayload, UPayloadFormat, UPriority, UResource, UStatus, UUri,
+        UPayload, UPayloadFormat, UResource, UStatus, UUri,
     },
     uri::builder::resourcebuilder::UResourceBuilder,
+    uuid::builder::UUIDBuilder,
 };
 use uprotocol_zenoh::UPClientZenoh;
 use zenoh::config::Config;
@@ -67,7 +68,7 @@ fn create_rpcserver_uuri() -> UUri {
 fn create_authority() -> UAuthority {
     UAuthority {
         name: Some("UAuthName".to_string()),
-        number: Some(Number::Id(vec![01, 02, 03, 10, 11, 12])),
+        number: Some(Number::Id(vec![1, 2, 3, 10, 11, 12])),
         ..Default::default()
     }
 }
@@ -92,11 +93,10 @@ async fn test_utransport_register_and_unregister() {
     assert_eq!(listener_string, "upl/0100162e04d20100_0");
 
     // Able to ungister
-    let result = upclient
+    upclient
         .unregister_listener(uuri.clone(), &listener_string)
         .await
         .unwrap();
-    assert_eq!(result, ());
 
     // Unable to ungister
     let result = upclient
@@ -108,7 +108,7 @@ async fn test_utransport_register_and_unregister() {
             UCode::INVALID_ARGUMENT,
             "Publish listener doesn't exist"
         ))
-    )
+    );
 }
 
 #[async_std::test]
@@ -124,11 +124,10 @@ async fn test_rpcserver_register_and_unregister() {
     assert_eq!(listener_string, "upl/0100162e04d20100_0");
 
     // Able to ungister
-    let result = upclient
+    upclient
         .unregister_rpc_listener(uuri.clone(), &listener_string)
         .await
         .unwrap();
-    assert_eq!(result, ());
 
     // Unable to ungister
     let result = upclient
@@ -140,7 +139,7 @@ async fn test_rpcserver_register_and_unregister() {
             UCode::INVALID_ARGUMENT,
             "RPC request listener doesn't exist"
         ))
-    )
+    );
 }
 
 #[async_std::test]
@@ -159,11 +158,10 @@ async fn test_utransport_special_uuri_register_and_unregister() {
     );
 
     // Able to ungister
-    let result = upclient
+    upclient
         .unregister_listener(uuri.clone(), &listener_string)
         .await
         .unwrap();
-    assert_eq!(result, ());
 
     // Unable to ungister
     let result = upclient
@@ -175,7 +173,7 @@ async fn test_utransport_special_uuri_register_and_unregister() {
             UCode::INVALID_ARGUMENT,
             "RPC response callback doesn't exist"
         ))
-    )
+    );
 }
 
 #[async_std::test]
@@ -191,40 +189,27 @@ async fn test_publish_and_subscribe() {
         Ok(msg) => {
             if let Data::Value(v) = msg.payload.unwrap().data.unwrap() {
                 let value = v.into_iter().map(|c| c as char).collect::<String>();
-                assert_eq!(msg.attributes.unwrap().sink.unwrap(), uuri_cloned);
+                assert_eq!(msg.attributes.unwrap().source.unwrap(), uuri_cloned);
                 assert_eq!(value, data_cloned);
             } else {
                 panic!("The message should be Data::Value type.");
             }
         }
-        Err(ustatus) => panic!("Internal Error: {:?}", ustatus),
+        Err(ustatus) => panic!("Internal Error: {ustatus:?}"),
     };
     let listener_string = upclient
         .register_listener(uuri.clone(), Box::new(listener))
         .await
         .unwrap();
 
-    // Create uattributes
-    let mut attributes = UAttributesBuilder::publish(UPriority::UPRIORITY_CS4).build();
-    attributes.sink = Some(uuri.clone()).into();
-    // TODO: Check what source we should fill
-    attributes.source = Some(uuri.clone()).into();
-
-    // Publish the data
-    let payload = UPayload {
-        length: Some(0),
-        format: UPayloadFormat::UPAYLOAD_FORMAT_TEXT.into(),
-        data: Some(Data::Value(target_data.as_bytes().to_vec())),
-        ..Default::default()
-    };
-    upclient
-        .send(UMessage {
-            attributes: Some(attributes.clone()).into(),
-            payload: Some(payload).into(),
-            ..Default::default()
-        })
-        .await
+    let umessage = UMessageBuilder::publish(&uuri)
+        .build_with_payload(
+            &UUIDBuilder::new(),
+            target_data.as_bytes().to_vec().into(),
+            UPayloadFormat::UPAYLOAD_FORMAT_TEXT,
+        )
         .unwrap();
+    upclient.send(umessage).await.unwrap();
 
     // Waiting for the subscriber to receive data
     task::sleep(time::Duration::from_millis(1000)).await;
@@ -286,7 +271,7 @@ async fn test_rpc_server_client() {
                 .unwrap();
             }
             Err(ustatus) => {
-                panic!("Internal Error: {:?}", ustatus);
+                panic!("Internal Error: {ustatus:?}");
             }
         }
     };
@@ -370,7 +355,7 @@ async fn test_register_listener_with_special_uuri() {
                 }
             }
         }
-        Err(ustatus) => panic!("Internal Error: {:?}", ustatus),
+        Err(ustatus) => panic!("Internal Error: {ustatus:?}"),
     };
     let listener_string = upclient1
         .register_listener(listener_uuri.clone(), Box::new(listener))
@@ -382,27 +367,14 @@ async fn test_register_listener_with_special_uuri() {
         let mut publish_uuri = create_utransport_uuri();
         publish_uuri.authority = Some(create_authority()).into();
 
-        // Create uattributes
-        let mut attributes = UAttributesBuilder::publish(UPriority::UPRIORITY_CS4).build();
-        attributes.sink = Some(publish_uuri.clone()).into();
-        // TODO: Check what source we should fill
-        attributes.source = Some(publish_uuri.clone()).into();
-
-        // Publish the data
-        let payload = UPayload {
-            length: Some(0),
-            format: UPayloadFormat::UPAYLOAD_FORMAT_TEXT.into(),
-            data: Some(Data::Value(publish_data.as_bytes().to_vec())),
-            ..Default::default()
-        };
-        upclient2
-            .send(UMessage {
-                attributes: Some(attributes.clone()).into(),
-                payload: Some(payload).into(),
-                ..Default::default()
-            })
-            .await
+        let umessage = UMessageBuilder::publish(&publish_uuri)
+            .build_with_payload(
+                &UUIDBuilder::new(),
+                publish_data.as_bytes().to_vec().into(),
+                UPayloadFormat::UPAYLOAD_FORMAT_TEXT,
+            )
             .unwrap();
+        upclient2.send(umessage).await.unwrap();
 
         // Waiting for the subscriber to receive data
         task::sleep(time::Duration::from_millis(1000)).await;

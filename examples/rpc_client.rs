@@ -62,7 +62,7 @@ async fn main() {
     };
 
     // invoke RPC method
-    println!("Send request to {}", uuri.to_string());
+    println!("Send request to {uuri}");
     let result = rpc_client
         .invoke_method(uuri, payload, CallOptionsBuilder::default().build())
         .await;
@@ -70,7 +70,7 @@ async fn main() {
     // process the result
     if let Data::Value(v) = result.unwrap().payload.unwrap().data.unwrap() {
         let value = v.into_iter().map(|c| c as char).collect::<String>();
-        println!("Receive {}", value);
+        println!("Receive {value}");
     } else {
         println!("Failed to get result from invoke_method.");
     }

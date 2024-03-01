@@ -14,9 +14,9 @@
 use async_std::task;
 use std::time;
 use up_rust::{
-    transport::builder::UAttributesBuilder,
-    transport::datamodel::UTransport,
-    uprotocol::{Data, UEntity, UMessage, UPayload, UPayloadFormat, UPriority, UResource, UUri},
+    transport::{builder::UMessageBuilder, datamodel::UTransport},
+    uprotocol::{UEntity, UPayloadFormat, UResource, UUri},
+    uuid::builder::UUIDBuilder,
 };
 use uprotocol_zenoh::UPClientZenoh;
 use zenoh::config::Config;
@@ -50,30 +50,18 @@ async fn main() {
         ..Default::default()
     };
 
-    // create uattributes
-    let mut attributes = UAttributesBuilder::publish(UPriority::UPRIORITY_CS4).build();
-    attributes.sink = Some(uuri.clone()).into();
-    // TODO: We need to check how to set the source
-    attributes.source = Some(uuri.clone()).into();
-
     let mut cnt: u64 = 0;
     loop {
-        let data = format!("{}", cnt);
-        let payload = UPayload {
-            length: Some(0),
-            format: UPayloadFormat::UPAYLOAD_FORMAT_TEXT.into(),
-            data: Some(Data::Value(data.as_bytes().to_vec())),
-            ..Default::default()
-        };
-        println!("Sending {} to {}...", data, uuri.to_string());
-        publisher
-            .send(UMessage {
-                attributes: Some(attributes.clone()).into(),
-                payload: Some(payload).into(),
-                ..Default::default()
-            })
-            .await
+        let data = format!("{cnt}");
+        let umessage = UMessageBuilder::publish(&uuri)
+            .build_with_payload(
+                &UUIDBuilder::new(),
+                data.as_bytes().to_vec().into(),
+                UPayloadFormat::UPAYLOAD_FORMAT_TEXT,
+            )
             .unwrap();
+        println!("Sending {data} to {uuri}...");
+        publisher.send(umessage).await.unwrap();
         task::sleep(time::Duration::from_millis(1000)).await;
         cnt += 1;
     }
