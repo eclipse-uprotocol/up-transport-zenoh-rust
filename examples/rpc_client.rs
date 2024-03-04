@@ -11,12 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use up_client_zenoh_rust::UPClientZenoh;
 use up_rust::{
     rpc::{CallOptionsBuilder, RpcClient},
     uprotocol::{Data, UEntity, UPayload, UPayloadFormat, UUri},
     uri::builder::resourcebuilder::UResourceBuilder,
 };
-use uprotocol_zenoh::UPClientZenoh;
 use zenoh::config::Config;
 
 #[async_std::main]

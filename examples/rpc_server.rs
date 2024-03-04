@@ -14,13 +14,13 @@
 use async_std::task::{self, block_on};
 use chrono::Utc;
 use std::{sync::Arc, time};
+use up_client_zenoh_rust::UPClientZenoh;
 use up_rust::{
     rpc::RpcServer,
     transport::datamodel::UTransport,
     uprotocol::{Data, UEntity, UMessage, UMessageType, UPayload, UPayloadFormat, UStatus, UUri},
     uri::builder::resourcebuilder::UResourceBuilder,
 };
-use uprotocol_zenoh::UPClientZenoh;
 use zenoh::config::Config;
 
 #[async_std::main]

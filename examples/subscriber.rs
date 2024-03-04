@@ -13,11 +13,11 @@
 //
 use async_std::task;
 use std::time;
+use up_client_zenoh_rust::UPClientZenoh;
 use up_rust::{
     transport::datamodel::UTransport,
     uprotocol::{Data, UEntity, UMessage, UResource, UStatus, UUri},
 };
-use uprotocol_zenoh::UPClientZenoh;
 use zenoh::config::Config;
 
 fn callback(result: Result<UMessage, UStatus>) {

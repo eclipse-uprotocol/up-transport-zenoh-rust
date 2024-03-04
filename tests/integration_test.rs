@@ -13,6 +13,7 @@
 //
 use async_std::task::{self, block_on};
 use std::{sync::Arc, time};
+use up_client_zenoh_rust::UPClientZenoh;
 use up_rust::{
     rpc::{CallOptionsBuilder, RpcClient, RpcServer},
     transport::{builder::UMessageBuilder, datamodel::UTransport},
@@ -23,7 +24,6 @@ use up_rust::{
     uri::builder::resourcebuilder::UResourceBuilder,
     uuid::builder::UUIDBuilder,
 };
-use uprotocol_zenoh::UPClientZenoh;
 use zenoh::config::Config;
 
 fn create_utransport_uuri() -> UUri {

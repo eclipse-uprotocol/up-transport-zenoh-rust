@@ -1,5 +1,5 @@
 [package]
-name = "uprotocol_zenoh"
+name = "up-client-zenoh-rust"
 version = "0.1.0"
 edition = "2021"
 
