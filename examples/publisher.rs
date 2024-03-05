@@ -13,7 +13,7 @@
 //
 use async_std::task;
 use std::time;
-use up_client_zenoh_rust::UPClientZenoh;
+use up_client_zenoh::UPClientZenoh;
 use up_rust::{
     transport::{builder::UMessageBuilder, datamodel::UTransport},
     uprotocol::{UEntity, UPayloadFormat, UResource, UUri},

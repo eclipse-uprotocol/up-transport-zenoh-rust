@@ -1,5 +1,5 @@
 [package]
-name = "up-client-zenoh-rust"
+name = "up-client-zenoh"
 version = "0.1.0"
 edition = "2021"
 

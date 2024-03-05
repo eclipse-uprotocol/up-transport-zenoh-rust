@@ -14,7 +14,7 @@
 use async_std::task::{self, block_on};
 use chrono::Utc;
 use std::{sync::Arc, time};
-use up_client_zenoh_rust::UPClientZenoh;
+use up_client_zenoh::UPClientZenoh;
 use up_rust::{
     rpc::RpcServer,
     transport::datamodel::UTransport,

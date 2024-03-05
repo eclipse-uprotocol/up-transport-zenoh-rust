@@ -13,7 +13,7 @@
 //
 use async_std::task::{self, block_on};
 use std::{sync::Arc, time};
-use up_client_zenoh_rust::UPClientZenoh;
+use up_client_zenoh::UPClientZenoh;
 use up_rust::{
     rpc::{CallOptionsBuilder, RpcClient, RpcServer},
     transport::{builder::UMessageBuilder, datamodel::UTransport},

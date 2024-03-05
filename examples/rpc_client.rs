@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use up_client_zenoh_rust::UPClientZenoh;
+use up_client_zenoh::UPClientZenoh;
 use up_rust::{
     rpc::{CallOptionsBuilder, RpcClient},
     uprotocol::{Data, UEntity, UPayload, UPayloadFormat, UUri},
