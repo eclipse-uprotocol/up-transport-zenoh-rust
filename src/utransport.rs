@@ -482,7 +482,13 @@ impl UTransport for UPClientZenoh {
                         )
                     })?;
                 // Get Zenoh key
-                let topic = attributes.clone().source;
+                let topic = if attributes.sink.is_some() {
+                    // If sink is not empty, this is Notification => topic is sink
+                    attributes.clone().sink
+                } else {
+                    // If sink is empty, this is Publication => topic is source
+                    attributes.clone().source
+                };
                 let zenoh_key = UPClientZenoh::to_zenoh_key_string(&topic)?;
                 // Send Publish
                 self.send_publish(&zenoh_key, payload, attributes).await

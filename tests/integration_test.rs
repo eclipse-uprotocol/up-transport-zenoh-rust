@@ -26,24 +26,45 @@ use up_rust::{
 };
 use zenoh::config::Config;
 
-fn create_utransport_uuri() -> UUri {
-    UUri {
-        entity: Some(UEntity {
-            name: "body.access".to_string(),
-            version_major: Some(1),
-            id: Some(1234),
+fn create_utransport_uuri(index: u8) -> UUri {
+    if index == 1 {
+        UUri {
+            entity: Some(UEntity {
+                name: "entity1".to_string(),
+                version_major: Some(1),
+                id: Some(1111),
+                ..Default::default()
+            })
+            .into(),
+            resource: Some(UResource {
+                name: "name1".to_string(),
+                instance: Some("instance1".to_string()),
+                message: Some("message1".to_string()),
+                id: Some(1111),
+                ..Default::default()
+            })
+            .into(),
             ..Default::default()
-        })
-        .into(),
-        resource: Some(UResource {
-            name: "door".to_string(),
-            instance: Some("front_left".to_string()),
-            message: Some("Door".to_string()),
-            id: Some(5678),
+        }
+    } else {
+        UUri {
+            entity: Some(UEntity {
+                name: "body.access".to_string(),
+                version_major: Some(1),
+                id: Some(1234),
+                ..Default::default()
+            })
+            .into(),
+            resource: Some(UResource {
+                name: "door".to_string(),
+                instance: Some("front_left".to_string()),
+                message: Some("Door".to_string()),
+                id: Some(5678),
+                ..Default::default()
+            })
+            .into(),
             ..Default::default()
-        })
-        .into(),
-        ..Default::default()
+        }
     }
 }
 
@@ -83,7 +104,7 @@ fn create_special_uuri() -> UUri {
 #[async_std::test]
 async fn test_utransport_register_and_unregister() {
     let upclient = UPClientZenoh::new(Config::default()).await.unwrap();
-    let uuri = create_utransport_uuri();
+    let uuri = create_utransport_uuri(0);
 
     // Compare the return string
     let listener_string = upclient
@@ -180,7 +201,7 @@ async fn test_utransport_special_uuri_register_and_unregister() {
 async fn test_publish_and_subscribe() {
     let target_data = String::from("Hello World!");
     let upclient = UPClientZenoh::new(Config::default()).await.unwrap();
-    let uuri = create_utransport_uuri();
+    let uuri = create_utransport_uuri(0);
 
     // Register the listener
     let uuri_cloned = uuri.clone();
@@ -203,6 +224,51 @@ async fn test_publish_and_subscribe() {
         .unwrap();
 
     let umessage = UMessageBuilder::publish(&uuri)
+        .build_with_payload(
+            &UUIDBuilder::new(),
+            target_data.as_bytes().to_vec().into(),
+            UPayloadFormat::UPAYLOAD_FORMAT_TEXT,
+        )
+        .unwrap();
+    upclient.send(umessage).await.unwrap();
+
+    // Waiting for the subscriber to receive data
+    task::sleep(time::Duration::from_millis(1000)).await;
+
+    // Cleanup
+    upclient
+        .unregister_listener(uuri.clone(), &listener_string)
+        .await
+        .unwrap();
+}
+
+#[async_std::test]
+async fn test_notification_and_subscribe() {
+    let target_data = String::from("Hello World!");
+    let upclient = UPClientZenoh::new(Config::default()).await.unwrap();
+    let uuri = create_utransport_uuri(1);
+
+    // Register the listener
+    let uuri_cloned = uuri.clone();
+    let data_cloned = target_data.clone();
+    let listener = move |result: Result<UMessage, UStatus>| match result {
+        Ok(msg) => {
+            if let Data::Value(v) = msg.payload.unwrap().data.unwrap() {
+                let value = v.into_iter().map(|c| c as char).collect::<String>();
+                assert_eq!(msg.attributes.unwrap().sink.unwrap(), uuri_cloned);
+                assert_eq!(value, data_cloned);
+            } else {
+                panic!("The message should be Data::Value type.");
+            }
+        }
+        Err(ustatus) => panic!("Internal Error: {ustatus:?}"),
+    };
+    let listener_string = upclient
+        .register_listener(uuri.clone(), Box::new(listener))
+        .await
+        .unwrap();
+
+    let umessage = UMessageBuilder::notification(&uuri)
         .build_with_payload(
             &UUIDBuilder::new(),
             target_data.as_bytes().to_vec().into(),
@@ -364,7 +430,7 @@ async fn test_register_listener_with_special_uuri() {
 
     // send Publish
     {
-        let mut publish_uuri = create_utransport_uuri();
+        let mut publish_uuri = create_utransport_uuri(0);
         publish_uuri.authority = Some(create_authority()).into();
 
         let umessage = UMessageBuilder::publish(&publish_uuri)
