@@ -13,12 +13,12 @@
 //
 use async_std::task;
 use std::time;
+use up_client_zenoh::UPClientZenoh;
 use up_rust::{
     transport::{builder::UMessageBuilder, datamodel::UTransport},
     uprotocol::{UEntity, UPayloadFormat, UResource, UUri},
     uuid::builder::UUIDBuilder,
 };
-use uprotocol_zenoh::UPClientZenoh;
 use zenoh::config::Config;
 
 #[async_std::main]
