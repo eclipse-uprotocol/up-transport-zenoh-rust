@@ -19,7 +19,10 @@ use std::{
     collections::HashMap,
     sync::{atomic::AtomicU64, Arc, Mutex},
 };
-use up_rust::uprotocol::{UAttributes, UCode, UMessage, UPayloadFormat, UPriority, UStatus, UUri};
+use up_rust::{
+    uprotocol::{UAttributes, UCode, UMessage, UPayloadFormat, UPriority, UStatus, UUri},
+    uuid::builder::UUIDBuilder,
+};
 use zenoh::{
     config::Config,
     prelude::r#async::*,
@@ -43,7 +46,10 @@ pub struct UPClientZenoh {
     query_map: Arc<Mutex<HashMap<String, Query>>>,
     // Save the callback for RPC response
     rpc_callback_map: Arc<Mutex<HashMap<String, Arc<UtransportListener>>>>,
+    // Used to identify different callbacks
     callback_counter: AtomicU64,
+    // UUID builder
+    uuid_builder: UUIDBuilder,
 }
 
 impl UPClientZenoh {
@@ -63,7 +69,12 @@ impl UPClientZenoh {
             query_map: Arc::new(Mutex::new(HashMap::new())),
             rpc_callback_map: Arc::new(Mutex::new(HashMap::new())),
             callback_counter: AtomicU64::new(0),
+            uuid_builder: UUIDBuilder::new(),
         })
+    }
+
+    pub fn get_uuid_builder(&self) -> &UUIDBuilder {
+        &self.uuid_builder
     }
 
     fn get_uauth_from_uuri(uri: &UUri) -> Result<String, UStatus> {

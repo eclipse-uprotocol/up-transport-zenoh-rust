@@ -22,7 +22,6 @@ use up_rust::{
         UPayload, UPayloadFormat, UResource, UStatus, UUri,
     },
     uri::builder::resourcebuilder::UResourceBuilder,
-    uuid::builder::UUIDBuilder,
 };
 use zenoh::config::Config;
 
@@ -225,7 +224,7 @@ async fn test_publish_and_subscribe() {
 
     let umessage = UMessageBuilder::publish(&uuri)
         .build_with_payload(
-            &UUIDBuilder::new(),
+            upclient.get_uuid_builder(),
             target_data.as_bytes().to_vec().into(),
             UPayloadFormat::UPAYLOAD_FORMAT_TEXT,
         )
@@ -270,7 +269,7 @@ async fn test_notification_and_subscribe() {
 
     let umessage = UMessageBuilder::notification(&uuri)
         .build_with_payload(
-            &UUIDBuilder::new(),
+            upclient.get_uuid_builder(),
             target_data.as_bytes().to_vec().into(),
             UPayloadFormat::UPAYLOAD_FORMAT_TEXT,
         )
@@ -435,7 +434,7 @@ async fn test_register_listener_with_special_uuri() {
 
         let umessage = UMessageBuilder::publish(&publish_uuri)
             .build_with_payload(
-                &UUIDBuilder::new(),
+                upclient2.get_uuid_builder(),
                 publish_data.as_bytes().to_vec().into(),
                 UPayloadFormat::UPAYLOAD_FORMAT_TEXT,
             )

@@ -19,7 +19,6 @@ use up_rust::{
     transport::{builder::UMessageBuilder, datamodel::UTransport},
     uprotocol::{Data, UMessage, UPayload, UStatus, UUri},
     uri::{builder::resourcebuilder::UResourceBuilder, validator::UriValidator},
-    uuid::builder::UUIDBuilder,
 };
 use zenoh::prelude::r#async::*;
 
@@ -52,8 +51,7 @@ impl RpcClient for UPClientZenoh {
         };
 
         // Generate UAttributes
-        let uuid_builder = UUIDBuilder::new();
-        let reqid = UUIDBuilder::new().build();
+        let reqid = self.uuid_builder.build();
         // Create response address
         let mut source = topic.clone();
         source.resource = Some(UResourceBuilder::for_rpc_response()).into();
@@ -61,9 +59,9 @@ impl RpcClient for UPClientZenoh {
         let umessage = if let Some(token) = options.token() {
             UMessageBuilder::request(&topic, &source, &reqid, 255)
                 .with_token(&token.to_string())
-                .build(&uuid_builder)
+                .build(&self.uuid_builder)
         } else {
-            UMessageBuilder::request(&topic, &source, &reqid, 255).build(&uuid_builder)
+            UMessageBuilder::request(&topic, &source, &reqid, 255).build(&self.uuid_builder)
         };
         // Extract uAttributes
         let Ok(UMessage {

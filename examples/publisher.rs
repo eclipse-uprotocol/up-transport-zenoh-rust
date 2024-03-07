@@ -17,7 +17,6 @@ use up_client_zenoh::UPClientZenoh;
 use up_rust::{
     transport::{builder::UMessageBuilder, datamodel::UTransport},
     uprotocol::{UEntity, UPayloadFormat, UResource, UUri},
-    uuid::builder::UUIDBuilder,
 };
 use zenoh::config::Config;
 
@@ -55,7 +54,7 @@ async fn main() {
         let data = format!("{cnt}");
         let umessage = UMessageBuilder::publish(&uuri)
             .build_with_payload(
-                &UUIDBuilder::new(),
+                publisher.get_uuid_builder(),
                 data.as_bytes().to_vec().into(),
                 UPayloadFormat::UPAYLOAD_FORMAT_TEXT,
             )
