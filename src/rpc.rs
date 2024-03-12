@@ -46,8 +46,10 @@ impl RpcClient for UPClientZenoh {
         let buf = if let Some(Data::Value(buf)) = payload.data {
             buf
         } else {
-            // TODO: Assume we only have Value here, no reference for shared memory
-            vec![]
+            // Assume we only have Value here, no reference for shared memory
+            return Err(RpcMapperError::InvalidPayload(String::from(
+                "The data in UPayload should be Data::Value",
+            )));
         };
 
         // Generate UAttributes

@@ -41,8 +41,11 @@ impl UPClientZenoh {
         let buf = if let Some(Data::Value(buf)) = payload.data {
             buf
         } else {
-            // TODO: Assume we only have Value here, no reference for shared memory
-            vec![]
+            // Assume we only have Value here, no reference for shared memory
+            return Err(UStatus::fail_with_code(
+                UCode::INVALID_ARGUMENT,
+                "The data in UPayload should be Data::Value",
+            ));
         };
 
         // Serialized UAttributes into protobuf
@@ -87,8 +90,11 @@ impl UPClientZenoh {
         let buf = if let Some(Data::Value(buf)) = payload.data {
             buf
         } else {
-            // TODO: Assume we only have Value here, no reference for shared memory
-            vec![]
+            // Assume we only have Value here, no reference for shared memory
+            return Err(UStatus::fail_with_code(
+                UCode::INVALID_ARGUMENT,
+                "The data in UPayload should be Data::Value",
+            ));
         };
 
         // Serialized UAttributes into protobuf
@@ -133,8 +139,7 @@ impl UPClientZenoh {
                         )));
                         return;
                     };
-                    // TODO: Get the attributes
-                    // Create UAttribute
+                    // Get UAttribute from the attachment
                     let Some(attachment) = sample.attachment() else {
                         resp_callback(Err(UStatus::fail_with_code(
                             UCode::INTERNAL,
@@ -200,8 +205,11 @@ impl UPClientZenoh {
         let buf = if let Some(Data::Value(buf)) = payload.data {
             buf
         } else {
-            // TODO: Assume we only have Value here, no reference for shared memory
-            vec![]
+            // Assume we only have Value here, no reference for shared memory
+            return Err(UStatus::fail_with_code(
+                UCode::INVALID_ARGUMENT,
+                "The data in UPayload should be Data::Value",
+            ));
         };
 
         // Serialized UAttributes into protobuf
