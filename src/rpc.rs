@@ -23,7 +23,6 @@ use up_rust::{
 };
 use zenoh::prelude::r#async::*;
 
-// TODO: Need to check how to use CallOptions
 #[async_trait]
 impl RpcClient for UPClientZenoh {
     async fn invoke_method(
@@ -57,13 +56,14 @@ impl RpcClient for UPClientZenoh {
         // Create response address
         let mut source = topic.clone();
         source.resource = Some(UResourceBuilder::for_rpc_response()).into();
-        // TODO: Check the ttl
+        // Create UMessage
         let umessage = if let Some(token) = options.token() {
-            UMessageBuilder::request(&topic, &source, &reqid, 255)
+            UMessageBuilder::request(&topic, &source, &reqid, options.timeout())
                 .with_token(&token.to_string())
                 .build(&uuid_builder)
         } else {
-            UMessageBuilder::request(&topic, &source, &reqid, 255).build(&uuid_builder)
+            UMessageBuilder::request(&topic, &source, &reqid, options.timeout())
+                .build(&uuid_builder)
         };
         // Extract uAttributes
         let Ok(UMessage {
