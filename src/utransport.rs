@@ -178,14 +178,13 @@ impl UPClientZenoh {
             resp_callback(msg);
         };
 
-        // TODO: Adjust the timeout
         let getbuilder = self
             .session
             .get(zenoh_key)
             .with_value(value)
             .with_attachment(attachment.build())
             .target(QueryTarget::BestMatching)
-            .timeout(Duration::from_millis(1000))
+            .timeout(Duration::from_millis(attributes.ttl.unwrap_or(1000) as u64))
             .callback(zenoh_callback);
         getbuilder.res().await.map_err(|e| {
             log::error!("Zenoh error: {e:?}");

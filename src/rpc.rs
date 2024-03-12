@@ -89,14 +89,13 @@ impl RpcClient for UPClientZenoh {
             payload.format.value().to_string().into(),
         ));
         // TODO: Query should support .encoding
-        // TODO: Adjust the timeout
         let getbuilder = self
             .session
             .get(&zenoh_key)
             .with_value(value)
             .with_attachment(attachment.build())
             .target(QueryTarget::BestMatching)
-            .timeout(Duration::from_millis(1000));
+            .timeout(Duration::from_millis(options.timeout() as u64));
 
         // Send the query
         let Ok(replies) = getbuilder.res().await else {
