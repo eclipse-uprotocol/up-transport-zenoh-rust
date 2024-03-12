@@ -43,9 +43,7 @@ impl RpcClient for UPClientZenoh {
         };
 
         // Get the data from UPayload
-        let buf = if let Some(Data::Value(buf)) = payload.data {
-            buf
-        } else {
+        let Some(Data::Value(buf)) = payload.data else {
             // Assume we only have Value here, no reference for shared memory
             return Err(RpcMapperError::InvalidPayload(String::from(
                 "The data in UPayload should be Data::Value",
@@ -95,7 +93,7 @@ impl RpcClient for UPClientZenoh {
             .with_value(value)
             .with_attachment(attachment.build())
             .target(QueryTarget::BestMatching)
-            .timeout(Duration::from_millis(options.timeout() as u64));
+            .timeout(Duration::from_millis(u64::from(options.timeout())));
 
         // Send the query
         let Ok(replies) = getbuilder.res().await else {

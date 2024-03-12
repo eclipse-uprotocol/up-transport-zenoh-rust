@@ -38,9 +38,7 @@ impl UPClientZenoh {
         attributes: UAttributes,
     ) -> Result<(), UStatus> {
         // Get the data from UPayload
-        let buf = if let Some(Data::Value(buf)) = payload.data {
-            buf
-        } else {
+        let Some(Data::Value(buf)) = payload.data else {
             // Assume we only have Value here, no reference for shared memory
             return Err(UStatus::fail_with_code(
                 UCode::INVALID_ARGUMENT,
@@ -87,9 +85,7 @@ impl UPClientZenoh {
         attributes: UAttributes,
     ) -> Result<(), UStatus> {
         // Get the data from UPayload
-        let buf = if let Some(Data::Value(buf)) = payload.data {
-            buf
-        } else {
+        let Some(Data::Value(buf)) = payload.data else {
             // Assume we only have Value here, no reference for shared memory
             return Err(UStatus::fail_with_code(
                 UCode::INVALID_ARGUMENT,
@@ -184,7 +180,10 @@ impl UPClientZenoh {
             .with_value(value)
             .with_attachment(attachment.build())
             .target(QueryTarget::BestMatching)
-            .timeout(Duration::from_millis(attributes.ttl.unwrap_or(1000) as u64))
+            .timeout(Duration::from_millis(u64::from(
+                // TODO: Workaround since TTL will be u32 in the future.
+                attributes.ttl.unwrap_or(1000).unsigned_abs(),
+            )))
             .callback(zenoh_callback);
         getbuilder.res().await.map_err(|e| {
             log::error!("Zenoh error: {e:?}");
@@ -201,9 +200,7 @@ impl UPClientZenoh {
         attributes: UAttributes,
     ) -> Result<(), UStatus> {
         // Get the data from UPayload
-        let buf = if let Some(Data::Value(buf)) = payload.data {
-            buf
-        } else {
+        let Some(Data::Value(buf)) = payload.data else {
             // Assume we only have Value here, no reference for shared memory
             return Err(UStatus::fail_with_code(
                 UCode::INVALID_ARGUMENT,
