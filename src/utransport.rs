@@ -592,7 +592,7 @@ impl UTransport for UPClientZenoh {
                 .rpc_callback_map
                 .lock()
                 .unwrap()
-                .remove(&topic)
+                .remove(&topic) // TODO: I do not think we should be calling .remove here... we could blow up other listeners
                 .is_none()
             {
                 if message_type == UMessageType::UMESSAGE_TYPE_RESPONSE {
@@ -631,9 +631,9 @@ impl UTransport for UPClientZenoh {
                                 UCode::NOT_FOUND,
                                 format!("No listeners registered for topic: {:?}", &topic),
                             ));
-                        } else {
-                            found_authority = true;
                         }
+                    } else {
+                        found_authority = true;
                     }
                 }
             }
@@ -664,9 +664,9 @@ impl UTransport for UPClientZenoh {
                                 UCode::NOT_FOUND,
                                 format!("No listeners registered for topic: {:?}", &topic),
                             ));
-                        } else {
-                            found_authority = true;
                         }
+                    } else {
+                        found_authority = true;
                     }
                 }
             }

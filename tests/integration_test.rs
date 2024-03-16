@@ -169,41 +169,39 @@ async fn test_utransport_register_and_unregister() {
 //         ))
 //     );
 // }
-//
-// #[async_std::test]
-// async fn test_utransport_special_uuri_register_and_unregister() {
-//     let upclient = UPClientZenoh::new(Config::default()).await.unwrap();
-//     let uuri = create_special_uuri();
-//
-//     // Compare the return string
-//     let listener_string = upclient
-//         .register_listener(uuri.clone(), Box::new(|_| {}))
-//         .await
-//         .unwrap();
-//     assert_eq!(
-//         listener_string,
-//         "upr/060102030a0b0c/**_0&upr/060102030a0b0c/**_1&upr/060102030a0b0c/**_2"
-//     );
-//
-//     // Able to ungister
-//     upclient
-//         .unregister_listener(uuri.clone(), &listener_string)
-//         .await
-//         .unwrap();
-//
-//     // Unable to ungister
-//     let result = upclient
-//         .unregister_listener(uuri.clone(), &listener_string)
-//         .await;
-//     assert_eq!(
-//         result,
-//         Err(UStatus::fail_with_code(
-//             UCode::INVALID_ARGUMENT,
-//             "RPC response callback doesn't exist"
-//         ))
-//     );
-// }
-//
+
+#[async_std::test]
+async fn test_utransport_special_uuri_register_and_unregister() {
+    let upclient = UPClientZenoh::new(Config::default()).await.unwrap();
+    let uuri = create_special_uuri();
+
+    let foo_listener_register = FooListener;
+    let register_res = upclient
+        .register_listener(uuri.clone(), foo_listener_register)
+        .await;
+    assert_eq!(register_res, Ok(()));
+
+    let foo_listener_unregister = FooListener;
+    // Able to unregister
+    let unregister_res = upclient
+        .unregister_listener(uuri.clone(), foo_listener_unregister)
+        .await;
+    assert_eq!(unregister_res, Ok(()));
+
+    let foo_listener_unregister = FooListener;
+    // Unable to unregister
+    let result = upclient
+        .unregister_listener(uuri.clone(), foo_listener_unregister)
+        .await;
+    assert_eq!(
+        result,
+        Err(UStatus::fail_with_code(
+            UCode::NOT_FOUND,
+            format!("No listeners registered for topic: {:?}", &uuri),
+        ))
+    );
+}
+
 // #[async_std::test]
 // async fn test_publish_and_subscribe() {
 //     let target_data = String::from("Hello World!");
