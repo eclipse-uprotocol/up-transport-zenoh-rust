@@ -15,6 +15,7 @@ pub mod rpc;
 pub mod utransport;
 
 use protobuf::{Enum, Message};
+use std::collections::HashSet;
 use std::{
     collections::HashMap,
     sync::{atomic::AtomicU64, Arc, Mutex},
@@ -35,13 +36,14 @@ pub struct ZenohListener {}
 pub struct UPClientZenoh {
     session: Arc<Session>,
     // Able to unregister Subscriber
-    subscriber_map: Arc<Mutex<HashMap<Arc<ListenerWrapper>, Subscriber<'static, ()>>>>,
+    subscriber_map:
+        Arc<Mutex<HashMap<UUri, HashMap<Arc<ListenerWrapper>, Subscriber<'static, ()>>>>>,
     // Able to unregister Queryable
-    queryable_map: Arc<Mutex<HashMap<Arc<ListenerWrapper>, Queryable<'static, ()>>>>,
+    queryable_map: Arc<Mutex<HashMap<UUri, HashMap<Arc<ListenerWrapper>, Queryable<'static, ()>>>>>,
     // Save the reqid to be able to send back response
     query_map: Arc<Mutex<HashMap<String, Query>>>,
     // Save the callback for RPC response
-    rpc_callback_map: Arc<Mutex<HashMap<UUri, Arc<ListenerWrapper>>>>,
+    rpc_callback_map: Arc<Mutex<HashMap<UUri, HashSet<Arc<ListenerWrapper>>>>>,
     callback_counter: AtomicU64,
 }
 

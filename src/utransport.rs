@@ -13,6 +13,8 @@
 //
 use crate::UPClientZenoh;
 use async_trait::async_trait;
+use std::collections::hash_map::Entry;
+use std::collections::HashSet;
 use std::{sync::Arc, time::Duration};
 use up_rust::listener_wrapper::ListenerWrapper;
 use up_rust::ulistener::UListener;
@@ -94,90 +96,103 @@ impl UPClientZenoh {
                 "Invalid uAttributes",
             ));
         };
+        let attachment = attachment.build();
 
         let value = Value::new(buf.into()).encoding(Encoding::WithSuffix(
             KnownEncoding::AppCustom,
             payload.format.value().to_string().into(),
         ));
 
-        // Retrieve the callback
-        let resp_listener = attributes.source.0.ok_or(UStatus::fail_with_code(
+        let resp_listener_clone = attributes.source.0.clone().ok_or(UStatus::fail_with_code(
             UCode::INVALID_ARGUMENT,
             "Lack of source address",
         ))?;
-        let resp_callback = self
-            .rpc_callback_map
-            .lock()
-            .unwrap()
-            .get(&resp_listener)
-            .ok_or(UStatus::fail_with_code(
-                UCode::INTERNAL,
-                "Unable to get callback",
-            ))?
-            .clone();
-        let zenoh_callback = move |reply: Reply| {
-            let msg = match reply.sample {
-                Ok(sample) => {
-                    let Some(encoding) = UPClientZenoh::to_upayload_format(&sample.encoding) else {
-                        resp_callback.on_receive(Err(UStatus::fail_with_code(
-                            UCode::INTERNAL,
-                            "Unable to get the encoding",
-                        )));
-                        return;
-                    };
-                    // TODO: Get the attributes
-                    // Create UAttribute
-                    let Some(attachment) = sample.attachment() else {
-                        resp_callback.on_receive(Err(UStatus::fail_with_code(
-                            UCode::INTERNAL,
-                            "Unable to get attachment",
-                        )));
-                        return;
-                    };
-                    let u_attribute = match UPClientZenoh::attachment_to_uattributes(attachment) {
-                        Ok(uattr) => uattr,
-                        Err(e) => {
-                            log::error!("attachment_to_uattributes error: {:?}", e);
-                            resp_callback.on_receive(Err(UStatus::fail_with_code(
-                                UCode::INTERNAL,
-                                "Unable to decode attribute",
-                            )));
-                            return;
-                        }
-                    };
-                    Ok(UMessage {
-                        attributes: Some(u_attribute).into(),
-                        payload: Some(UPayload {
-                            length: Some(0),
-                            format: encoding.into(),
-                            data: Some(Data::Value(sample.payload.contiguous().to_vec())),
-                            ..Default::default()
-                        })
-                        .into(),
-                        ..Default::default()
-                    })
-                }
-                Err(e) => Err(UStatus::fail_with_code(
-                    UCode::INTERNAL,
-                    format!("Error while parsing Zenoh reply: {e:?}"),
-                )),
-            };
-            resp_callback.on_receive(msg);
+
+        let callbacks = {
+            let rpc_callback_map = self.rpc_callback_map.lock().unwrap();
+            rpc_callback_map
+                .get(&resp_listener_clone)
+                .map(|listener_set| listener_set.iter().cloned().collect::<Vec<_>>())
+                .unwrap_or_else(Vec::new)
         };
 
-        // TODO: Adjust the timeout
-        let getbuilder = self
-            .session
-            .get(zenoh_key)
-            .with_value(value)
-            .with_attachment(attachment.build())
-            .target(QueryTarget::BestMatching)
-            .timeout(Duration::from_millis(1000))
-            .callback(zenoh_callback);
-        getbuilder.res().await.map_err(|e| {
-            log::error!("Zenoh error: {e:?}");
-            UStatus::fail_with_code(UCode::INTERNAL, "Unable to send get with Zenoh")
-        })?;
+        if callbacks.is_empty() {
+            return Err(UStatus::fail_with_code(
+                UCode::NOT_FOUND,
+                format!(
+                    "No listeners registered for topic: {:?}",
+                    resp_listener_clone
+                ),
+            ));
+        }
+
+        for listener in callbacks {
+            let zenoh_callback = move |reply: Reply| {
+                let msg = match reply.sample {
+                    Ok(sample) => {
+                        let Some(encoding) = UPClientZenoh::to_upayload_format(&sample.encoding)
+                        else {
+                            listener.on_receive(Err(UStatus::fail_with_code(
+                                UCode::INTERNAL,
+                                "Unable to get the encoding",
+                            )));
+                            return;
+                        };
+                        // TODO: Get the attributes
+                        // Create UAttribute
+                        let Some(attachment) = sample.attachment() else {
+                            listener.on_receive(Err(UStatus::fail_with_code(
+                                UCode::INTERNAL,
+                                "Unable to get attachment",
+                            )));
+                            return;
+                        };
+                        let u_attribute = match UPClientZenoh::attachment_to_uattributes(attachment)
+                        {
+                            Ok(uattr) => uattr,
+                            Err(e) => {
+                                log::error!("attachment_to_uattributes error: {:?}", e);
+                                listener.on_receive(Err(UStatus::fail_with_code(
+                                    UCode::INTERNAL,
+                                    "Unable to decode attribute",
+                                )));
+                                return;
+                            }
+                        };
+                        Ok(UMessage {
+                            attributes: Some(u_attribute).into(),
+                            payload: Some(UPayload {
+                                length: Some(0),
+                                format: encoding.into(),
+                                data: Some(Data::Value(sample.payload.contiguous().to_vec())),
+                                ..Default::default()
+                            })
+                            .into(),
+                            ..Default::default()
+                        })
+                    }
+                    Err(e) => Err(UStatus::fail_with_code(
+                        UCode::INTERNAL,
+                        format!("Error while parsing Zenoh reply: {e:?}"),
+                    )),
+                };
+                listener.on_receive(msg);
+            };
+
+            // TODO: Adjust the timeout
+            let getbuilder = self
+                .session
+                .get(zenoh_key)
+                .with_value(value.clone())
+                .with_attachment(attachment.clone())
+                .target(QueryTarget::BestMatching)
+                .timeout(Duration::from_millis(1000))
+                .callback(zenoh_callback);
+            getbuilder.res().await.map_err(|e| {
+                log::error!("Zenoh error: {e:?}");
+                UStatus::fail_with_code(UCode::INTERNAL, "Unable to send get with Zenoh")
+            })?;
+        }
 
         Ok(())
     }
@@ -302,7 +317,6 @@ impl UPClientZenoh {
             };
             listener_wrapper.on_receive(Ok(msg));
         };
-        let listener_wrapper = Arc::new(ListenerWrapper::new(listener));
         if let Ok(subscriber) = self
             .session
             .declare_subscriber(&zenoh_key)
@@ -310,10 +324,14 @@ impl UPClientZenoh {
             .res()
             .await
         {
-            self.subscriber_map
-                .lock()
-                .unwrap()
-                .insert(listener_wrapper, subscriber);
+            let listener_wrapper = Arc::new(ListenerWrapper::new(listener));
+
+            // Explicitly bind the lock guard to extend its lifetime
+            let mut subscriber_map_guard = self.subscriber_map.lock().unwrap();
+
+            // Now the lock guard is explicitly held until the end of the block
+            let listeners = subscriber_map_guard.entry(topic.clone()).or_default();
+            listeners.insert(listener_wrapper, subscriber);
         } else {
             return Err(UStatus::fail_with_code(
                 UCode::INTERNAL,
@@ -398,10 +416,11 @@ impl UPClientZenoh {
             .res()
             .await
         {
-            self.queryable_map
-                .lock()
-                .unwrap()
-                .insert(listener_wrapper, queryable);
+            let mut queryable_map_guard = self.queryable_map.lock().unwrap();
+
+            // Now the lock guard is explicitly held until the end of the block
+            let listeners = queryable_map_guard.entry(topic.clone()).or_default();
+            listeners.insert(listener_wrapper, queryable);
         } else {
             return Err(UStatus::fail_with_code(
                 UCode::INTERNAL,
@@ -422,10 +441,11 @@ impl UPClientZenoh {
 
         let listener_wrapper = Arc::new(ListenerWrapper::new(listener));
 
-        self.rpc_callback_map
-            .lock()
-            .unwrap()
-            .insert(topic.clone(), listener_wrapper);
+        let mut rpc_callback_map_guard = self.rpc_callback_map.lock().unwrap();
+
+        let mut listeners = rpc_callback_map_guard.entry(topic.clone()).or_default();
+
+        listeners.insert(listener_wrapper);
 
         Ok(())
     }
@@ -573,31 +593,40 @@ impl UTransport for UPClientZenoh {
             ));
         }
         let listener_wrapper = Arc::new(ListenerWrapper::new(listener));
-        if self
-            .queryable_map
-            .lock()
-            .unwrap()
-            .remove(&listener_wrapper)
-            .is_none()
-        {
-            return Err(UStatus::fail_with_code(
-                UCode::INVALID_ARGUMENT,
-                "RPC request listener doesn't exist",
-            ));
+        let mut queryable_map_guard = self.queryable_map.lock().unwrap();
+
+        let listeners = queryable_map_guard.entry(topic.clone());
+        match listeners {
+            Entry::Vacant(_) => {
+                return Err(UStatus::fail_with_code(
+                    UCode::NOT_FOUND,
+                    format!("No listeners registered for topic: {:?}", &topic),
+                ))
+            }
+            Entry::Occupied(mut e) => {
+                let occupied = e.get_mut();
+                let identified_listener = ListenerWrapper::new(listener);
+                occupied.remove(&identified_listener);
+            }
         }
-        let listener_wrapper = Arc::new(ListenerWrapper::new(listener));
-        if self
-            .subscriber_map
-            .lock()
-            .unwrap()
-            .remove(&listener_wrapper)
-            .is_none()
-        {
-            return Err(UStatus::fail_with_code(
-                UCode::INVALID_ARGUMENT,
-                "Publish listener doesn't exist",
-            ));
+
+        let mut subscriber_map_guard = self.subscriber_map.lock().unwrap();
+
+        let listeners = subscriber_map_guard.entry(topic.clone());
+        match listeners {
+            Entry::Vacant(_) => {
+                return Err(UStatus::fail_with_code(
+                    UCode::NOT_FOUND,
+                    format!("No listeners registered for topic: {:?}", &topic),
+                ))
+            }
+            Entry::Occupied(mut e) => {
+                let occupied = e.get_mut();
+                let identified_listener = ListenerWrapper::new(listener);
+                occupied.remove(&identified_listener);
+            }
         }
+
         Ok(())
     }
 }
