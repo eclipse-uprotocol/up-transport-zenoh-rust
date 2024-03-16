@@ -16,7 +16,7 @@ use async_trait::async_trait;
 use std::collections::hash_map::Entry;
 use std::{sync::Arc, time::Duration};
 use up_rust::listener_wrapper::ListenerWrapper;
-use up_rust::ulistener::UListener;
+use up_rust::ulistener::ClonableBoxUListener;
 use up_rust::{
     Data, UAttributes, UAttributesValidators, UCode, UMessage, UMessageType, UPayload,
     UPayloadFormat, UStatus, UTransport, UUri, UriValidator,
@@ -266,14 +266,15 @@ impl UPClientZenoh {
     }
     async fn register_publish_listener<T>(&self, topic: &UUri, listener: T) -> Result<(), UStatus>
     where
-        T: Copy + UListener + 'static,
+        T: Clone + ClonableBoxUListener + 'static,
     {
         // Get Zenoh key
         let zenoh_key = UPClientZenoh::to_zenoh_key_string(topic)?;
 
         // Setup callback
+        let listener_callback = listener.clone();
         let callback = move |sample: Sample| {
-            let listener_wrapper = Arc::new(ListenerWrapper::new(listener));
+            let listener_wrapper = Arc::new(ListenerWrapper::new(listener_callback.clone()));
             // Create UAttribute
             let Some(attachment) = sample.attachment() else {
                 listener_wrapper.on_receive(Err(UStatus::fail_with_code(
@@ -342,18 +343,19 @@ impl UPClientZenoh {
 
     async fn register_request_listener<T>(&self, topic: &UUri, listener: T) -> Result<(), UStatus>
     where
-        T: Copy + UListener + 'static,
+        T: Clone + ClonableBoxUListener + 'static,
     {
         // Get Zenoh key
         let zenoh_key = UPClientZenoh::to_zenoh_key_string(topic)?;
 
         let query_map = self.query_map.clone();
+        let listener_callback = listener.clone();
         // Setup callback
         let callback = move |query: Query| {
-            let listener_wrapper = Arc::new(ListenerWrapper::new(listener));
+            let listener_wrapper = Arc::new(ListenerWrapper::new(listener_callback.clone()));
             // Create UAttribute
             let Some(attachment) = query.attachment() else {
-                listener.on_receive(Err(UStatus::fail_with_code(
+                listener_wrapper.on_receive(Err(UStatus::fail_with_code(
                     UCode::INTERNAL,
                     "Unable to get attachment",
                 )));
@@ -432,7 +434,7 @@ impl UPClientZenoh {
     #[allow(clippy::unnecessary_wraps)]
     fn register_response_listener<T>(&self, topic: &UUri, listener: T) -> Result<(), UStatus>
     where
-        T: Copy + UListener + 'static,
+        T: Clone + ClonableBoxUListener + 'static,
     {
         let listener_wrapper = Arc::new(ListenerWrapper::new(listener));
 
@@ -534,14 +536,15 @@ impl UTransport for UPClientZenoh {
 
     async fn register_listener<T>(&self, topic: UUri, listener: T) -> Result<(), UStatus>
     where
-        T: Copy + UListener + 'static,
+        T: Clone + ClonableBoxUListener + 'static,
     {
         if topic.authority.is_some() && topic.entity.is_none() && topic.resource.is_none() {
             // This is special UUri which means we need to register for all of Publish, Request, and Response
             // RPC response
-            self.register_response_listener(&topic, listener)?;
+            self.register_response_listener(&topic, listener.clone())?;
             // RPC request
-            self.register_request_listener(&topic, listener).await?;
+            self.register_request_listener(&topic, listener.clone())
+                .await?;
             // Normal publish
             self.register_publish_listener(&topic, listener).await?;
             Ok(())
@@ -565,7 +568,7 @@ impl UTransport for UPClientZenoh {
 
     async fn unregister_listener<T>(&self, topic: UUri, listener: T) -> Result<(), UStatus>
     where
-        T: Copy + UListener + 'static,
+        T: Clone + ClonableBoxUListener + 'static,
     {
         let mut message_type = UMessageType::UMESSAGE_TYPE_UNSPECIFIED;
         let mut found_authority = false;
@@ -623,7 +626,7 @@ impl UTransport for UPClientZenoh {
                 }
                 Entry::Occupied(mut e) => {
                     let occupied = e.get_mut();
-                    let identified_listener = ListenerWrapper::new(listener);
+                    let identified_listener = ListenerWrapper::new(listener.clone());
                     let possibly_removed = occupied.remove(&identified_listener);
                     if possibly_removed.is_none() {
                         if message_type == UMessageType::UMESSAGE_TYPE_REQUEST {

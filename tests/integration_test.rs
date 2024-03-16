@@ -202,51 +202,76 @@ async fn test_utransport_special_uuri_register_and_unregister() {
     );
 }
 
-// #[async_std::test]
-// async fn test_publish_and_subscribe() {
-//     let target_data = String::from("Hello World!");
-//     let upclient = UPClientZenoh::new(Config::default()).await.unwrap();
-//     let uuri = create_utransport_uuri(0);
-//
-//     // Register the listener
-//     let uuri_cloned = uuri.clone();
-//     let data_cloned = target_data.clone();
-//     let listener = move |result: Result<UMessage, UStatus>| match result {
-//         Ok(msg) => {
-//             if let Data::Value(v) = msg.payload.unwrap().data.unwrap() {
-//                 let value = v.into_iter().map(|c| c as char).collect::<String>();
-//                 assert_eq!(msg.attributes.unwrap().source.unwrap(), uuri_cloned);
-//                 assert_eq!(value, data_cloned);
-//             } else {
-//                 panic!("The message should be Data::Value type.");
-//             }
-//         }
-//         Err(ustatus) => panic!("Internal Error: {ustatus:?}"),
-//     };
-//     let listener_string = upclient
-//         .register_listener(uuri.clone(), Box::new(listener))
-//         .await
-//         .unwrap();
-//
-//     let umessage = UMessageBuilder::publish(&uuri)
-//         .build_with_payload(
-//             &UUIDBuilder::new(),
-//             target_data.as_bytes().to_vec().into(),
-//             UPayloadFormat::UPAYLOAD_FORMAT_TEXT,
-//         )
-//         .unwrap();
-//     upclient.send(umessage).await.unwrap();
-//
-//     // Waiting for the subscriber to receive data
-//     task::sleep(time::Duration::from_millis(1000)).await;
-//
-//     // Cleanup
-//     upclient
-//         .unregister_listener(uuri.clone(), &listener_string)
-//         .await
-//         .unwrap();
-// }
-//
+#[derive(Debug, Clone)]
+struct PubSubListener {
+    expected_uuri: Arc<UUri>,
+    expected_data: Arc<String>,
+}
+
+impl PubSubListener {
+    pub fn new(uuri: UUri, data: String) -> Self {
+        Self {
+            expected_uuri: Arc::new(uuri),
+            expected_data: Arc::new(data),
+        }
+    }
+}
+
+impl UListener for PubSubListener {
+    fn on_receive(&self, received: Result<UMessage, UStatus>) {
+        match received {
+            Ok(msg) => {
+                if let Data::Value(v) = msg.payload.unwrap().data.unwrap() {
+                    let value = v.into_iter().map(|c| c as char).collect::<String>();
+                    assert_eq!(msg.attributes.unwrap().source.unwrap(), *self.expected_uuri);
+                    assert_eq!(value, *self.expected_data);
+                } else {
+                    panic!("The message should be Data::Value type.");
+                }
+            }
+            Err(ustatus) => panic!("Internal Error: {ustatus:?}"),
+        }
+    }
+}
+
+#[async_std::test]
+async fn test_publish_and_subscribe() {
+    let target_data = String::from("Hello World!");
+    let upclient = UPClientZenoh::new(Config::default()).await.unwrap();
+    let uuri = create_utransport_uuri(0);
+
+    // Register the listener
+    let uuri_cloned = uuri.clone();
+    let data_cloned = target_data.clone();
+    let pub_sub_listener = PubSubListener::new(uuri_cloned.clone(), data_cloned.clone());
+    let register_res = upclient
+        .register_listener(uuri.clone(), pub_sub_listener)
+        .await;
+    assert_eq!(register_res, Ok(()));
+
+    let uuid_builder = UUIDBuilder::new();
+
+    let umessage = UMessageBuilder::publish(uuri.clone())
+        .with_message_id(uuid_builder.build())
+        .build_with_payload(
+            target_data.as_bytes().to_vec().into(),
+            UPayloadFormat::UPAYLOAD_FORMAT_TEXT,
+        )
+        .unwrap();
+    let send_res = upclient.send(umessage).await;
+    assert_eq!(send_res, Ok(()));
+
+    // Waiting for the subscriber to receive data
+    task::sleep(time::Duration::from_millis(1000)).await;
+
+    // Cleanup
+    let pub_sub_listener = PubSubListener::new(uuri_cloned, data_cloned);
+    let unregister_res = upclient
+        .unregister_listener(uuri.clone(), pub_sub_listener)
+        .await;
+    assert_eq!(unregister_res, Ok(()));
+}
+
 // #[async_std::test]
 // async fn test_notification_and_subscribe() {
 //     let target_data = String::from("Hello World!");
