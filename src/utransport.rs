@@ -567,57 +567,119 @@ impl UTransport for UPClientZenoh {
     where
         T: Copy + UListener + 'static,
     {
+        let mut message_type = UMessageType::UMESSAGE_TYPE_UNSPECIFIED;
+        let mut found_authority = false;
         if topic.authority.is_some() && topic.entity.is_none() && topic.resource.is_none() {
             // This is special UUri which means we need to unregister both listeners
         } else {
             // Do the validation
             UriValidator::validate(&topic)
                 .map_err(|_| UStatus::fail_with_code(UCode::INVALID_ARGUMENT, "Invalid topic"))?;
+
+            if UriValidator::is_rpc_response(&topic) {
+                message_type = UMessageType::UMESSAGE_TYPE_RESPONSE;
+            } else if UriValidator::is_rpc_method(&topic) {
+                message_type = UMessageType::UMESSAGE_TYPE_REQUEST;
+            } else {
+                message_type = UMessageType::UMESSAGE_TYPE_PUBLISH;
+            }
         }
 
-        if self
-            .rpc_callback_map
-            .lock()
-            .unwrap()
-            .remove(&topic)
-            .is_none()
+        if message_type == UMessageType::UMESSAGE_TYPE_RESPONSE
+            || message_type == UMessageType::UMESSAGE_TYPE_UNSPECIFIED
         {
-            return Err(UStatus::fail_with_code(
-                UCode::INVALID_ARGUMENT,
-                "RPC response callback doesn't exist",
-            ));
-        }
-        let mut queryable_map_guard = self.queryable_map.lock().unwrap();
-
-        let listeners = queryable_map_guard.entry(topic.clone());
-        match listeners {
-            Entry::Vacant(_) => {
-                return Err(UStatus::fail_with_code(
-                    UCode::NOT_FOUND,
-                    format!("No listeners registered for topic: {:?}", &topic),
-                ))
-            }
-            Entry::Occupied(mut e) => {
-                let occupied = e.get_mut();
-                let identified_listener = ListenerWrapper::new(listener);
-                occupied.remove(&identified_listener);
+            if self
+                .rpc_callback_map
+                .lock()
+                .unwrap()
+                .remove(&topic)
+                .is_none()
+            {
+                if message_type == UMessageType::UMESSAGE_TYPE_RESPONSE {
+                    return Err(UStatus::fail_with_code(
+                        UCode::NOT_FOUND,
+                        "RPC response callback doesn't exist",
+                    ));
+                }
+            } else {
+                found_authority = true;
             }
         }
 
-        let mut subscriber_map_guard = self.subscriber_map.lock().unwrap();
+        if message_type == UMessageType::UMESSAGE_TYPE_REQUEST
+            || message_type == UMessageType::UMESSAGE_TYPE_UNSPECIFIED
+        {
+            let mut queryable_map_guard = self.queryable_map.lock().unwrap();
 
-        let listeners = subscriber_map_guard.entry(topic.clone());
-        match listeners {
-            Entry::Vacant(_) => {
+            let listeners = queryable_map_guard.entry(topic.clone());
+            match listeners {
+                Entry::Vacant(_) => {
+                    if message_type == UMessageType::UMESSAGE_TYPE_REQUEST {
+                        return Err(UStatus::fail_with_code(
+                            UCode::NOT_FOUND,
+                            format!("No listeners registered for topic: {:?}", &topic),
+                        ));
+                    }
+                }
+                Entry::Occupied(mut e) => {
+                    let occupied = e.get_mut();
+                    let identified_listener = ListenerWrapper::new(listener);
+                    let possibly_removed = occupied.remove(&identified_listener);
+                    if possibly_removed.is_none() {
+                        if message_type == UMessageType::UMESSAGE_TYPE_REQUEST {
+                            return Err(UStatus::fail_with_code(
+                                UCode::NOT_FOUND,
+                                format!("No listeners registered for topic: {:?}", &topic),
+                            ));
+                        } else {
+                            found_authority = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        if message_type == UMessageType::UMESSAGE_TYPE_PUBLISH
+            || message_type == UMessageType::UMESSAGE_TYPE_UNSPECIFIED
+        {
+            let mut subscriber_map_guard = self.subscriber_map.lock().unwrap();
+
+            let listeners = subscriber_map_guard.entry(topic.clone());
+            match listeners {
+                Entry::Vacant(_) => {
+                    if message_type == UMessageType::UMESSAGE_TYPE_PUBLISH {
+                        return Err(UStatus::fail_with_code(
+                            UCode::NOT_FOUND,
+                            format!("No listeners registered for topic: {:?}", &topic),
+                        ));
+                    }
+                }
+                Entry::Occupied(mut e) => {
+                    let occupied = e.get_mut();
+                    let identified_listener = ListenerWrapper::new(listener);
+                    let possibly_removed = occupied.remove(&identified_listener);
+                    if possibly_removed.is_none() {
+                        if message_type == UMessageType::UMESSAGE_TYPE_PUBLISH {
+                            return Err(UStatus::fail_with_code(
+                                UCode::NOT_FOUND,
+                                format!("No listeners registered for topic: {:?}", &topic),
+                            ));
+                        } else {
+                            found_authority = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        if message_type == UMessageType::UMESSAGE_TYPE_UNSPECIFIED {
+            if found_authority {
+                return Ok(());
+            } else {
                 return Err(UStatus::fail_with_code(
                     UCode::NOT_FOUND,
                     format!("No listeners registered for topic: {:?}", &topic),
-                ))
-            }
-            Entry::Occupied(mut e) => {
-                let occupied = e.get_mut();
-                let identified_listener = ListenerWrapper::new(listener);
-                occupied.remove(&identified_listener);
+                ));
             }
         }
 

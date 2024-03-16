@@ -181,7 +181,7 @@ impl UPClientZenoh {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use up_rust::uprotocol::{uri::uauthority::Number, UAuthority, UEntity, UResource, UUri};
+    use up_rust::{Number, UAuthority, UEntity, UResource, UUri};
 
     #[test]
     fn test_to_zenoh_key_string() {
