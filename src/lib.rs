@@ -19,7 +19,8 @@ use std::{
     collections::HashMap,
     sync::{atomic::AtomicU64, Arc, Mutex},
 };
-use up_rust::uprotocol::{UAttributes, UCode, UMessage, UPayloadFormat, UPriority, UStatus, UUri};
+use up_rust::listener_wrapper::ListenerWrapper;
+use up_rust::{UAttributes, UCode, UPayloadFormat, UPriority, UStatus, UUri};
 use zenoh::{
     config::Config,
     prelude::r#async::*,
@@ -28,21 +29,19 @@ use zenoh::{
     subscriber::Subscriber,
 };
 
-pub type UtransportListener = Box<dyn Fn(Result<UMessage, UStatus>) + Send + Sync + 'static>;
-
 const UATTRIBUTE_VERSION: u8 = 1;
 
 pub struct ZenohListener {}
 pub struct UPClientZenoh {
     session: Arc<Session>,
     // Able to unregister Subscriber
-    subscriber_map: Arc<Mutex<HashMap<String, Subscriber<'static, ()>>>>,
+    subscriber_map: Arc<Mutex<HashMap<Arc<ListenerWrapper>, Subscriber<'static, ()>>>>,
     // Able to unregister Queryable
-    queryable_map: Arc<Mutex<HashMap<String, Queryable<'static, ()>>>>,
+    queryable_map: Arc<Mutex<HashMap<Arc<ListenerWrapper>, Queryable<'static, ()>>>>,
     // Save the reqid to be able to send back response
     query_map: Arc<Mutex<HashMap<String, Query>>>,
     // Save the callback for RPC response
-    rpc_callback_map: Arc<Mutex<HashMap<String, Arc<UtransportListener>>>>,
+    rpc_callback_map: Arc<Mutex<HashMap<UUri, Arc<ListenerWrapper>>>>,
     callback_counter: AtomicU64,
 }
 
