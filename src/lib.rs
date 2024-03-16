@@ -18,7 +18,7 @@ use protobuf::{Enum, Message};
 use std::collections::HashSet;
 use std::{
     collections::HashMap,
-    sync::{atomic::AtomicU64, Arc, Mutex},
+    sync::{Arc, Mutex},
 };
 use up_rust::listener_wrapper::ListenerWrapper;
 use up_rust::{UAttributes, UCode, UPayloadFormat, UPriority, UStatus, UUri};
@@ -36,15 +36,16 @@ pub struct ZenohListener {}
 pub struct UPClientZenoh {
     session: Arc<Session>,
     // Able to unregister Subscriber
+    #[allow(clippy::type_complexity)]
     subscriber_map:
         Arc<Mutex<HashMap<UUri, HashMap<Arc<ListenerWrapper>, Subscriber<'static, ()>>>>>,
     // Able to unregister Queryable
+    #[allow(clippy::type_complexity)]
     queryable_map: Arc<Mutex<HashMap<UUri, HashMap<Arc<ListenerWrapper>, Queryable<'static, ()>>>>>,
     // Save the reqid to be able to send back response
     query_map: Arc<Mutex<HashMap<String, Query>>>,
     // Save the callback for RPC response
     rpc_callback_map: Arc<Mutex<HashMap<UUri, HashSet<Arc<ListenerWrapper>>>>>,
-    callback_counter: AtomicU64,
 }
 
 impl UPClientZenoh {
@@ -63,7 +64,6 @@ impl UPClientZenoh {
             queryable_map: Arc::new(Mutex::new(HashMap::new())),
             query_map: Arc::new(Mutex::new(HashMap::new())),
             rpc_callback_map: Arc::new(Mutex::new(HashMap::new())),
-            callback_counter: AtomicU64::new(0),
         })
     }
 

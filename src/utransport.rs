@@ -14,7 +14,6 @@
 use crate::UPClientZenoh;
 use async_trait::async_trait;
 use std::collections::hash_map::Entry;
-use std::collections::HashSet;
 use std::{sync::Arc, time::Duration};
 use up_rust::listener_wrapper::ListenerWrapper;
 use up_rust::ulistener::UListener;
@@ -75,6 +74,7 @@ impl UPClientZenoh {
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn send_request(
         &self,
         zenoh_key: &str,
@@ -112,17 +112,15 @@ impl UPClientZenoh {
             let rpc_callback_map = self.rpc_callback_map.lock().unwrap();
             rpc_callback_map
                 .get(&resp_listener_clone)
-                .map(|listener_set| listener_set.iter().cloned().collect::<Vec<_>>())
-                .unwrap_or_else(Vec::new)
+                .map_or_else(Vec::new, |listener_set| {
+                    listener_set.iter().cloned().collect::<Vec<_>>()
+                })
         };
 
         if callbacks.is_empty() {
             return Err(UStatus::fail_with_code(
                 UCode::NOT_FOUND,
-                format!(
-                    "No listeners registered for topic: {:?}",
-                    resp_listener_clone
-                ),
+                format!("No listeners registered for topic: {resp_listener_clone}",),
             ));
         }
 
@@ -431,19 +429,16 @@ impl UPClientZenoh {
         Ok(())
     }
 
+    #[allow(clippy::unnecessary_wraps)]
     fn register_response_listener<T>(&self, topic: &UUri, listener: T) -> Result<(), UStatus>
     where
         T: Copy + UListener + 'static,
     {
-        // Get Zenoh key
-        let zenoh_key = UPClientZenoh::to_zenoh_key_string(topic)?;
-        // Generate listener string for users to delete
-
         let listener_wrapper = Arc::new(ListenerWrapper::new(listener));
 
         let mut rpc_callback_map_guard = self.rpc_callback_map.lock().unwrap();
 
-        let mut listeners = rpc_callback_map_guard.entry(topic.clone()).or_default();
+        let listeners = rpc_callback_map_guard.entry(topic.clone()).or_default();
 
         listeners.insert(listener_wrapper);
 
@@ -546,9 +541,9 @@ impl UTransport for UPClientZenoh {
             // RPC response
             self.register_response_listener(&topic, listener)?;
             // RPC request
-            &self.register_request_listener(&topic, listener).await?;
+            self.register_request_listener(&topic, listener).await?;
             // Normal publish
-            &self.register_publish_listener(&topic, listener).await?;
+            self.register_publish_listener(&topic, listener).await?;
             Ok(())
         } else {
             // Do the validation
@@ -592,7 +587,6 @@ impl UTransport for UPClientZenoh {
                 "RPC response callback doesn't exist",
             ));
         }
-        let listener_wrapper = Arc::new(ListenerWrapper::new(listener));
         let mut queryable_map_guard = self.queryable_map.lock().unwrap();
 
         let listeners = queryable_map_guard.entry(topic.clone());
