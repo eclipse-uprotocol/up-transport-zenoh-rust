@@ -203,12 +203,12 @@ async fn test_utransport_special_uuri_register_and_unregister() {
 }
 
 #[derive(Debug, Clone)]
-struct PubSubListener {
+struct PubSubTestListener {
     expected_uuri: Arc<UUri>,
     expected_data: Arc<String>,
 }
 
-impl PubSubListener {
+impl PubSubTestListener {
     pub fn new(uuri: UUri, data: String) -> Self {
         Self {
             expected_uuri: Arc::new(uuri),
@@ -217,7 +217,7 @@ impl PubSubListener {
     }
 }
 
-impl UListener for PubSubListener {
+impl UListener for PubSubTestListener {
     fn on_receive(&self, received: Result<UMessage, UStatus>) {
         match received {
             Ok(msg) => {
@@ -238,20 +238,97 @@ impl UListener for PubSubListener {
 async fn test_publish_and_subscribe() {
     let target_data = String::from("Hello World!");
     let upclient = UPClientZenoh::new(Config::default()).await.unwrap();
-    let uuri = create_utransport_uuri(0);
+    let topic = create_utransport_uuri(0);
+
+    println!("topic: {:?}", &topic);
 
     // Register the listener
-    let uuri_cloned = uuri.clone();
-    let data_cloned = target_data.clone();
-    let pub_sub_listener = PubSubListener::new(uuri_cloned.clone(), data_cloned.clone());
+    let pub_sub_test_listener = PubSubTestListener::new(topic.clone(), target_data.clone());
     let register_res = upclient
-        .register_listener(uuri.clone(), pub_sub_listener)
+        .register_listener(topic.clone(), pub_sub_test_listener)
         .await;
     assert_eq!(register_res, Ok(()));
 
     let uuid_builder = UUIDBuilder::new();
 
-    let umessage = UMessageBuilder::publish(uuri.clone())
+    let umessage = UMessageBuilder::publish(topic.clone())
+        .with_message_id(uuid_builder.build())
+        .build_with_payload(
+            target_data.as_bytes().to_vec().into(),
+            UPayloadFormat::UPAYLOAD_FORMAT_TEXT,
+        )
+        .unwrap();
+
+    println!("umessage: {:?}", umessage);
+
+    let send_res = upclient.send(umessage).await;
+    assert_eq!(send_res, Ok(()));
+
+    // Waiting for the subscriber to receive data
+    task::sleep(time::Duration::from_millis(1000)).await;
+
+    // Cleanup
+    let pub_sub_test_listener = PubSubTestListener::new(topic.clone(), target_data.clone());
+    let unregister_res = upclient
+        .unregister_listener(topic.clone(), pub_sub_test_listener)
+        .await;
+    assert_eq!(unregister_res, Ok(()));
+}
+
+#[derive(Clone)]
+struct NotifTestListener {
+    expected_sink: Arc<UUri>,
+    expected_data: Arc<String>,
+}
+
+impl NotifTestListener {
+    pub fn new(expected_sink: UUri, expected_data: String) -> Self {
+        Self {
+            expected_sink: Arc::new(expected_sink),
+            expected_data: Arc::new(expected_data),
+        }
+    }
+}
+
+impl UListener for NotifTestListener {
+    fn on_receive(&self, received: Result<UMessage, UStatus>) {
+        match received {
+            Ok(msg) => {
+                if let Data::Value(v) = msg.payload.unwrap().data.unwrap() {
+                    let value = v.into_iter().map(|c| c as char).collect::<String>();
+                    assert_eq!(msg.attributes.unwrap().sink.unwrap(), *self.expected_sink);
+                    assert_eq!(value, *self.expected_data);
+                } else {
+                    panic!("The message should be Data::Value type.");
+                }
+            }
+            Err(ustatus) => panic!("Internal Error: {ustatus:?}"),
+        }
+    }
+}
+
+#[async_std::test]
+async fn test_notification_and_subscribe() {
+    let target_data = String::from("Hello World!");
+    let upclient = UPClientZenoh::new(Config::default()).await.unwrap();
+    let origin_uuri = create_utransport_uuri(1);
+    let destination_uuri = create_utransport_uuri(2);
+
+    // Register the listener
+    let test_correct_received_listener =
+        NotifTestListener::new(destination_uuri.clone(), target_data.clone());
+
+    let register_res = upclient
+        .register_listener(
+            destination_uuri.clone(),
+            test_correct_received_listener.clone(),
+        )
+        .await;
+    assert_eq!(register_res, Ok(()));
+
+    let uuid_builder = UUIDBuilder::new();
+
+    let umessage = UMessageBuilder::notification(origin_uuri.clone(), destination_uuri.clone())
         .with_message_id(uuid_builder.build())
         .build_with_payload(
             target_data.as_bytes().to_vec().into(),
@@ -265,58 +342,15 @@ async fn test_publish_and_subscribe() {
     task::sleep(time::Duration::from_millis(1000)).await;
 
     // Cleanup
-    let pub_sub_listener = PubSubListener::new(uuri_cloned, data_cloned);
     let unregister_res = upclient
-        .unregister_listener(uuri.clone(), pub_sub_listener)
+        .unregister_listener(
+            destination_uuri.clone(),
+            test_correct_received_listener.clone(),
+        )
         .await;
     assert_eq!(unregister_res, Ok(()));
 }
 
-// #[async_std::test]
-// async fn test_notification_and_subscribe() {
-//     let target_data = String::from("Hello World!");
-//     let upclient = UPClientZenoh::new(Config::default()).await.unwrap();
-//     let uuri = create_utransport_uuri(1);
-//
-//     // Register the listener
-//     let uuri_cloned = uuri.clone();
-//     let data_cloned = target_data.clone();
-//     let listener = move |result: Result<UMessage, UStatus>| match result {
-//         Ok(msg) => {
-//             if let Data::Value(v) = msg.payload.unwrap().data.unwrap() {
-//                 let value = v.into_iter().map(|c| c as char).collect::<String>();
-//                 assert_eq!(msg.attributes.unwrap().sink.unwrap(), uuri_cloned);
-//                 assert_eq!(value, data_cloned);
-//             } else {
-//                 panic!("The message should be Data::Value type.");
-//             }
-//         }
-//         Err(ustatus) => panic!("Internal Error: {ustatus:?}"),
-//     };
-//     let listener_string = upclient
-//         .register_listener(uuri.clone(), Box::new(listener))
-//         .await
-//         .unwrap();
-//
-//     let umessage = UMessageBuilder::notification(&uuri)
-//         .build_with_payload(
-//             &UUIDBuilder::new(),
-//             target_data.as_bytes().to_vec().into(),
-//             UPayloadFormat::UPAYLOAD_FORMAT_TEXT,
-//         )
-//         .unwrap();
-//     upclient.send(umessage).await.unwrap();
-//
-//     // Waiting for the subscriber to receive data
-//     task::sleep(time::Duration::from_millis(1000)).await;
-//
-//     // Cleanup
-//     upclient
-//         .unregister_listener(uuri.clone(), &listener_string)
-//         .await
-//         .unwrap();
-// }
-//
 // #[async_std::test]
 // async fn test_rpc_server_client() {
 //     let upclient_client = UPClientZenoh::new(Config::default()).await.unwrap();
