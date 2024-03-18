@@ -13,7 +13,6 @@
 //
 use crate::UPClientZenoh;
 use async_trait::async_trait;
-use std::collections::hash_map::Entry;
 use std::{sync::Arc, time::Duration};
 use up_rust::listener_wrapper::ListenerWrapper;
 use up_rust::ulistener::UListener;
@@ -442,6 +441,57 @@ impl UPClientZenoh {
 
         Ok(())
     }
+
+    fn unregister_publish_listener(
+        &self,
+        topic: &UUri,
+        listener: &ListenerWrapper,
+    ) -> Result<(), UStatus> {
+        let mut subscriber_map = self.subscriber_map.lock().unwrap();
+        if let Some(subscribers) = subscriber_map.get_mut(topic) {
+            if let Some(_subscriber) = subscribers.remove(listener) {
+                return Ok(());
+            }
+        }
+        Err(UStatus::fail_with_code(
+            UCode::NOT_FOUND,
+            format!("Publish listener not found: {topic:?}"),
+        ))
+    }
+
+    fn unregister_request_listener(
+        &self,
+        topic: &UUri,
+        listener: &ListenerWrapper,
+    ) -> Result<(), UStatus> {
+        let mut queryable_map = self.queryable_map.lock().unwrap();
+        if let Some(queryables) = queryable_map.get_mut(topic) {
+            if let Some(_queryable) = queryables.remove(listener) {
+                return Ok(());
+            }
+        }
+        Err(UStatus::fail_with_code(
+            UCode::NOT_FOUND,
+            format!("Request listener not found: {topic:?}"),
+        ))
+    }
+
+    fn unregister_response_listener(
+        &self,
+        topic: &UUri,
+        listener: &ListenerWrapper,
+    ) -> Result<(), UStatus> {
+        let mut rpc_callback_map = self.rpc_callback_map.lock().unwrap();
+        if let Some(callbacks) = rpc_callback_map.get_mut(topic) {
+            if callbacks.remove(listener) {
+                return Ok(());
+            }
+        }
+        Err(UStatus::fail_with_code(
+            UCode::NOT_FOUND,
+            format!("Response listener not found: {topic:?}"),
+        ))
+    }
 }
 
 #[async_trait]
@@ -567,124 +617,62 @@ impl UTransport for UPClientZenoh {
         }
     }
 
-    #[allow(clippy::too_many_lines)]
     async fn unregister_listener<T>(&self, topic: UUri, listener: &Arc<T>) -> Result<(), UStatus>
     where
         T: UListener,
     {
         let listener_wrapper = ListenerWrapper::new(listener);
-        let mut message_type = UMessageType::UMESSAGE_TYPE_UNSPECIFIED;
-        let mut found_authority = false;
-        if topic.authority.is_some() && topic.entity.is_none() && topic.resource.is_none() {
-            // This is special UUri which means we need to unregister both listeners
-        } else {
-            // Do the validation
-            UriValidator::validate(&topic)
-                .map_err(|_| UStatus::fail_with_code(UCode::INVALID_ARGUMENT, "Invalid topic"))?;
-
-            if UriValidator::is_rpc_response(&topic) {
-                message_type = UMessageType::UMESSAGE_TYPE_RESPONSE;
-            } else if UriValidator::is_rpc_method(&topic) {
-                message_type = UMessageType::UMESSAGE_TYPE_REQUEST;
+        let message_type =
+            if topic.authority.is_some() && topic.entity.is_none() && topic.resource.is_none() {
+                UMessageType::UMESSAGE_TYPE_UNSPECIFIED
             } else {
-                message_type = UMessageType::UMESSAGE_TYPE_PUBLISH;
-            }
-        }
+                UriValidator::validate(&topic).map_err(|_| {
+                    UStatus::fail_with_code(UCode::INVALID_ARGUMENT, "Invalid topic")
+                })?;
 
-        if message_type == UMessageType::UMESSAGE_TYPE_RESPONSE
-            || message_type == UMessageType::UMESSAGE_TYPE_UNSPECIFIED
-        {
-            if self
-                .rpc_callback_map
-                .lock()
-                .unwrap()
-                .remove(&topic) // TODO: I do not think we should be calling .remove here... we could blow up other listeners
-                .is_none()
-            {
-                if message_type == UMessageType::UMESSAGE_TYPE_RESPONSE {
-                    return Err(UStatus::fail_with_code(
-                        UCode::NOT_FOUND,
-                        "RPC response callback doesn't exist",
-                    ));
+                if UriValidator::is_rpc_response(&topic) {
+                    UMessageType::UMESSAGE_TYPE_RESPONSE
+                } else if UriValidator::is_rpc_method(&topic) {
+                    UMessageType::UMESSAGE_TYPE_REQUEST
+                } else {
+                    UMessageType::UMESSAGE_TYPE_PUBLISH
                 }
-            } else {
-                found_authority = true;
-            }
-        }
-
-        if message_type == UMessageType::UMESSAGE_TYPE_REQUEST
-            || message_type == UMessageType::UMESSAGE_TYPE_UNSPECIFIED
-        {
-            let mut queryable_map_guard = self.queryable_map.lock().unwrap();
-
-            let listeners = queryable_map_guard.entry(topic.clone());
-            match listeners {
-                Entry::Vacant(_) => {
-                    if message_type == UMessageType::UMESSAGE_TYPE_REQUEST {
-                        return Err(UStatus::fail_with_code(
-                            UCode::NOT_FOUND,
-                            format!("No listeners registered for topic: {:?}", &topic),
-                        ));
-                    }
-                }
-                Entry::Occupied(mut e) => {
-                    let occupied = e.get_mut();
-                    let possibly_removed = occupied.remove(&listener_wrapper);
-                    if possibly_removed.is_none() {
-                        if message_type == UMessageType::UMESSAGE_TYPE_REQUEST {
-                            return Err(UStatus::fail_with_code(
-                                UCode::NOT_FOUND,
-                                format!("No listeners registered for topic: {:?}", &topic),
-                            ));
-                        }
-                    } else {
-                        found_authority = true;
-                    }
-                }
-            }
-        }
-
-        if message_type == UMessageType::UMESSAGE_TYPE_PUBLISH
-            || message_type == UMessageType::UMESSAGE_TYPE_UNSPECIFIED
-        {
-            let mut subscriber_map_guard = self.subscriber_map.lock().unwrap();
-
-            let listeners = subscriber_map_guard.entry(topic.clone());
-            match listeners {
-                Entry::Vacant(_) => {
-                    if message_type == UMessageType::UMESSAGE_TYPE_PUBLISH {
-                        return Err(UStatus::fail_with_code(
-                            UCode::NOT_FOUND,
-                            format!("No listeners registered for topic: {:?}", &topic),
-                        ));
-                    }
-                }
-                Entry::Occupied(mut e) => {
-                    let occupied = e.get_mut();
-                    let possibly_removed = occupied.remove(&listener_wrapper);
-                    if possibly_removed.is_none() {
-                        if message_type == UMessageType::UMESSAGE_TYPE_PUBLISH {
-                            return Err(UStatus::fail_with_code(
-                                UCode::NOT_FOUND,
-                                format!("No listeners registered for topic: {:?}", &topic),
-                            ));
-                        }
-                    } else {
-                        found_authority = true;
-                    }
-                }
-            }
-        }
-
-        if message_type == UMessageType::UMESSAGE_TYPE_UNSPECIFIED {
-            return if found_authority {
-                Ok(())
-            } else {
-                Err(UStatus::fail_with_code(
-                    UCode::NOT_FOUND,
-                    format!("No listeners registered for topic: {:?}", &topic),
-                ))
             };
+
+        match message_type {
+            UMessageType::UMESSAGE_TYPE_UNSPECIFIED => {
+                let results = vec![
+                    self.unregister_response_listener(&topic, &listener_wrapper),
+                    self.unregister_request_listener(&topic, &listener_wrapper),
+                    self.unregister_publish_listener(&topic, &listener_wrapper),
+                ];
+
+                // Filter out the Ok results, collect errors
+                let errors: Vec<UStatus> = results.into_iter().filter_map(Result::err).collect();
+
+                if !errors.is_empty() {
+                    let first_error = errors[0].clone(); // Assuming UStatus implements Clone.
+                    let error_messages: Vec<String> =
+                        errors.into_iter().filter_map(|e| e.message).collect();
+                    let combined_message = error_messages.join("; ");
+
+                    return Err(UStatus {
+                        code: first_error.code, // Preserve the first error code
+                        message: Some(combined_message),
+                        details: vec![],
+                        special_fields: ::protobuf::SpecialFields::default(),
+                    });
+                }
+            }
+            UMessageType::UMESSAGE_TYPE_RESPONSE => {
+                self.unregister_response_listener(&topic, &listener_wrapper)?;
+            }
+            UMessageType::UMESSAGE_TYPE_REQUEST => {
+                self.unregister_request_listener(&topic, &listener_wrapper)?;
+            }
+            UMessageType::UMESSAGE_TYPE_PUBLISH => {
+                self.unregister_publish_listener(&topic, &listener_wrapper)?;
+            }
         }
 
         Ok(())

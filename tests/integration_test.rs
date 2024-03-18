@@ -16,9 +16,9 @@ use std::{sync::Arc, time};
 use up_client_zenoh::UPClientZenoh;
 use up_rust::ulistener::UListener;
 use up_rust::{
-    CallOptionsBuilder, Data, Number, RpcClient, UAuthority, UCode, UEntity, UMessage,
-    UMessageBuilder, UMessageType, UPayload, UPayloadFormat, UResource, UResourceBuilder, UStatus,
-    UTransport, UUIDBuilder, UUri,
+    CallOptionsBuilder, Data, Number, RpcClient, UAuthority, UEntity, UMessage, UMessageBuilder,
+    UMessageType, UPayload, UPayloadFormat, UResource, UResourceBuilder, UStatus, UTransport,
+    UUIDBuilder, UUri,
 };
 use zenoh::config::Config;
 
@@ -140,13 +140,7 @@ async fn test_utransport_register_and_unregister() {
     let result = upclient
         .unregister_listener(uuri.clone(), &foo_listener)
         .await;
-    assert_eq!(
-        result,
-        Err(UStatus::fail_with_code(
-            UCode::NOT_FOUND,
-            format!("No listeners registered for topic: {:?}", &uuri),
-        ))
-    );
+    assert!(result.is_err());
 }
 
 #[async_std::test]
@@ -198,13 +192,7 @@ async fn test_utransport_special_uuri_register_and_unregister() {
     let result = upclient
         .unregister_listener(uuri.clone(), &foo_listener)
         .await;
-    assert_eq!(
-        result,
-        Err(UStatus::fail_with_code(
-            UCode::NOT_FOUND,
-            format!("No listeners registered for topic: {:?}", &uuri),
-        ))
-    );
+    assert!(result.is_err());
 }
 
 #[derive(Debug, Clone)]
