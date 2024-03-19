@@ -23,7 +23,6 @@ use up_rust::{
 };
 use zenoh::prelude::r#async::*;
 
-// TODO: Need to check how to use CallOptions
 #[async_trait]
 impl RpcClient for UPClientZenoh {
     async fn invoke_method(
@@ -44,11 +43,11 @@ impl RpcClient for UPClientZenoh {
         };
 
         // Get the data from UPayload
-        let buf = if let Some(Data::Value(buf)) = payload.data {
-            buf
-        } else {
-            // TODO: Assume we only have Value here, no reference for shared memory
-            vec![]
+        let Some(Data::Value(buf)) = payload.data else {
+            // Assume we only have Value here, no reference for shared memory
+            return Err(RpcMapperError::InvalidPayload(String::from(
+                "The data in UPayload should be Data::Value",
+            )));
         };
 
         // Generate UAttributes
@@ -57,13 +56,14 @@ impl RpcClient for UPClientZenoh {
         // Create response address
         let mut source = topic.clone();
         source.resource = Some(UResourceBuilder::for_rpc_response()).into();
-        // TODO: Check the ttl
+        // Create UMessage
         let umessage = if let Some(token) = options.token() {
-            UMessageBuilder::request(&topic, &source, &reqid, 255)
+            UMessageBuilder::request(&topic, &source, &reqid, options.timeout())
                 .with_token(&token.to_string())
                 .build(&uuid_builder)
         } else {
-            UMessageBuilder::request(&topic, &source, &reqid, 255).build(&uuid_builder)
+            UMessageBuilder::request(&topic, &source, &reqid, options.timeout())
+                .build(&uuid_builder)
         };
         // Extract uAttributes
         let Ok(UMessage {
@@ -87,14 +87,13 @@ impl RpcClient for UPClientZenoh {
             payload.format.value().to_string().into(),
         ));
         // TODO: Query should support .encoding
-        // TODO: Adjust the timeout
         let getbuilder = self
             .session
             .get(&zenoh_key)
             .with_value(value)
             .with_attachment(attachment.build())
             .target(QueryTarget::BestMatching)
-            .timeout(Duration::from_millis(1000));
+            .timeout(Duration::from_millis(u64::from(options.timeout())));
 
         // Send the query
         let Ok(replies) = getbuilder.res().await else {

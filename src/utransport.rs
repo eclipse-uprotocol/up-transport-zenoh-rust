@@ -38,11 +38,12 @@ impl UPClientZenoh {
         attributes: UAttributes,
     ) -> Result<(), UStatus> {
         // Get the data from UPayload
-        let buf = if let Some(Data::Value(buf)) = payload.data {
-            buf
-        } else {
-            // TODO: Assume we only have Value here, no reference for shared memory
-            vec![]
+        let Some(Data::Value(buf)) = payload.data else {
+            // Assume we only have Value here, no reference for shared memory
+            return Err(UStatus::fail_with_code(
+                UCode::INVALID_ARGUMENT,
+                "The data in UPayload should be Data::Value",
+            ));
         };
 
         // Serialized UAttributes into protobuf
@@ -84,11 +85,12 @@ impl UPClientZenoh {
         attributes: UAttributes,
     ) -> Result<(), UStatus> {
         // Get the data from UPayload
-        let buf = if let Some(Data::Value(buf)) = payload.data {
-            buf
-        } else {
-            // TODO: Assume we only have Value here, no reference for shared memory
-            vec![]
+        let Some(Data::Value(buf)) = payload.data else {
+            // Assume we only have Value here, no reference for shared memory
+            return Err(UStatus::fail_with_code(
+                UCode::INVALID_ARGUMENT,
+                "The data in UPayload should be Data::Value",
+            ));
         };
 
         // Serialized UAttributes into protobuf
@@ -133,8 +135,7 @@ impl UPClientZenoh {
                         )));
                         return;
                     };
-                    // TODO: Get the attributes
-                    // Create UAttribute
+                    // Get UAttribute from the attachment
                     let Some(attachment) = sample.attachment() else {
                         resp_callback(Err(UStatus::fail_with_code(
                             UCode::INTERNAL,
@@ -173,14 +174,16 @@ impl UPClientZenoh {
             resp_callback(msg);
         };
 
-        // TODO: Adjust the timeout
         let getbuilder = self
             .session
             .get(zenoh_key)
             .with_value(value)
             .with_attachment(attachment.build())
             .target(QueryTarget::BestMatching)
-            .timeout(Duration::from_millis(1000))
+            .timeout(Duration::from_millis(u64::from(
+                // TODO: Workaround since TTL will be u32 in the future.
+                attributes.ttl.unwrap_or(1000).unsigned_abs(),
+            )))
             .callback(zenoh_callback);
         getbuilder.res().await.map_err(|e| {
             log::error!("Zenoh error: {e:?}");
@@ -197,11 +200,12 @@ impl UPClientZenoh {
         attributes: UAttributes,
     ) -> Result<(), UStatus> {
         // Get the data from UPayload
-        let buf = if let Some(Data::Value(buf)) = payload.data {
-            buf
-        } else {
-            // TODO: Assume we only have Value here, no reference for shared memory
-            vec![]
+        let Some(Data::Value(buf)) = payload.data else {
+            // Assume we only have Value here, no reference for shared memory
+            return Err(UStatus::fail_with_code(
+                UCode::INVALID_ARGUMENT,
+                "The data in UPayload should be Data::Value",
+            ));
         };
 
         // Serialized UAttributes into protobuf
