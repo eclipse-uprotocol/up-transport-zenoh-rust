@@ -35,21 +35,28 @@ use zenoh::{
 const UATTRIBUTE_VERSION: u8 = 1;
 
 pub struct ZenohListener {}
+// We use HashMap<Arc<ListenerWrapper>, ...> and HashSet<Arc<ListenerWrapper>> because this is a
+// safer abstraction to use rather than a hash of UUri and ListenerWrapper
+type SubscriberMap =
+    Arc<Mutex<HashMap<UUri, HashMap<Arc<ListenerWrapper>, Subscriber<'static, ()>>>>>;
+type QueryableMap =
+    Arc<Mutex<HashMap<UUri, HashMap<Arc<ListenerWrapper>, Queryable<'static, ()>>>>>;
+type RpcCallbackMap = Arc<Mutex<HashMap<UUri, HashSet<Arc<ListenerWrapper>>>>>;
 pub struct UPClientZenoh {
     session: Arc<Session>,
     // Able to unregister Subscriber
-    #[allow(clippy::type_complexity)]
-    subscriber_map:
-        Arc<Mutex<HashMap<UUri, HashMap<Arc<ListenerWrapper>, Subscriber<'static, ()>>>>>,
+    subscriber_map: SubscriberMap,
     // Able to unregister Queryable
-    #[allow(clippy::type_complexity)]
-    queryable_map: Arc<Mutex<HashMap<UUri, HashMap<Arc<ListenerWrapper>, Queryable<'static, ()>>>>>,
+    queryable_map: QueryableMap,
     // Save the reqid to be able to send back response
     query_map: Arc<Mutex<HashMap<String, Query>>>,
     // Save the callback for RPC response
-    rpc_callback_map: Arc<Mutex<HashMap<UUri, HashSet<Arc<ListenerWrapper>>>>>,
+    rpc_callback_map: RpcCallbackMap,
+    // used to be able to stamp requests consistently from within invoke_method()
     uuid_builder: UUIDBuilder,
+    // used on to form our source UUri when calling invoke_method()
     authority: UAuthority,
+    // used to form our source UUri when calling invoke_method()
     entity: UEntity,
 }
 
