@@ -20,6 +20,7 @@ use up_rust::{
     Data, UAttributes, UAttributesValidators, UCode, UMessage, UMessageType, UPayload,
     UPayloadFormat, UStatus, UTransport, UUri, UriValidator,
 };
+use zenoh::sample::Attachment;
 use zenoh::{
     prelude::{r#async::*, Sample},
     query::Reply,
@@ -27,6 +28,80 @@ use zenoh::{
 };
 
 impl UPClientZenoh {
+    async fn send_and_process_response_callbacks(
+        &self,
+        zenoh_key: &str,
+        value: Value,
+        attachment: Attachment,
+        listener: Arc<ListenerWrapper>,
+    ) -> Result<(), UStatus> {
+        let zenoh_callback = move |reply: Reply| {
+            let msg = match reply.sample {
+                Ok(sample) => {
+                    let Some(encoding) = UPClientZenoh::to_upayload_format(&sample.encoding) else {
+                        listener.on_receive(Err(UStatus::fail_with_code(
+                            UCode::INTERNAL,
+                            "Unable to get the encoding",
+                        )));
+                        return;
+                    };
+                    // TODO: Get the attributes
+                    // Create UAttribute
+                    let Some(attachment) = sample.attachment() else {
+                        listener.on_receive(Err(UStatus::fail_with_code(
+                            UCode::INTERNAL,
+                            "Unable to get attachment",
+                        )));
+                        return;
+                    };
+                    let u_attribute = match UPClientZenoh::attachment_to_uattributes(attachment) {
+                        Ok(uattr) => uattr,
+                        Err(e) => {
+                            log::error!("attachment_to_uattributes error: {:?}", e);
+                            listener.on_receive(Err(UStatus::fail_with_code(
+                                UCode::INTERNAL,
+                                "Unable to decode attribute",
+                            )));
+                            return;
+                        }
+                    };
+                    Ok(UMessage {
+                        attributes: Some(u_attribute).into(),
+                        payload: Some(UPayload {
+                            length: Some(0),
+                            format: encoding.into(),
+                            data: Some(Data::Value(sample.payload.contiguous().to_vec())),
+                            ..Default::default()
+                        })
+                        .into(),
+                        ..Default::default()
+                    })
+                }
+                Err(e) => Err(UStatus::fail_with_code(
+                    UCode::INTERNAL,
+                    format!("Error while parsing Zenoh reply: {e:?}"),
+                )),
+            };
+            listener.on_receive(msg);
+        };
+
+        // TODO: Adjust the timeout
+        let getbuilder = self
+            .session
+            .get(zenoh_key)
+            .with_value(value.clone())
+            .with_attachment(attachment.clone())
+            .target(QueryTarget::BestMatching)
+            .timeout(Duration::from_millis(1000))
+            .callback(zenoh_callback);
+        getbuilder.res().await.map_err(|e| {
+            log::error!("Zenoh error: {e:?}");
+            UStatus::fail_with_code(UCode::INTERNAL, "Unable to send get with Zenoh")
+        })?;
+
+        Ok(())
+    }
+
     async fn send_publish(
         &self,
         zenoh_key: &str,
@@ -125,73 +200,13 @@ impl UPClientZenoh {
         }
 
         for listener in callbacks {
-            let zenoh_callback = move |reply: Reply| {
-                let msg = match reply.sample {
-                    Ok(sample) => {
-                        let Some(encoding) = UPClientZenoh::to_upayload_format(&sample.encoding)
-                        else {
-                            listener.on_receive(Err(UStatus::fail_with_code(
-                                UCode::INTERNAL,
-                                "Unable to get the encoding",
-                            )));
-                            return;
-                        };
-                        // Get UAttribute from the attachment
-                        let Some(attachment) = sample.attachment() else {
-                            listener.on_receive(Err(UStatus::fail_with_code(
-                                UCode::INTERNAL,
-                                "Unable to get attachment",
-                            )));
-                            return;
-                        };
-                        let u_attribute = match UPClientZenoh::attachment_to_uattributes(attachment)
-                        {
-                            Ok(uattr) => uattr,
-                            Err(e) => {
-                                log::error!("attachment_to_uattributes error: {:?}", e);
-                                listener.on_receive(Err(UStatus::fail_with_code(
-                                    UCode::INTERNAL,
-                                    "Unable to decode attribute",
-                                )));
-                                return;
-                            }
-                        };
-                        Ok(UMessage {
-                            attributes: Some(u_attribute).into(),
-                            payload: Some(UPayload {
-                                length: Some(0),
-                                format: encoding.into(),
-                                data: Some(Data::Value(sample.payload.contiguous().to_vec())),
-                                ..Default::default()
-                            })
-                            .into(),
-                            ..Default::default()
-                        })
-                    }
-                    Err(e) => Err(UStatus::fail_with_code(
-                        UCode::INTERNAL,
-                        format!("Error while parsing Zenoh reply: {e:?}"),
-                    )),
-                };
-                listener.on_receive(msg);
-            };
-
-
-            let getbuilder = self
-                .session
-                .get(zenoh_key)
-                .with_value(value.clone())
-                .with_attachment(attachment.clone())
-                .target(QueryTarget::BestMatching)
-                .timeout(Duration::from_millis(u64::from(
-                // TODO: Workaround since TTL will be u32 in the future.
-                attributes.ttl.unwrap_or(1000).unsigned_abs(),
-            )))
-                .callback(zenoh_callback);
-            getbuilder.res().await.map_err(|e| {
-                log::error!("Zenoh error: {e:?}");
-                UStatus::fail_with_code(UCode::INTERNAL, "Unable to send get with Zenoh")
-            })?;
+            self.send_and_process_response_callbacks(
+                zenoh_key,
+                value.clone(),
+                attachment.clone(),
+                listener.clone(),
+            )
+            .await?;
         }
 
         Ok(())
