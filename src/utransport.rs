@@ -342,9 +342,8 @@ impl UPClientZenoh {
             .res()
             .await
         {
-            let mut subscriber_map_guard = self.subscriber_map.lock().unwrap();
-            let listeners = subscriber_map_guard.entry(topic.clone()).or_default();
-            listeners.insert(Arc::new(listener_wrapper), subscriber);
+            let mut subscribers = self.subscriber_map.lock().unwrap();
+            subscribers.insert((topic.clone(), listener_wrapper), subscriber);
         } else {
             return Err(UStatus::fail_with_code(
                 UCode::INTERNAL,
@@ -430,9 +429,8 @@ impl UPClientZenoh {
             .res()
             .await
         {
-            let mut queryable_map_guard = self.queryable_map.lock().unwrap();
-            let listeners = queryable_map_guard.entry(topic.clone()).or_default();
-            listeners.insert(Arc::new(listener_wrapper), queryable);
+            let mut queryables = self.queryable_map.lock().unwrap();
+            queryables.insert((topic.clone(), listener_wrapper), queryable);
         } else {
             return Err(UStatus::fail_with_code(
                 UCode::INTERNAL,
@@ -469,10 +467,8 @@ impl UPClientZenoh {
         listener: &ListenerWrapper,
     ) -> Result<(), UStatus> {
         let mut subscriber_map = self.subscriber_map.lock().unwrap();
-        if let Some(subscribers) = subscriber_map.get_mut(topic) {
-            if let Some(_subscriber) = subscribers.remove(listener) {
-                return Ok(());
-            }
+        if let Some(_subscriber) = subscriber_map.remove(&(topic.clone(), listener.clone())) {
+            return Ok(());
         }
         Err(UStatus::fail_with_code(
             UCode::NOT_FOUND,
@@ -486,10 +482,8 @@ impl UPClientZenoh {
         listener: &ListenerWrapper,
     ) -> Result<(), UStatus> {
         let mut queryable_map = self.queryable_map.lock().unwrap();
-        if let Some(queryables) = queryable_map.get_mut(topic) {
-            if let Some(_queryable) = queryables.remove(listener) {
-                return Ok(());
-            }
+        if let Some(_queryable) = queryable_map.remove(&(topic.clone(), listener.clone())) {
+            return Ok(());
         }
         Err(UStatus::fail_with_code(
             UCode::NOT_FOUND,

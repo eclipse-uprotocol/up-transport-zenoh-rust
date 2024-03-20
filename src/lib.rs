@@ -35,12 +35,8 @@ use zenoh::{
 const UATTRIBUTE_VERSION: u8 = 1;
 
 pub struct ZenohListener {}
-// We use HashMap<Arc<ListenerWrapper>, ...> and HashSet<Arc<ListenerWrapper>> because this is a
-// safer abstraction to use rather than a hash of UUri and ListenerWrapper
-type SubscriberMap =
-    Arc<Mutex<HashMap<UUri, HashMap<Arc<ListenerWrapper>, Subscriber<'static, ()>>>>>;
-type QueryableMap =
-    Arc<Mutex<HashMap<UUri, HashMap<Arc<ListenerWrapper>, Queryable<'static, ()>>>>>;
+type SubscriberMap = Arc<Mutex<HashMap<(UUri, ListenerWrapper), Subscriber<'static, ()>>>>;
+type QueryableMap = Arc<Mutex<HashMap<(UUri, ListenerWrapper), Queryable<'static, ()>>>>;
 type RpcCallbackMap = Arc<Mutex<HashMap<UUri, HashSet<Arc<ListenerWrapper>>>>>;
 pub struct UPClientZenoh {
     session: Arc<Session>,
