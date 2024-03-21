@@ -32,25 +32,6 @@ pub type UtransportListener = Box<dyn Fn(Result<UMessage, UStatus>) + Send + Syn
 
 const UATTRIBUTE_VERSION: u8 = 1;
 
-pub enum ZenohMode {
-    Peer,
-    Client,
-    Router,
-}
-
-/// Configuration struct for `UPClientZenoh`
-pub struct UPClientZenohConfig {
-    /// The Zenoh's mode (router, peer or client)
-    pub mode: ZenohMode,
-    /// Which endpoints to listen on. E.g. tcp/localhost:7447.
-    /// By configuring the endpoints, it is possible to tell Zenoh which are the endpoints that other routers,
-    /// peers, or client can use to establish a zenoh session.
-    pub listen: Option<Vec<String>>,
-    /// Which endpoints to connect to. E.g. tcp/localhost:7447.
-    /// By configuring the endpoints, it is possible to tell Zenoh which router/peer to connect to at startup.
-    pub connect: Option<Vec<String>>,
-}
-
 pub struct ZenohListener {}
 pub struct UPClientZenoh {
     session: Arc<Session>,
@@ -74,75 +55,12 @@ impl UPClientZenoh {
     /// # Examples
     ///
     /// ```
-    /// use up_client_zenoh::UPClientZenoh;
-    /// async_std::task::block_on(async {
+    /// # async_std::task::block_on(async {
+    ///     use up_client_zenoh::UPClientZenoh;
     ///     let upclient = UPClientZenoh::new().await.unwrap();
-    /// });
+    /// # });
     /// ```
     pub async fn new() -> Result<UPClientZenoh, UStatus> {
-        UPClientZenoh::new_with_zenoh_config(Config::default()).await
-    }
-
-    /// Create `UPClientZenoh` by applying the `UPClientZenohConfig`
-    ///
-    /// # Arguments
-    ///
-    /// * `config` - The config needed by `UPClientZenoh`
-    ///
-    /// # Errors
-    /// Will return `Err` if unable to create `UPClientZenoh`
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use up_client_zenoh::{UPClientZenoh, UPClientZenohConfig, ZenohMode};
-    /// async_std::task::block_on(async {
-    ///     let config = UPClientZenohConfig {
-    ///         mode: ZenohMode::Peer,
-    ///         connect: None,
-    ///         listen: None,
-    ///     };
-    ///     let upclient = UPClientZenoh::new_with_config(config).await.unwrap();
-    /// });
-    /// ```
-    pub async fn new_with_config(config: UPClientZenohConfig) -> Result<UPClientZenoh, UStatus> {
-        let mut zenoh_config = Config::default();
-        // Set Zenoh mode
-        zenoh_config
-            .set_mode(Some(match config.mode {
-                ZenohMode::Peer => WhatAmI::Peer,
-                ZenohMode::Client => WhatAmI::Client,
-                ZenohMode::Router => WhatAmI::Router,
-            }))
-            .map_err(|_| UStatus::fail_with_code(UCode::INTERNAL, "Unable to set Zenoh mode"))?;
-        // Parse connect address
-        if let Some(connects) = config.connect {
-            zenoh_config.connect.endpoints = connects
-                .iter()
-                .map(|v| {
-                    v.parse().map_err(|_| {
-                        UStatus::fail_with_code(
-                            UCode::INVALID_ARGUMENT,
-                            "Connect address are wrong format",
-                        )
-                    })
-                })
-                .collect::<Result<_, _>>()?;
-        }
-        // Parse listen address
-        if let Some(listens) = config.listen {
-            zenoh_config.listen.endpoints = listens
-                .iter()
-                .map(|v| {
-                    v.parse().map_err(|_| {
-                        UStatus::fail_with_code(
-                            UCode::INVALID_ARGUMENT,
-                            "Listen address are wrong format",
-                        )
-                    })
-                })
-                .collect::<Result<_, _>>()?;
-        }
         UPClientZenoh::new_with_zenoh_config(Config::default()).await
     }
 
@@ -160,11 +78,11 @@ impl UPClientZenoh {
     /// # Examples
     ///
     /// ```
-    /// use up_client_zenoh::UPClientZenoh;
-    /// use zenoh::config::Config;
-    /// async_std::task::block_on(async {
+    /// # async_std::task::block_on(async {
+    ///     use up_client_zenoh::UPClientZenoh;
+    ///     use zenoh::config::Config;
     ///     let upclient = UPClientZenoh::new_with_zenoh_config(Config::default()).await.unwrap();
-    /// });
+    /// # });
     /// ```
     pub async fn new_with_zenoh_config(config: Config) -> Result<UPClientZenoh, UStatus> {
         let Ok(session) = zenoh::open(config).res().await else {
