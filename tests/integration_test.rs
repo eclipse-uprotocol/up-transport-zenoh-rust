@@ -14,7 +14,7 @@
 use async_std::task::{self, block_on};
 use std::{sync::Arc, time};
 use up_client_zenoh::UPClientZenoh;
-use up_rust::ulistener::UListener;
+use up_rust::UListener;
 use up_rust::{
     CallOptionsBuilder, Data, Number, RpcClient, UAuthority, UEntity, UMessage, UMessageBuilder,
     UMessageType, UPayload, UPayloadFormat, UResource, UResourceBuilder, UStatus, UTransport,
@@ -111,8 +111,12 @@ fn create_special_uuri() -> UUri {
 struct FooListener;
 
 impl UListener for FooListener {
-    fn on_receive(&self, received: Result<UMessage, UStatus>) {
-        println!("From within FooListener, received: {:?}", &received);
+    fn on_receive(&self, msg: UMessage) {
+        println!("From within FooListener, received msg: {:?}", &msg);
+    }
+
+    fn on_error(&self, err: UStatus) {
+        println!("From within FooListener, received err: {:?}", &err);
     }
 }
 
@@ -126,19 +130,19 @@ async fn test_utransport_register_and_unregister() {
     let foo_listener = Arc::new(FooListener);
     // Able to register
     let register_res = upclient
-        .register_listener(uuri.clone(), &foo_listener)
+        .register_listener(uuri.clone(), foo_listener.clone())
         .await;
     assert_eq!(register_res, Ok(()));
 
     // Able to unregister
     let unregister_res = upclient
-        .unregister_listener(uuri.clone(), &foo_listener)
+        .unregister_listener(uuri.clone(), foo_listener.clone())
         .await;
     assert_eq!(unregister_res, Ok(()));
 
     // Unable to unregister
     let result = upclient
-        .unregister_listener(uuri.clone(), &foo_listener)
+        .unregister_listener(uuri.clone(), foo_listener.clone())
         .await;
     assert!(result.is_err());
 }
@@ -152,19 +156,19 @@ async fn test_rpcserver_register_and_unregister() {
 
     let foo_listener = Arc::new(FooListener);
     let register_res = upclient
-        .register_listener(uuri.clone(), &foo_listener)
+        .register_listener(uuri.clone(), foo_listener.clone())
         .await;
     assert_eq!(register_res, Ok(()));
 
     // Able to unregister
     let unregister_res = upclient
-        .unregister_listener(uuri.clone(), &foo_listener)
+        .unregister_listener(uuri.clone(), foo_listener.clone())
         .await;
     assert_eq!(unregister_res, Ok(()));
 
     // Unable to unregister
     let unregister_res = upclient
-        .unregister_listener(uuri.clone(), &foo_listener)
+        .unregister_listener(uuri.clone(), foo_listener.clone())
         .await;
     assert!(unregister_res.is_err());
 }
@@ -178,19 +182,19 @@ async fn test_utransport_special_uuri_register_and_unregister() {
 
     let foo_listener = Arc::new(FooListener);
     let register_res = upclient
-        .register_listener(uuri.clone(), &foo_listener)
+        .register_listener(uuri.clone(), foo_listener.clone())
         .await;
     assert_eq!(register_res, Ok(()));
 
     // Able to unregister
     let unregister_res = upclient
-        .unregister_listener(uuri.clone(), &foo_listener)
+        .unregister_listener(uuri.clone(), foo_listener.clone())
         .await;
     assert_eq!(unregister_res, Ok(()));
 
     // Unable to unregister
     let result = upclient
-        .unregister_listener(uuri.clone(), &foo_listener)
+        .unregister_listener(uuri.clone(), foo_listener.clone())
         .await;
     assert!(result.is_err());
 }
@@ -211,19 +215,18 @@ impl PubSubTestListener {
 }
 
 impl UListener for PubSubTestListener {
-    fn on_receive(&self, received: Result<UMessage, UStatus>) {
-        match received {
-            Ok(msg) => {
-                if let Data::Value(v) = msg.payload.unwrap().data.unwrap() {
-                    let value = v.into_iter().map(|c| c as char).collect::<String>();
-                    assert_eq!(msg.attributes.unwrap().source.unwrap(), *self.expected_uuri);
-                    assert_eq!(value, *self.expected_data);
-                } else {
-                    panic!("The message should be Data::Value type.");
-                }
-            }
-            Err(ustatus) => panic!("Internal Error: {ustatus:?}"),
+    fn on_receive(&self, msg: UMessage) {
+        if let Data::Value(v) = msg.payload.unwrap().data.unwrap() {
+            let value = v.into_iter().map(|c| c as char).collect::<String>();
+            assert_eq!(msg.attributes.unwrap().source.unwrap(), *self.expected_uuri);
+            assert_eq!(value, *self.expected_data);
+        } else {
+            panic!("The message should be Data::Value type.");
         }
+    }
+
+    fn on_error(&self, err: UStatus) {
+        panic!("Internal Error: {err:?}")
     }
 }
 
@@ -239,7 +242,7 @@ async fn test_publish_and_subscribe() {
     let pub_sub_test_listener =
         Arc::new(PubSubTestListener::new(topic.clone(), target_data.clone()));
     let register_res = upclient
-        .register_listener(topic.clone(), &pub_sub_test_listener)
+        .register_listener(topic.clone(), pub_sub_test_listener.clone())
         .await;
     assert_eq!(register_res, Ok(()));
 
@@ -260,7 +263,7 @@ async fn test_publish_and_subscribe() {
 
     // Cleanup
     let unregister_res = upclient
-        .unregister_listener(topic.clone(), &pub_sub_test_listener)
+        .unregister_listener(topic.clone(), pub_sub_test_listener.clone())
         .await;
     assert_eq!(unregister_res, Ok(()));
 }
@@ -281,19 +284,18 @@ impl NotifTestListener {
 }
 
 impl UListener for NotifTestListener {
-    fn on_receive(&self, received: Result<UMessage, UStatus>) {
-        match received {
-            Ok(msg) => {
-                if let Data::Value(v) = msg.payload.unwrap().data.unwrap() {
-                    let value = v.into_iter().map(|c| c as char).collect::<String>();
-                    assert_eq!(msg.attributes.unwrap().sink.unwrap(), *self.expected_sink);
-                    assert_eq!(value, *self.expected_data);
-                } else {
-                    panic!("The message should be Data::Value type.");
-                }
-            }
-            Err(ustatus) => panic!("Internal Error: {ustatus:?}"),
+    fn on_receive(&self, msg: UMessage) {
+        if let Data::Value(v) = msg.payload.unwrap().data.unwrap() {
+            let value = v.into_iter().map(|c| c as char).collect::<String>();
+            assert_eq!(msg.attributes.unwrap().sink.unwrap(), *self.expected_sink);
+            assert_eq!(value, *self.expected_data);
+        } else {
+            panic!("The message should be Data::Value type.");
         }
+    }
+
+    fn on_error(&self, err: UStatus) {
+        panic!("Internal Error: {err:?}");
     }
 }
 
@@ -313,7 +315,10 @@ async fn test_notification_and_subscribe() {
     ));
 
     let register_res = upclient
-        .register_listener(destination_uuri.clone(), &test_correct_received_listener)
+        .register_listener(
+            destination_uuri.clone(),
+            test_correct_received_listener.clone(),
+        )
         .await;
     assert_eq!(register_res, Ok(()));
 
@@ -334,7 +339,10 @@ async fn test_notification_and_subscribe() {
 
     // Cleanup
     let unregister_res = upclient
-        .unregister_listener(destination_uuri.clone(), &test_correct_received_listener)
+        .unregister_listener(
+            destination_uuri.clone(),
+            test_correct_received_listener.clone(),
+        )
         .await;
     assert_eq!(unregister_res, Ok(()));
 }
@@ -364,52 +372,49 @@ impl RpcTestListener {
 }
 
 impl UListener for RpcTestListener {
-    fn on_receive(&self, received: Result<UMessage, UStatus>) {
-        match received {
-            Ok(msg) => {
-                let UMessage {
-                    attributes,
-                    payload,
-                    ..
-                } = msg;
-                // Get the UUri
-                let source = attributes.clone().unwrap().source.unwrap();
-                let sink = attributes.clone().unwrap().sink.unwrap();
-                // Build the payload to send back
-                if let Data::Value(v) = payload.unwrap().data.unwrap() {
-                    let value = v.into_iter().map(|c| c as char).collect::<String>();
-                    assert_eq!(*self.expected_request_data, value);
-                } else {
-                    panic!("The message should be Data::Value type.");
-                }
-                let upayload = UPayload {
-                    length: Some(0),
-                    format: UPayloadFormat::UPAYLOAD_FORMAT_TEXT.into(),
-                    data: Some(Data::Value(self.response_data.as_bytes().to_vec())),
-                    ..Default::default()
-                };
-                // Set the attributes type to Response
-                let mut uattributes = attributes.unwrap();
-                uattributes.type_ = UMessageType::UMESSAGE_TYPE_RESPONSE.into();
-                uattributes.sink = Some(source.clone()).into();
-                uattributes.source = Some(sink.clone()).into();
-                // move id to reqid and generate new id
-                let uuid_builder = UUIDBuilder::new();
-                let id = uuid_builder.build();
-                uattributes.reqid = uattributes.id;
-                uattributes.id = Some(id).into();
-                // Send back result
-                let send_res = block_on(self.upclient_server.send(UMessage {
-                    attributes: Some(uattributes).into(),
-                    payload: Some(upayload).into(),
-                    ..Default::default()
-                }));
-                assert_eq!(send_res, Ok(()));
-            }
-            Err(ustatus) => {
-                panic!("Internal Error: {ustatus:?}");
-            }
+    fn on_receive(&self, msg: UMessage) {
+        let UMessage {
+            attributes,
+            payload,
+            ..
+        } = msg;
+        // Get the UUri
+        let source = attributes.clone().unwrap().source.unwrap();
+        let sink = attributes.clone().unwrap().sink.unwrap();
+        // Build the payload to send back
+        if let Data::Value(v) = payload.unwrap().data.unwrap() {
+            let value = v.into_iter().map(|c| c as char).collect::<String>();
+            assert_eq!(*self.expected_request_data, value);
+        } else {
+            panic!("The message should be Data::Value type.");
         }
+        let upayload = UPayload {
+            length: Some(0),
+            format: UPayloadFormat::UPAYLOAD_FORMAT_TEXT.into(),
+            data: Some(Data::Value(self.response_data.as_bytes().to_vec())),
+            ..Default::default()
+        };
+        // Set the attributes type to Response
+        let mut uattributes = attributes.unwrap();
+        uattributes.type_ = UMessageType::UMESSAGE_TYPE_RESPONSE.into();
+        uattributes.sink = Some(source.clone()).into();
+        uattributes.source = Some(sink.clone()).into();
+        // move id to reqid and generate new id
+        let uuid_builder = UUIDBuilder::new();
+        let id = uuid_builder.build();
+        uattributes.reqid = uattributes.id;
+        uattributes.id = Some(id).into();
+        // Send back result
+        let send_res = block_on(self.upclient_server.send(UMessage {
+            attributes: Some(uattributes).into(),
+            payload: Some(upayload).into(),
+            ..Default::default()
+        }));
+        assert_eq!(send_res, Ok(()));
+    }
+
+    fn on_error(&self, err: UStatus) {
+        panic!("Internal Error: {err:?}");
     }
 }
 
@@ -439,7 +444,7 @@ async fn test_rpc_server_client() {
         &upclient_server,
     ));
     upclient_server
-        .register_listener(uuri.clone(), &rpc_test_listener)
+        .register_listener(uuri.clone(), rpc_test_listener.clone())
         .await
         .unwrap();
     // Need some time for queryable to run
@@ -489,54 +494,53 @@ impl TestAuthorityOnlyRegisterListener {
 }
 
 impl UListener for TestAuthorityOnlyRegisterListener {
-    fn on_receive(&self, received: Result<UMessage, UStatus>) {
-        match received {
-            Ok(msg) => {
-                let UMessage {
-                    attributes,
-                    payload,
-                    ..
-                } = msg;
-                let value = if let Data::Value(v) = payload.clone().unwrap().data.unwrap() {
-                    v.into_iter().map(|c| c as char).collect::<String>()
-                } else {
-                    panic!("The message should be Data::Value type.");
-                };
-                match attributes.type_.enum_value().unwrap() {
-                    UMessageType::UMESSAGE_TYPE_PUBLISH => {
-                        assert_eq!(*self.expected_publish_data, value);
-                    }
-                    UMessageType::UMESSAGE_TYPE_REQUEST => {
-                        assert_eq!(*self.expected_request_data, value);
-                        // Set the attributes type to Response
-                        let mut uattributes = attributes.unwrap();
-                        uattributes.type_ = UMessageType::UMESSAGE_TYPE_RESPONSE.into();
-                        // Swap source and sink
-                        (uattributes.sink, uattributes.source) =
-                            (uattributes.source.clone(), uattributes.sink.clone());
-                        // move id to reqid and generate new id
-                        let uuid_builder = UUIDBuilder::new();
-                        let id = uuid_builder.build();
-                        uattributes.reqid = uattributes.id;
-                        uattributes.id = Some(id).into();
-                        // Send back result
-                        let send_res = block_on(self.service_provider_up_client.send(UMessage {
-                            attributes: Some(uattributes).into(),
-                            payload,
-                            ..Default::default()
-                        }));
-                        assert_eq!(send_res, Ok(()));
-                    }
-                    UMessageType::UMESSAGE_TYPE_RESPONSE => {
-                        panic!("Response type");
-                    }
-                    UMessageType::UMESSAGE_TYPE_UNSPECIFIED => {
-                        panic!("Unknown type");
-                    }
-                }
+    fn on_receive(&self, msg: UMessage) {
+        let UMessage {
+            attributes,
+            payload,
+            ..
+        } = msg;
+        let value = if let Data::Value(v) = payload.clone().unwrap().data.unwrap() {
+            v.into_iter().map(|c| c as char).collect::<String>()
+        } else {
+            panic!("The message should be Data::Value type.");
+        };
+        match attributes.type_.enum_value().unwrap() {
+            UMessageType::UMESSAGE_TYPE_PUBLISH => {
+                assert_eq!(*self.expected_publish_data, value);
             }
-            Err(ustatus) => panic!("Internal Error: {ustatus:?}"),
+            UMessageType::UMESSAGE_TYPE_REQUEST => {
+                assert_eq!(*self.expected_request_data, value);
+                // Set the attributes type to Response
+                let mut uattributes = attributes.unwrap();
+                uattributes.type_ = UMessageType::UMESSAGE_TYPE_RESPONSE.into();
+                // Swap source and sink
+                (uattributes.sink, uattributes.source) =
+                    (uattributes.source.clone(), uattributes.sink.clone());
+                // move id to reqid and generate new id
+                let uuid_builder = UUIDBuilder::new();
+                let id = uuid_builder.build();
+                uattributes.reqid = uattributes.id;
+                uattributes.id = Some(id).into();
+                // Send back result
+                let send_res = block_on(self.service_provider_up_client.send(UMessage {
+                    attributes: Some(uattributes).into(),
+                    payload,
+                    ..Default::default()
+                }));
+                assert_eq!(send_res, Ok(()));
+            }
+            UMessageType::UMESSAGE_TYPE_RESPONSE => {
+                panic!("Response type");
+            }
+            UMessageType::UMESSAGE_TYPE_UNSPECIFIED => {
+                panic!("Unknown type");
+            }
         }
+    }
+
+    fn on_error(&self, err: UStatus) {
+        panic!("Internal Error: {err:?}");
     }
 }
 
@@ -562,7 +566,7 @@ async fn test_register_listener_with_special_uuri() {
         &upclient1,
     ));
     let register_res = upclient1
-        .register_listener(listener_uuri.clone(), &listener)
+        .register_listener(listener_uuri.clone(), listener.clone())
         .await;
     assert_eq!(register_res, Ok(()));
 
@@ -613,7 +617,7 @@ async fn test_register_listener_with_special_uuri() {
 
     // Cleanup
     let unregister_res = upclient1
-        .unregister_listener(listener_uuri.clone(), &listener)
+        .unregister_listener(listener_uuri.clone(), listener.clone())
         .await;
     assert_eq!(unregister_res, Ok(()));
 }

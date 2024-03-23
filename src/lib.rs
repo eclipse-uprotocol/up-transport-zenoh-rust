@@ -20,7 +20,7 @@ use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
 };
-use up_rust::listener_wrapper::ListenerWrapper;
+use up_rust::ComparableListener;
 use up_rust::{
     UAttributes, UAuthority, UCode, UEntity, UPayloadFormat, UPriority, UStatus, UUIDBuilder, UUri,
 };
@@ -35,9 +35,9 @@ use zenoh::{
 const UATTRIBUTE_VERSION: u8 = 1;
 
 pub struct ZenohListener {}
-type SubscriberMap = Arc<Mutex<HashMap<(UUri, ListenerWrapper), Subscriber<'static, ()>>>>;
-type QueryableMap = Arc<Mutex<HashMap<(UUri, ListenerWrapper), Queryable<'static, ()>>>>;
-type RpcCallbackMap = Arc<Mutex<HashMap<UUri, HashSet<Arc<ListenerWrapper>>>>>;
+type SubscriberMap = Arc<Mutex<HashMap<(UUri, ComparableListener), Subscriber<'static, ()>>>>;
+type QueryableMap = Arc<Mutex<HashMap<(UUri, ComparableListener), Queryable<'static, ()>>>>;
+type RpcCallbackMap = Arc<Mutex<HashMap<UUri, HashSet<Arc<ComparableListener>>>>>;
 pub struct UPClientZenoh {
     session: Arc<Session>,
     // Able to unregister Subscriber
