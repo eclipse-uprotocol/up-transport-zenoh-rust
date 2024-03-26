@@ -51,10 +51,9 @@ impl UPClientZenoh {
     /// Will return `Err` if unable to create Zenoh session
     pub async fn new(config: Config) -> Result<UPClientZenoh, UStatus> {
         let Ok(session) = zenoh::open(config).res().await else {
-            return Err(UStatus::fail_with_code(
-                UCode::INTERNAL,
-                "Unable to open Zenoh session",
-            ));
+            let msg = "Unable to open Zenoh session".to_string();
+            log::error!("{msg}");
+            return Err(UStatus::fail_with_code(UCode::INTERNAL, msg));
         };
         Ok(UPClientZenoh {
             session: Arc::new(session),
@@ -69,19 +68,17 @@ impl UPClientZenoh {
     fn get_uauth_from_uuri(uri: &UUri) -> Result<String, UStatus> {
         if let Some(authority) = uri.authority.as_ref() {
             let buf: Vec<u8> = authority.try_into().map_err(|_| {
-                UStatus::fail_with_code(
-                    UCode::INVALID_ARGUMENT,
-                    "Unable to transform UAuthority into micro form",
-                )
+                let msg = "Unable to transform UAuthority into micro form".to_string();
+                log::error!("{msg}");
+                UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
             })?;
             Ok(buf
                 .iter()
                 .fold(String::new(), |s, c| s + &format!("{c:02x}")))
         } else {
-            Err(UStatus::fail_with_code(
-                UCode::INVALID_ARGUMENT,
-                "Empty UAuthority",
-            ))
+            let msg = "UAuthority is empty".to_string();
+            log::error!("{msg}");
+            Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg))
         }
     }
 
@@ -91,10 +88,9 @@ impl UPClientZenoh {
             Ok(String::from("upr/") + &UPClientZenoh::get_uauth_from_uuri(uri)? + "/**")
         } else {
             let micro_uuri: Vec<u8> = uri.try_into().map_err(|_| {
-                UStatus::fail_with_code(
-                    UCode::INVALID_ARGUMENT,
-                    "Unable to serialize into micro format",
-                )
+                let msg = "Unable to serialize into micro format".to_string();
+                log::error!("{msg}");
+                UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
             })?;
             // If the UUri is larger than 8 bytes, then it should be remote UUri with UAuthority
             // We should prepend it to the Zenoh key.
@@ -148,30 +144,27 @@ impl UPClientZenoh {
     fn attachment_to_uattributes(attachment: &Attachment) -> anyhow::Result<UAttributes> {
         let mut attachment_iter = attachment.iter();
         if let Some((_, value)) = attachment_iter.next() {
-            let version = *value.as_slice().first().ok_or(UStatus::fail_with_code(
-                UCode::INTERNAL,
-                "uAttributes version is empty",
-            ))?;
+            let version = *value.as_slice().first().ok_or_else(|| {
+                let msg = "UAttributes version is empty".to_string();
+                log::error!("{msg}");
+                UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
+            })?;
             if version != 1 {
-                return Err(UStatus::fail_with_code(
-                    UCode::INTERNAL,
-                    "uAttributes version should be 1",
-                )
-                .into());
+                let msg = "UAttributes version should be 1".to_string();
+                log::error!("{msg}");
+                return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg).into());
             }
         } else {
-            return Err(UStatus::fail_with_code(
-                UCode::INTERNAL,
-                "Unable to get the uAttributes version",
-            )
-            .into());
+            let msg = "Unable to get the UAttributes version".to_string();
+            log::error!("{msg}");
+            return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg).into());
         }
         let uattributes = if let Some((_, value)) = attachment_iter.next() {
             UAttributes::parse_from_bytes(value.as_slice())?
         } else {
-            return Err(
-                UStatus::fail_with_code(UCode::INTERNAL, "Unable to get the uAttributes").into(),
-            );
+            let msg = "Unable to get the UAttributes".to_string();
+            log::error!("{msg}");
+            return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg).into());
         };
         Ok(uattributes)
     }

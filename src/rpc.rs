@@ -29,22 +29,25 @@ impl RpcClient for UPClientZenoh {
         options: CallOptions,
     ) -> RpcClientResult {
         // Validate UUri
-        UriValidator::validate(&topic)
-            .map_err(|_| RpcMapperError::UnexpectedError(String::from("Wrong UUri")))?;
+        UriValidator::validate(&topic).map_err(|_| {
+            let msg = "Invalid UUri for invoke_method".to_string();
+            log::error!("{msg}");
+            RpcMapperError::UnexpectedError(msg)
+        })?;
 
         // Get Zenoh key
         let Ok(zenoh_key) = UPClientZenoh::to_zenoh_key_string(&topic) else {
-            return Err(RpcMapperError::UnexpectedError(String::from(
-                "Unable to transform to Zenoh key",
-            )));
+            let msg = "Unable to transform to Zenoh key".to_string();
+            log::error!("{msg}");
+            return Err(RpcMapperError::UnexpectedError(msg));
         };
 
         // Get the data from UPayload
         let Some(Data::Value(buf)) = payload.data else {
             // Assume we only have Value here, no reference for shared memory
-            return Err(RpcMapperError::InvalidPayload(String::from(
-                "The data in UPayload should be Data::Value",
-            )));
+            let msg = "The data in UPayload should be Data::Value".to_string();
+            log::error!("{msg}");
+            return Err(RpcMapperError::InvalidPayload(msg));
         };
 
         // Generate UAttributes
@@ -57,9 +60,9 @@ impl RpcClient for UPClientZenoh {
             UAttributes::request(uuid_builder.build(), topic, source, options.clone());
         // Put into attachment
         let Ok(attachment) = UPClientZenoh::uattributes_to_attachment(&uattributes) else {
-            return Err(RpcMapperError::UnexpectedError(String::from(
-                "Invalid uAttributes",
-            )));
+            let msg = "Unable to transform UAttributes to user attachment in Zenoh".to_string();
+            log::error!("{msg}");
+            return Err(RpcMapperError::UnexpectedError(msg));
         };
 
         let value = Value::new(buf.into()).encoding(Encoding::WithSuffix(
@@ -77,22 +80,22 @@ impl RpcClient for UPClientZenoh {
 
         // Send the query
         let Ok(replies) = getbuilder.res().await else {
-            return Err(RpcMapperError::UnexpectedError(String::from(
-                "Error while sending Zenoh query",
-            )));
+            let msg = "Error while sending Zenoh query".to_string();
+            log::error!("{msg}");
+            return Err(RpcMapperError::UnexpectedError(msg));
         };
 
         let Ok(reply) = replies.recv_async().await else {
-            return Err(RpcMapperError::UnexpectedError(String::from(
-                "Error while receiving Zenoh reply",
-            )));
+            let msg = "Error while receiving Zenoh reply".to_string();
+            log::error!("{msg}");
+            return Err(RpcMapperError::UnexpectedError(msg));
         };
         match reply.sample {
             Ok(sample) => {
                 let Some(encoding) = UPClientZenoh::to_upayload_format(&sample.encoding) else {
-                    return Err(RpcMapperError::UnexpectedError(String::from(
-                        "Error while parsing Zenoh encoding",
-                    )));
+                    let msg = "Error while parsing Zenoh encoding".to_string();
+                    log::error!("{msg}");
+                    return Err(RpcMapperError::UnexpectedError(msg));
                 };
                 // TODO: Need to check attributes is correct or not
                 Ok(UMessage {
@@ -107,9 +110,11 @@ impl RpcClient for UPClientZenoh {
                     ..Default::default()
                 })
             }
-            Err(e) => Err(RpcMapperError::UnexpectedError(format!(
-                "Error while parsing Zenoh reply: {e:?}"
-            ))),
+            Err(e) => {
+                let msg = format!("Error while parsing Zenoh reply: {e:?}");
+                log::error!("{msg}");
+                Err(RpcMapperError::UnexpectedError(msg))
+            }
         }
     }
 }

@@ -12,7 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use async_std::task::{self, block_on};
-use std::{sync::Arc, time};
+use std::{
+    sync::{Arc, Once},
+    time,
+};
 use up_client_zenoh::UPClientZenoh;
 use up_rust::{
     CallOptions, Data, Number, RpcClient, UAuthority, UCode, UEntity, UMessage, UMessageBuilder,
@@ -20,6 +23,12 @@ use up_rust::{
     UUIDBuilder, UUri,
 };
 use zenoh::config::Config;
+
+static INIT: Once = Once::new();
+
+fn before_test() {
+    INIT.call_once(env_logger::init);
+}
 
 fn create_utransport_uuri(index: u8) -> UUri {
     if index == 1 {
@@ -98,6 +107,8 @@ fn create_special_uuri() -> UUri {
 
 #[async_std::test]
 async fn test_utransport_register_and_unregister() {
+    before_test();
+
     let upclient = UPClientZenoh::new(Config::default()).await.unwrap();
     let uuri = create_utransport_uuri(0);
 
@@ -129,6 +140,8 @@ async fn test_utransport_register_and_unregister() {
 
 #[async_std::test]
 async fn test_rpcserver_register_and_unregister() {
+    before_test();
+
     let upclient = UPClientZenoh::new(Config::default()).await.unwrap();
     let uuri = create_rpcserver_uuri();
 
@@ -160,6 +173,8 @@ async fn test_rpcserver_register_and_unregister() {
 
 #[async_std::test]
 async fn test_utransport_special_uuri_register_and_unregister() {
+    before_test();
+
     let upclient = UPClientZenoh::new(Config::default()).await.unwrap();
     let uuri = create_special_uuri();
 
@@ -194,6 +209,8 @@ async fn test_utransport_special_uuri_register_and_unregister() {
 
 #[async_std::test]
 async fn test_publish_and_subscribe() {
+    before_test();
+
     let target_data = String::from("Hello World!");
     let upclient = UPClientZenoh::new(Config::default()).await.unwrap();
     let uuri = create_utransport_uuri(0);
@@ -239,6 +256,8 @@ async fn test_publish_and_subscribe() {
 
 #[async_std::test]
 async fn test_notification_and_subscribe() {
+    before_test();
+
     let target_data = String::from("Hello World!");
     let upclient = UPClientZenoh::new(Config::default()).await.unwrap();
     let uuri = create_utransport_uuri(1);
@@ -284,6 +303,8 @@ async fn test_notification_and_subscribe() {
 
 #[async_std::test]
 async fn test_rpc_server_client() {
+    before_test();
+
     let upclient_client = UPClientZenoh::new(Config::default()).await.unwrap();
     let upclient_server = Arc::new(UPClientZenoh::new(Config::default()).await.unwrap());
     let request_data = String::from("This is the request data");
@@ -372,6 +393,8 @@ async fn test_rpc_server_client() {
 
 #[async_std::test]
 async fn test_register_listener_with_special_uuri() {
+    before_test();
+
     let upclient1 = Arc::new(UPClientZenoh::new(Config::default()).await.unwrap());
     let upclient1_clone = upclient1.clone();
     let upclient2 = UPClientZenoh::new(Config::default()).await.unwrap();

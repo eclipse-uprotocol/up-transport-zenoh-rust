@@ -37,23 +37,24 @@ impl UPClientZenoh {
         // Get the data from UPayload
         let Some(Data::Value(buf)) = payload.data else {
             // Assume we only have Value here, no reference for shared memory
-            return Err(UStatus::fail_with_code(
-                UCode::INVALID_ARGUMENT,
-                "The data in UPayload should be Data::Value",
-            ));
+            let msg = "The data in UPayload should be Data::Value".to_string();
+            log::error!("{msg}");
+            return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg));
         };
 
-        // Serialized UAttributes into protobuf
+        // Transform UAttributes to user attachment in Zenoh
         let Ok(attachment) = UPClientZenoh::uattributes_to_attachment(&attributes) else {
-            return Err(UStatus::fail_with_code(
-                UCode::INVALID_ARGUMENT,
-                "Invalid uAttributes",
-            ));
+            let msg = "Unable to transform UAttributes to attachment".to_string();
+            log::error!("{msg}");
+            return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg));
         };
 
+        // Map the priority to Zenoh
         let priority =
             UPClientZenoh::map_zenoh_priority(attributes.priority.enum_value().map_err(|_| {
-                UStatus::fail_with_code(UCode::INVALID_ARGUMENT, "Invalid priority")
+                let msg = "Unable to map to Zenoh priority".to_string();
+                log::error!("{msg}");
+                UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
             })?);
 
         let putbuilder = self
@@ -84,18 +85,16 @@ impl UPClientZenoh {
         // Get the data from UPayload
         let Some(Data::Value(buf)) = payload.data else {
             // Assume we only have Value here, no reference for shared memory
-            return Err(UStatus::fail_with_code(
-                UCode::INVALID_ARGUMENT,
-                "The data in UPayload should be Data::Value",
-            ));
+            let msg = "The data in UPayload should be Data::Value".to_string();
+            log::error!("{msg}");
+            return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg));
         };
 
-        // Serialized UAttributes into protobuf
+        // Transform UAttributes to user attachment in Zenoh
         let Ok(attachment) = UPClientZenoh::uattributes_to_attachment(&attributes) else {
-            return Err(UStatus::fail_with_code(
-                UCode::INVALID_ARGUMENT,
-                "Invalid uAttributes",
-            ));
+            let msg = "Unable to transform UAttributes to attachment".to_string();
+            log::error!("{msg}");
+            return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg));
         };
 
         let value = Value::new(buf.into()).encoding(Encoding::WithSuffix(
@@ -107,47 +106,46 @@ impl UPClientZenoh {
         let resp_listener_str = attributes
             .source
             .0
-            .ok_or(UStatus::fail_with_code(
-                UCode::INVALID_ARGUMENT,
-                "Lack of source address",
-            ))?
+            .ok_or_else(|| {
+                let msg = "Lack of source address".to_string();
+                log::error!("{msg}");
+                UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
+            })?
             .to_string();
         let resp_callback = self
             .rpc_callback_map
             .lock()
             .unwrap()
             .get(&resp_listener_str)
-            .ok_or(UStatus::fail_with_code(
-                UCode::INTERNAL,
-                "Unable to get callback",
-            ))?
+            .ok_or_else(|| {
+                let msg = "Unable to get callback".to_string();
+                log::error!("{msg}");
+                UStatus::fail_with_code(UCode::INTERNAL, msg)
+            })?
             .clone();
         let zenoh_callback = move |reply: Reply| {
             let msg = match reply.sample {
                 Ok(sample) => {
                     let Some(encoding) = UPClientZenoh::to_upayload_format(&sample.encoding) else {
-                        resp_callback(Err(UStatus::fail_with_code(
-                            UCode::INTERNAL,
-                            "Unable to get the encoding",
-                        )));
+                        let msg = "Unable to get the encoding".to_string();
+                        log::error!("{msg}");
+                        resp_callback(Err(UStatus::fail_with_code(UCode::INTERNAL, msg)));
                         return;
                     };
                     // Get UAttribute from the attachment
                     let Some(attachment) = sample.attachment() else {
-                        resp_callback(Err(UStatus::fail_with_code(
-                            UCode::INTERNAL,
-                            "Unable to get attachment",
-                        )));
+                        let msg = "Unable to get the attachment".to_string();
+                        log::error!("{msg}");
+                        resp_callback(Err(UStatus::fail_with_code(UCode::INTERNAL, msg)));
                         return;
                     };
                     let u_attribute = match UPClientZenoh::attachment_to_uattributes(attachment) {
                         Ok(uattr) => uattr,
                         Err(e) => {
-                            log::error!("attachment_to_uattributes error: {:?}", e);
-                            resp_callback(Err(UStatus::fail_with_code(
-                                UCode::INTERNAL,
-                                "Unable to decode attribute",
-                            )));
+                            let msg =
+                                format!("Unable to transform attachment to UAttributes: {e:?}");
+                            log::error!("{msg}");
+                            resp_callback(Err(UStatus::fail_with_code(UCode::INTERNAL, msg)));
                             return;
                         }
                     };
@@ -163,10 +161,11 @@ impl UPClientZenoh {
                         ..Default::default()
                     })
                 }
-                Err(e) => Err(UStatus::fail_with_code(
-                    UCode::INTERNAL,
-                    format!("Error while parsing Zenoh reply: {e:?}"),
-                )),
+                Err(e) => {
+                    let msg = format!("Error while parsing Zenoh reply: {e:?}");
+                    log::error!("{msg}");
+                    Err(UStatus::fail_with_code(UCode::INTERNAL, msg))
+                }
             };
             resp_callback(msg);
         };
@@ -182,8 +181,9 @@ impl UPClientZenoh {
             )))
             .callback(zenoh_callback);
         getbuilder.res().await.map_err(|e| {
-            log::error!("Zenoh error: {e:?}");
-            UStatus::fail_with_code(UCode::INTERNAL, "Unable to send get with Zenoh")
+            let msg = format!("Unable to send get with Zenoh: {e:?}");
+            log::error!("{msg}");
+            UStatus::fail_with_code(UCode::INTERNAL, msg)
         })?;
 
         Ok(())
@@ -198,20 +198,18 @@ impl UPClientZenoh {
         // Get the data from UPayload
         let Some(Data::Value(buf)) = payload.data else {
             // Assume we only have Value here, no reference for shared memory
-            return Err(UStatus::fail_with_code(
-                UCode::INVALID_ARGUMENT,
-                "The data in UPayload should be Data::Value",
-            ));
+            let msg = "The data in UPayload should be Data::Value".to_string();
+            log::error!("{msg}");
+            return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg));
         };
 
-        // Serialized UAttributes into protobuf
+        // Transform UAttributes to user attachment in Zenoh
         let Ok(attachment) = UPClientZenoh::uattributes_to_attachment(&attributes) else {
-            log::error!("send_response: Invalide uAttributes");
-            return Err(UStatus::fail_with_code(
-                UCode::INVALID_ARGUMENT,
-                "Invalid uAttributes",
-            ));
+            let msg = "Unable to transform UAttributes to attachment".to_string();
+            log::error!("{msg}");
+            return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg));
         };
+
         // Get reqid
         let reqid = attributes.reqid.to_string();
 
@@ -222,8 +220,9 @@ impl UPClientZenoh {
         ));
         let reply = Ok(Sample::new(
             KeyExpr::new(zenoh_key.to_string()).map_err(|e| {
-                log::error!("Unable to create Zenoh key: {e:?}");
-                UStatus::fail_with_code(UCode::INTERNAL, "Unable to create Zenoh key")
+                let msg = format!("Unable to create Zenoh key: {e:?}");
+                log::error!("{msg}");
+                UStatus::fail_with_code(UCode::INTERNAL, msg)
             })?,
             value,
         ));
@@ -232,10 +231,11 @@ impl UPClientZenoh {
             .lock()
             .unwrap()
             .get(&reqid)
-            .ok_or(UStatus::fail_with_code(
-                UCode::INTERNAL,
-                "query doesn't exist",
-            ))?
+            .ok_or_else(|| {
+                let msg = "query doesn't exist".to_string();
+                log::error!("{msg}");
+                UStatus::fail_with_code(UCode::INTERNAL, msg)
+            })?
             .clone();
 
         // Send data
@@ -244,21 +244,21 @@ impl UPClientZenoh {
             .with_attachment(attachment.build())
             .map_err(|_| {
                 // TODO: The latest Zenoh version can print error.
-                log::error!("Unable to add attachment");
-                UStatus::fail_with_code(UCode::INTERNAL, "Unable to add attachment")
+                let msg = "Unable to add attachment";
+                log::error!("{msg}");
+                UStatus::fail_with_code(UCode::INTERNAL, msg)
             })?
             .res()
             .await
             .map_err(|e| {
-                log::error!("Unable to reply with Zenoh: {e:?}");
-                UStatus::fail_with_code(
-                    UCode::INTERNAL,
-                    format!("Unable to reply with Zenoh: {e:?}"),
-                )
+                let msg = format!("Unable to reply with Zenoh: {e:?}");
+                log::error!("{msg}");
+                UStatus::fail_with_code(UCode::INTERNAL, msg)
             })?;
 
         Ok(())
     }
+
     async fn register_publish_listener(
         &self,
         topic: &UUri,
@@ -277,29 +277,25 @@ impl UPClientZenoh {
         let callback = move |sample: Sample| {
             // Create UAttribute
             let Some(attachment) = sample.attachment() else {
-                listener(Err(UStatus::fail_with_code(
-                    UCode::INTERNAL,
-                    "Unable to get attachment",
-                )));
+                let msg = "Unable to get attachment";
+                log::error!("{msg}");
+                listener(Err(UStatus::fail_with_code(UCode::INTERNAL, msg)));
                 return;
             };
             let u_attribute = match UPClientZenoh::attachment_to_uattributes(attachment) {
                 Ok(uattributes) => uattributes,
                 Err(e) => {
-                    log::error!("attachment_to_uattributes error: {:?}", e);
-                    listener(Err(UStatus::fail_with_code(
-                        UCode::INTERNAL,
-                        "Unable to decode attribute",
-                    )));
+                    let msg = format!("Unable to transform attachment to UAttributes: {e:?}");
+                    log::error!("{msg}");
+                    listener(Err(UStatus::fail_with_code(UCode::INTERNAL, msg)));
                     return;
                 }
             };
             // Create UPayload
             let Some(encoding) = UPClientZenoh::to_upayload_format(&sample.encoding) else {
-                listener(Err(UStatus::fail_with_code(
-                    UCode::INTERNAL,
-                    "Unable to get payload encoding",
-                )));
+                let msg = "Unable to get payload encoding";
+                log::error!("{msg}");
+                listener(Err(UStatus::fail_with_code(UCode::INTERNAL, msg)));
                 return;
             };
             let u_payload = UPayload {
@@ -328,10 +324,9 @@ impl UPClientZenoh {
                 .unwrap()
                 .insert(hashmap_key.clone(), subscriber);
         } else {
-            return Err(UStatus::fail_with_code(
-                UCode::INTERNAL,
-                "Unable to register callback with Zenoh",
-            ));
+            let msg = "Unable to register callback with Zenoh";
+            log::error!("{msg}");
+            return Err(UStatus::fail_with_code(UCode::INTERNAL, msg));
         }
 
         Ok(hashmap_key)
@@ -356,20 +351,17 @@ impl UPClientZenoh {
         let callback = move |query: Query| {
             // Create UAttribute
             let Some(attachment) = query.attachment() else {
-                listener(Err(UStatus::fail_with_code(
-                    UCode::INTERNAL,
-                    "Unable to get attachment",
-                )));
+                let msg = "Unable to get attachment".to_string();
+                log::error!("{msg}");
+                listener(Err(UStatus::fail_with_code(UCode::INTERNAL, msg)));
                 return;
             };
             let u_attribute = match UPClientZenoh::attachment_to_uattributes(attachment) {
                 Ok(uattributes) => uattributes,
                 Err(e) => {
-                    log::error!("attachment_to_uattributes error: {:?}", e);
-                    listener(Err(UStatus::fail_with_code(
-                        UCode::INTERNAL,
-                        "Unable to decode attribute",
-                    )));
+                    let msg = format!("Unable to transform user attachment to UAttributes: {e:?}");
+                    log::error!("{msg}");
+                    listener(Err(UStatus::fail_with_code(UCode::INTERNAL, msg)));
                     return;
                 }
             };
@@ -377,10 +369,9 @@ impl UPClientZenoh {
             let u_payload = match query.value() {
                 Some(value) => {
                     let Some(encoding) = UPClientZenoh::to_upayload_format(&value.encoding) else {
-                        listener(Err(UStatus::fail_with_code(
-                            UCode::INTERNAL,
-                            "Unable to get payload encoding",
-                        )));
+                        let msg = "Unable to get payload encoding".to_string();
+                        log::error!("{msg}");
+                        listener(Err(UStatus::fail_with_code(UCode::INTERNAL, msg)));
                         return;
                     };
                     UPayload {
@@ -421,10 +412,9 @@ impl UPClientZenoh {
                 .unwrap()
                 .insert(hashmap_key.clone(), queryable);
         } else {
-            return Err(UStatus::fail_with_code(
-                UCode::INTERNAL,
-                "Unable to register callback with Zenoh",
-            ));
+            let msg = "Unable to register callback with Zenoh".to_string();
+            log::error!("{msg}");
+            return Err(UStatus::fail_with_code(UCode::INTERNAL, msg));
         }
 
         Ok(hashmap_key)
@@ -456,14 +446,16 @@ impl UPClientZenoh {
 #[async_trait]
 impl UTransport for UPClientZenoh {
     async fn send(&self, message: UMessage) -> Result<(), UStatus> {
-        let payload = *message.payload.0.ok_or(UStatus::fail_with_code(
-            UCode::INVALID_ARGUMENT,
-            "Invalid uPayload",
-        ))?;
-        let attributes = *message.attributes.0.ok_or(UStatus::fail_with_code(
-            UCode::INVALID_ARGUMENT,
-            "Invalid uAttributes",
-        ))?;
+        let payload = *message.payload.0.ok_or_else(|| {
+            let msg = "Invalid UPayload".to_string();
+            log::error!("{msg}");
+            UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
+        })?;
+        let attributes = *message.attributes.0.ok_or_else(|| {
+            let msg = "Invalid UAttributes".to_string();
+            log::error!("{msg}");
+            UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
+        })?;
 
         // Check the type of UAttributes (Publish / Request / Response)
         match attributes
@@ -476,10 +468,9 @@ impl UTransport for UPClientZenoh {
                     .validator()
                     .validate(&attributes)
                     .map_err(|e| {
-                        UStatus::fail_with_code(
-                            UCode::INVALID_ARGUMENT,
-                            format!("Wrong Publish UAttributes {e:?}"),
-                        )
+                        let msg = format!("Wrong Publish UAttributes: {e:?}");
+                        log::error!("{msg}");
+                        UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
                     })?;
                 // Get Zenoh key
                 let topic = if attributes.sink.is_some() {
@@ -498,10 +489,9 @@ impl UTransport for UPClientZenoh {
                     .validator()
                     .validate(&attributes)
                     .map_err(|e| {
-                        UStatus::fail_with_code(
-                            UCode::INVALID_ARGUMENT,
-                            format!("Wrong Request UAttributes {e:?}"),
-                        )
+                        let msg = format!("Wrong Message type in UAttributes: {e:?}");
+                        log::error!("{msg}");
+                        UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
                     })?;
                 // Get Zenoh key
                 let topic = attributes.clone().sink;
@@ -514,10 +504,9 @@ impl UTransport for UPClientZenoh {
                     .validator()
                     .validate(&attributes)
                     .map_err(|e| {
-                        UStatus::fail_with_code(
-                            UCode::INVALID_ARGUMENT,
-                            format!("Wrong Response UAttributes {e:?}"),
-                        )
+                        let msg = format!("Wrong Message type in UAttributes: {e:?}");
+                        log::error!("{msg}");
+                        UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
                     })?;
                 // Get Zenoh key
                 let topic = attributes.clone().source;
@@ -525,18 +514,18 @@ impl UTransport for UPClientZenoh {
                 // Send Response
                 self.send_response(&zenoh_key, payload, attributes).await
             }
-            UMessageType::UMESSAGE_TYPE_UNSPECIFIED => Err(UStatus::fail_with_code(
-                UCode::INVALID_ARGUMENT,
-                "Wrong Message type in UAttributes",
-            )),
+            UMessageType::UMESSAGE_TYPE_UNSPECIFIED => {
+                let msg = "Wrong Message type in UAttributes".to_string();
+                log::error!("{msg}");
+                Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg))
+            }
         }
     }
 
     async fn receive(&self, _topic: UUri) -> Result<UMessage, UStatus> {
-        Err(UStatus::fail_with_code(
-            UCode::UNIMPLEMENTED,
-            "Not implemented",
-        ))
+        let msg = "Not implemented".to_string();
+        log::error!("{msg}");
+        Err(UStatus::fail_with_code(UCode::UNIMPLEMENTED, msg))
     }
 
     async fn register_listener(
@@ -589,18 +578,20 @@ impl UTransport for UPClientZenoh {
             // This is special UUri which means we need to unregister both listeners
             let listener_vec = listener.split('&').collect::<Vec<_>>();
             if listener_vec.len() != 3 {
-                return Err(UStatus::fail_with_code(
-                    UCode::INVALID_ARGUMENT,
-                    "Invalid listener string",
-                ));
+                let msg = "Invalid listener string".to_string();
+                log::error!("{msg}");
+                return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg));
             }
             resp_listener_str = Some(listener_vec[0]);
             req_listener_str = Some(listener_vec[1]);
             pub_listener_str = Some(listener_vec[2]);
         } else {
             // Do the validation
-            UriValidator::validate(&topic)
-                .map_err(|_| UStatus::fail_with_code(UCode::INVALID_ARGUMENT, "Invalid topic"))?;
+            UriValidator::validate(&topic).map_err(|_| {
+                let msg = "Invalid topic".to_string();
+                log::error!("{msg}");
+                UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
+            })?;
 
             if UriValidator::is_rpc_response(&topic) {
                 resp_listener_str = Some(listener);
@@ -619,10 +610,9 @@ impl UTransport for UPClientZenoh {
                 .remove(listener)
                 .is_none()
             {
-                return Err(UStatus::fail_with_code(
-                    UCode::INVALID_ARGUMENT,
-                    "RPC response callback doesn't exist",
-                ));
+                let msg = "RPC response callback doesn't exist".to_string();
+                log::warn!("{msg}");
+                return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg));
             }
         }
         if let Some(listener) = req_listener_str {
@@ -634,10 +624,9 @@ impl UTransport for UPClientZenoh {
                 .remove(listener)
                 .is_none()
             {
-                return Err(UStatus::fail_with_code(
-                    UCode::INVALID_ARGUMENT,
-                    "RPC request listener doesn't exist",
-                ));
+                let msg = "RPC request listener doesn't exist".to_string();
+                log::warn!("{msg}");
+                return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg));
             }
         }
         if let Some(listener) = pub_listener_str {
@@ -649,10 +638,9 @@ impl UTransport for UPClientZenoh {
                 .remove(listener)
                 .is_none()
             {
-                return Err(UStatus::fail_with_code(
-                    UCode::INVALID_ARGUMENT,
-                    "Publish listener doesn't exist",
-                ));
+                let msg = "Publish listener doesn't exist".to_string();
+                log::warn!("{msg}");
+                return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg));
             }
         }
         Ok(())
