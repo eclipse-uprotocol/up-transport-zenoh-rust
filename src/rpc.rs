@@ -15,8 +15,8 @@ use crate::UPClientZenoh;
 use async_trait::async_trait;
 use std::{string::ToString, time::Duration};
 use up_rust::{
-    CallOptions, Data, RpcClient, RpcClientResult, RpcMapperError, UMessage, UMessageBuilder,
-    UPayload, UResourceBuilder, UUIDBuilder, UUri, UriValidator,
+    CallOptions, Data, RpcClient, RpcClientResult, RpcMapperError, UAttributes, UMessage, UPayload,
+    UResourceBuilder, UUIDBuilder, UUri, UriValidator,
 };
 use zenoh::prelude::r#async::*;
 
@@ -52,27 +52,9 @@ impl RpcClient for UPClientZenoh {
         // Create response address
         let mut source = topic.clone();
         source.resource = Some(UResourceBuilder::for_rpc_response()).into();
-        // Create UMessage
-        let umessage = if let Some(token) = options.token {
-            UMessageBuilder::request(topic, source, options.ttl)
-                .with_message_id(uuid_builder.build())
-                .with_token(token)
-                .build()
-        } else {
-            UMessageBuilder::request(topic, source, options.ttl)
-                .with_message_id(uuid_builder.build())
-                .build()
-        };
-        // Extract uAttributes
-        let Ok(UMessage {
-            attributes: uattributes,
-            ..
-        }) = umessage
-        else {
-            return Err(RpcMapperError::UnexpectedError(String::from(
-                "Unable to create uAttributes",
-            )));
-        };
+        // Create UAttributes
+        let uattributes =
+            UAttributes::request(uuid_builder.build(), topic, source, options.clone());
         // Put into attachment
         let Ok(attachment) = UPClientZenoh::uattributes_to_attachment(&uattributes) else {
             return Err(RpcMapperError::UnexpectedError(String::from(
@@ -114,7 +96,7 @@ impl RpcClient for UPClientZenoh {
                 };
                 // TODO: Need to check attributes is correct or not
                 Ok(UMessage {
-                    attributes: uattributes,
+                    attributes: Some(uattributes).into(),
                     payload: Some(UPayload {
                         length: Some(0),
                         format: encoding.into(),
