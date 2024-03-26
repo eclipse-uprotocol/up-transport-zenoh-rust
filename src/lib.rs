@@ -19,7 +19,7 @@ use std::{
     collections::HashMap,
     sync::{atomic::AtomicU64, Arc, Mutex},
 };
-use up_rust::uprotocol::{UAttributes, UCode, UMessage, UPayloadFormat, UPriority, UStatus, UUri};
+use up_rust::{UAttributes, UCode, UMessage, UPayloadFormat, UPriority, UStatus, UUri};
 use zenoh::{
     config::Config,
     prelude::r#async::*,
@@ -180,7 +180,7 @@ impl UPClientZenoh {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use up_rust::uprotocol::{uri::uauthority::Number, UAuthority, UEntity, UResource, UUri};
+    use up_rust::{Number, UAuthority, UEntity, UResource, UUri};
 
     #[test]
     fn test_to_zenoh_key_string() {

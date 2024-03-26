@@ -18,11 +18,8 @@ use std::{
     time::Duration,
 };
 use up_rust::{
-    transport::{datamodel::UTransport, validator::Validators},
-    uprotocol::{
-        Data, UAttributes, UCode, UMessage, UMessageType, UPayload, UPayloadFormat, UStatus, UUri,
-    },
-    uri::validator::UriValidator,
+    Data, UAttributes, UAttributesValidators, UCode, UMessage, UMessageType, UPayload,
+    UPayloadFormat, UStatus, UTransport, UUri, UriValidator,
 };
 use zenoh::{
     prelude::{r#async::*, Sample},
@@ -181,8 +178,7 @@ impl UPClientZenoh {
             .with_attachment(attachment.build())
             .target(QueryTarget::BestMatching)
             .timeout(Duration::from_millis(u64::from(
-                // TODO: Workaround since TTL will be u32 in the future.
-                attributes.ttl.unwrap_or(1000).unsigned_abs(),
+                attributes.ttl.unwrap_or(1000),
             )))
             .callback(zenoh_callback);
         getbuilder.res().await.map_err(|e| {
@@ -475,8 +471,8 @@ impl UTransport for UPClientZenoh {
             .enum_value()
             .map_err(|_| UStatus::fail_with_code(UCode::INTERNAL, "Unable to parse type"))?
         {
-            UMessageType::UMESSAGE_TYPE_PUBLISH => {
-                Validators::Publish
+            UMessageType::UMESSAGE_TYPE_PUBLISH | UMessageType::UMESSAGE_TYPE_NOTIFICATION => {
+                UAttributesValidators::Publish
                     .validator()
                     .validate(&attributes)
                     .map_err(|e| {
@@ -498,7 +494,7 @@ impl UTransport for UPClientZenoh {
                 self.send_publish(&zenoh_key, payload, attributes).await
             }
             UMessageType::UMESSAGE_TYPE_REQUEST => {
-                Validators::Request
+                UAttributesValidators::Request
                     .validator()
                     .validate(&attributes)
                     .map_err(|e| {
@@ -514,7 +510,7 @@ impl UTransport for UPClientZenoh {
                 self.send_request(&zenoh_key, payload, attributes).await
             }
             UMessageType::UMESSAGE_TYPE_RESPONSE => {
-                Validators::Response
+                UAttributesValidators::Response
                     .validator()
                     .validate(&attributes)
                     .map_err(|e| {

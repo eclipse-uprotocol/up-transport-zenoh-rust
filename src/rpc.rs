@@ -15,11 +15,8 @@ use crate::UPClientZenoh;
 use async_trait::async_trait;
 use std::{string::ToString, time::Duration};
 use up_rust::{
-    rpc::{CallOptions, RpcClient, RpcClientResult, RpcMapperError, RpcServer},
-    transport::{builder::UMessageBuilder, datamodel::UTransport},
-    uprotocol::{Data, UMessage, UPayload, UStatus, UUri},
-    uri::{builder::resourcebuilder::UResourceBuilder, validator::UriValidator},
-    uuid::builder::UUIDBuilder,
+    CallOptions, Data, RpcClient, RpcClientResult, RpcMapperError, UMessage, UMessageBuilder,
+    UPayload, UResourceBuilder, UUIDBuilder, UUri, UriValidator,
 };
 use zenoh::prelude::r#async::*;
 
@@ -52,18 +49,19 @@ impl RpcClient for UPClientZenoh {
 
         // Generate UAttributes
         let uuid_builder = UUIDBuilder::new();
-        let reqid = UUIDBuilder::new().build();
         // Create response address
         let mut source = topic.clone();
         source.resource = Some(UResourceBuilder::for_rpc_response()).into();
         // Create UMessage
-        let umessage = if let Some(token) = options.token() {
-            UMessageBuilder::request(&topic, &source, &reqid, options.timeout())
-                .with_token(&token.to_string())
-                .build(&uuid_builder)
+        let umessage = if let Some(token) = options.token {
+            UMessageBuilder::request(topic, source, options.ttl)
+                .with_message_id(uuid_builder.build())
+                .with_token(token)
+                .build()
         } else {
-            UMessageBuilder::request(&topic, &source, &reqid, options.timeout())
-                .build(&uuid_builder)
+            UMessageBuilder::request(topic, source, options.ttl)
+                .with_message_id(uuid_builder.build())
+                .build()
         };
         // Extract uAttributes
         let Ok(UMessage {
@@ -93,7 +91,7 @@ impl RpcClient for UPClientZenoh {
             .with_value(value)
             .with_attachment(attachment.build())
             .target(QueryTarget::BestMatching)
-            .timeout(Duration::from_millis(u64::from(options.timeout())));
+            .timeout(Duration::from_millis(u64::from(options.ttl)));
 
         // Send the query
         let Ok(replies) = getbuilder.res().await else {
@@ -131,20 +129,5 @@ impl RpcClient for UPClientZenoh {
                 "Error while parsing Zenoh reply: {e:?}"
             ))),
         }
-    }
-}
-
-#[async_trait]
-impl RpcServer for UPClientZenoh {
-    async fn register_rpc_listener(
-        &self,
-        method: UUri,
-        listener: Box<dyn Fn(Result<UMessage, UStatus>) + Send + Sync + 'static>,
-    ) -> Result<String, UStatus> {
-        self.register_listener(method, listener).await
-    }
-
-    async fn unregister_rpc_listener(&self, method: UUri, listener: &str) -> Result<(), UStatus> {
-        self.unregister_listener(method, listener).await
     }
 }

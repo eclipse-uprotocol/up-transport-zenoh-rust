@@ -15,14 +15,9 @@ use async_std::task::{self, block_on};
 use std::{sync::Arc, time};
 use up_client_zenoh::UPClientZenoh;
 use up_rust::{
-    rpc::{CallOptionsBuilder, RpcClient, RpcServer},
-    transport::{builder::UMessageBuilder, datamodel::UTransport},
-    uprotocol::{
-        uri::uauthority::Number, Data, UAuthority, UCode, UEntity, UMessage, UMessageType,
-        UPayload, UPayloadFormat, UResource, UStatus, UUri,
-    },
-    uri::builder::resourcebuilder::UResourceBuilder,
-    uuid::builder::UUIDBuilder,
+    CallOptions, Data, Number, RpcClient, UAuthority, UCode, UEntity, UMessage, UMessageBuilder,
+    UMessageType, UPayload, UPayloadFormat, UResource, UResourceBuilder, UStatus, UTransport,
+    UUIDBuilder, UUri,
 };
 use zenoh::config::Config;
 
@@ -139,20 +134,20 @@ async fn test_rpcserver_register_and_unregister() {
 
     // Compare the return string
     let listener_string = upclient
-        .register_rpc_listener(uuri.clone(), Box::new(|_| {}))
+        .register_listener(uuri.clone(), Box::new(|_| {}))
         .await
         .unwrap();
     assert_eq!(listener_string, "upl/0100162e04d20100_0");
 
     // Able to ungister
     upclient
-        .unregister_rpc_listener(uuri.clone(), &listener_string)
+        .unregister_listener(uuri.clone(), &listener_string)
         .await
         .unwrap();
 
     // Unable to ungister
     let result = upclient
-        .unregister_rpc_listener(uuri.clone(), &listener_string)
+        .unregister_listener(uuri.clone(), &listener_string)
         .await;
     assert_eq!(
         result,
@@ -223,9 +218,9 @@ async fn test_publish_and_subscribe() {
         .await
         .unwrap();
 
-    let umessage = UMessageBuilder::publish(&uuri)
+    let umessage = UMessageBuilder::publish(uuri.clone())
+        .with_message_id(UUIDBuilder::new().build())
         .build_with_payload(
-            &UUIDBuilder::new(),
             target_data.as_bytes().to_vec().into(),
             UPayloadFormat::UPAYLOAD_FORMAT_TEXT,
         )
@@ -268,9 +263,9 @@ async fn test_notification_and_subscribe() {
         .await
         .unwrap();
 
-    let umessage = UMessageBuilder::notification(&uuri)
+    let umessage = UMessageBuilder::notification(uuri.clone(), uuri.clone())
+        .with_message_id(UUIDBuilder::new().build())
         .build_with_payload(
-            &UUIDBuilder::new(),
             target_data.as_bytes().to_vec().into(),
             UPayloadFormat::UPAYLOAD_FORMAT_TEXT,
         )
@@ -342,7 +337,7 @@ async fn test_rpc_server_client() {
         }
     };
     upclient_server
-        .register_rpc_listener(uuri.clone(), Box::new(callback))
+        .register_listener(uuri.clone(), Box::new(callback))
         .await
         .unwrap();
     // Need some time for queryable to run
@@ -356,7 +351,14 @@ async fn test_rpc_server_client() {
         ..Default::default()
     };
     let result = upclient_client
-        .invoke_method(uuri, payload, CallOptionsBuilder::default().build())
+        .invoke_method(
+            uuri,
+            payload,
+            CallOptions {
+                ttl: 1000,
+                ..Default::default()
+            },
+        )
         .await;
 
     // Process the result
@@ -394,7 +396,7 @@ async fn test_register_listener_with_special_uuri() {
                 panic!("The message should be Data::Value type.");
             };
             match attributes.type_.enum_value().unwrap() {
-                UMessageType::UMESSAGE_TYPE_PUBLISH => {
+                UMessageType::UMESSAGE_TYPE_PUBLISH | UMessageType::UMESSAGE_TYPE_NOTIFICATION => {
                     assert_eq!(publish_data_clone, value);
                 }
                 UMessageType::UMESSAGE_TYPE_REQUEST => {
@@ -433,9 +435,9 @@ async fn test_register_listener_with_special_uuri() {
         let mut publish_uuri = create_utransport_uuri(0);
         publish_uuri.authority = Some(create_authority()).into();
 
-        let umessage = UMessageBuilder::publish(&publish_uuri)
+        let umessage = UMessageBuilder::publish(publish_uuri)
+            .with_message_id(UUIDBuilder::new().build())
             .build_with_payload(
-                &UUIDBuilder::new(),
                 publish_data.as_bytes().to_vec().into(),
                 UPayloadFormat::UPAYLOAD_FORMAT_TEXT,
             )
@@ -458,7 +460,14 @@ async fn test_register_listener_with_special_uuri() {
             ..Default::default()
         };
         let result = upclient2
-            .invoke_method(request_uuri, payload, CallOptionsBuilder::default().build())
+            .invoke_method(
+                request_uuri,
+                payload,
+                CallOptions {
+                    ttl: 1000,
+                    ..Default::default()
+                },
+            )
             .await;
         // Process the result
         if let Data::Value(v) = result.unwrap().payload.unwrap().data.unwrap() {
