@@ -334,7 +334,6 @@ async fn test_rpc_server_client() {
                     panic!("The message should be Data::Value type.");
                 }
                 let upayload = UPayload {
-                    length: Some(0),
                     format: UPayloadFormat::UPAYLOAD_FORMAT_TEXT.into(),
                     data: Some(Data::Value(response_data_cloned.as_bytes().to_vec())),
                     ..Default::default()
@@ -366,7 +365,6 @@ async fn test_rpc_server_client() {
 
     // Run RpcClient
     let payload = UPayload {
-        length: Some(0),
         format: UPayloadFormat::UPAYLOAD_FORMAT_TEXT.into(),
         data: Some(Data::Value(request_data.as_bytes().to_vec())),
         ..Default::default()
@@ -477,7 +475,6 @@ async fn test_register_listener_with_special_uuri() {
 
         // Run RpcClient
         let payload = UPayload {
-            length: Some(0),
             format: UPayloadFormat::UPAYLOAD_FORMAT_TEXT.into(),
             data: Some(Data::Value(request_data.as_bytes().to_vec())),
             ..Default::default()

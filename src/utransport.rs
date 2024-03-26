@@ -489,7 +489,7 @@ impl UTransport for UPClientZenoh {
                     .validator()
                     .validate(&attributes)
                     .map_err(|e| {
-                        let msg = format!("Wrong Message type in UAttributes: {e:?}");
+                        let msg = format!("Wrong Request UAttributes: {e:?}");
                         log::error!("{msg}");
                         UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
                     })?;
@@ -504,7 +504,7 @@ impl UTransport for UPClientZenoh {
                     .validator()
                     .validate(&attributes)
                     .map_err(|e| {
-                        let msg = format!("Wrong Message type in UAttributes: {e:?}");
+                        let msg = format!("Wrong Response UAttributes: {e:?}");
                         log::error!("{msg}");
                         UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
                     })?;

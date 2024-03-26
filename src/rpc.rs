@@ -37,7 +37,7 @@ impl RpcClient for UPClientZenoh {
 
         // Get Zenoh key
         let Ok(zenoh_key) = UPClientZenoh::to_zenoh_key_string(&topic) else {
-            let msg = "Unable to transform to Zenoh key".to_string();
+            let msg = "Unable to transform UUri to Zenoh key".to_string();
             log::error!("{msg}");
             return Err(RpcMapperError::UnexpectedError(msg));
         };
@@ -56,8 +56,10 @@ impl RpcClient for UPClientZenoh {
         let mut source = topic.clone();
         source.resource = Some(UResourceBuilder::for_rpc_response()).into();
         // Create UAttributes
-        let uattributes =
+        let mut uattributes =
             UAttributes::request(uuid_builder.build(), topic, source, options.clone());
+        // TODO: reqid should be put into UAttributes::request
+        uattributes.reqid = Some(uuid_builder.build()).into();
         // Put into attachment
         let Ok(attachment) = UPClientZenoh::uattributes_to_attachment(&uattributes) else {
             let msg = "Unable to transform UAttributes to user attachment in Zenoh".to_string();
