@@ -47,8 +47,26 @@ pub struct UPClientZenoh {
 }
 
 impl UPClientZenoh {
+    /// Create `UPClientZenoh` by applying the Zenoh configuration.
+    /// It is suggested to use by advanced users.
+    /// You can refer to [here](https://github.com/eclipse-zenoh/zenoh/blob/0.10.1-rc/DEFAULT_CONFIG.json5) for more configuration details.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - Zenoh configuration
+    ///
     /// # Errors
-    /// Will return `Err` if unable to create Zenoh session
+    /// Will return `Err` if unable to create `UPClientZenoh`
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # async_std::task::block_on(async {
+    ///     use up_client_zenoh::UPClientZenoh;
+    ///     use zenoh::config::Config;
+    ///     let upclient = UPClientZenoh::new(Config::default()).await.unwrap();
+    /// # });
+    /// ```
     pub async fn new(config: Config) -> Result<UPClientZenoh, UStatus> {
         let Ok(session) = zenoh::open(config).res().await else {
             let msg = "Unable to open Zenoh session".to_string();
