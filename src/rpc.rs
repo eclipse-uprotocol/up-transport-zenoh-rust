@@ -42,20 +42,11 @@ impl RpcClient for UPClientZenoh {
             return Err(RpcMapperError::UnexpectedError(msg));
         };
 
-        // Get the data from UPayload
-        let Some(Data::Value(buf)) = payload.data else {
-            // Assume we only have Value here, no reference for shared memory
-            let msg = "The data in UPayload should be Data::Value".to_string();
-            log::error!("{msg}");
-            return Err(RpcMapperError::InvalidPayload(msg));
-        };
-
-        // Generate UAttributes
+        // Create UAttributes and put into Zenoh user attachment
         let uuid_builder = UUIDBuilder::new();
-        // Create response address
+        // Create response address (TODO: This should be from UPClientZenoh)
         let mut source = topic.clone();
         source.resource = Some(UResourceBuilder::for_rpc_response()).into();
-        // Create UAttributes
         let mut uattributes =
             UAttributes::request(uuid_builder.build(), topic, source, options.clone());
         // TODO: reqid should be put into UAttributes::request
@@ -67,11 +58,19 @@ impl RpcClient for UPClientZenoh {
             return Err(RpcMapperError::UnexpectedError(msg));
         };
 
+        // Get the data from UPayload
+        let Some(Data::Value(buf)) = payload.data else {
+            // Assume we only have Value here, no reference for shared memory
+            let msg = "The data in UPayload should be Data::Value".to_string();
+            log::error!("{msg}");
+            return Err(RpcMapperError::InvalidPayload(msg));
+        };
         let value = Value::new(buf.into()).encoding(Encoding::WithSuffix(
             KnownEncoding::AppCustom,
             payload.format.value().to_string().into(),
         ));
-        // TODO: Query should support .encoding
+
+        // Send the query
         let getbuilder = self
             .session
             .get(&zenoh_key)
@@ -79,14 +78,13 @@ impl RpcClient for UPClientZenoh {
             .with_attachment(attachment.build())
             .target(QueryTarget::BestMatching)
             .timeout(Duration::from_millis(u64::from(options.ttl)));
-
-        // Send the query
         let Ok(replies) = getbuilder.res().await else {
             let msg = "Error while sending Zenoh query".to_string();
             log::error!("{msg}");
             return Err(RpcMapperError::UnexpectedError(msg));
         };
 
+        // Receive the reply
         let Ok(reply) = replies.recv_async().await else {
             let msg = "Error while receiving Zenoh reply".to_string();
             log::error!("{msg}");
