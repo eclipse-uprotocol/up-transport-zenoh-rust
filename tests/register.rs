@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-mod test_lib;
+pub mod test_lib;
 
 use up_client_zenoh::UPClientZenoh;
 use up_rust::{UCode, UStatus, UTransport};

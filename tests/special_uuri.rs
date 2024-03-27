@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-mod test_lib;
+pub mod test_lib;
 
 use async_std::task::{self, block_on};
 use std::{sync::Arc, time};

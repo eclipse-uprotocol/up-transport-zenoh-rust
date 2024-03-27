@@ -20,7 +20,7 @@ pub fn before_test() {
     INIT.call_once(env_logger::init);
 }
 
-#[allow(dead_code)]
+#[allow(clippy::must_use_candidate)]
 pub fn create_utransport_uuri(index: u8) -> UUri {
     if index == 1 {
         UUri {
@@ -63,7 +63,7 @@ pub fn create_utransport_uuri(index: u8) -> UUri {
     }
 }
 
-#[allow(dead_code)]
+#[allow(clippy::must_use_candidate)]
 pub fn create_rpcserver_uuri() -> UUri {
     UUri {
         entity: Some(UEntity {
@@ -82,7 +82,7 @@ pub fn create_rpcserver_uuri() -> UUri {
     }
 }
 
-#[allow(dead_code)]
+#[allow(clippy::must_use_candidate)]
 pub fn create_authority() -> UAuthority {
     UAuthority {
         name: Some("UAuthName".to_string()),
@@ -91,7 +91,7 @@ pub fn create_authority() -> UAuthority {
     }
 }
 
-#[allow(dead_code)]
+#[allow(clippy::must_use_candidate)]
 pub fn create_special_uuri() -> UUri {
     UUri {
         authority: Some(create_authority()).into(),
