@@ -26,13 +26,14 @@ use zenoh::config::Config;
 async fn test_rpc_server_client() {
     test_lib::before_test();
 
+    // Initialization
     let upclient_client = UPClientZenoh::new(Config::default()).await.unwrap();
     let upclient_server = Arc::new(UPClientZenoh::new(Config::default()).await.unwrap());
     let request_data = String::from("This is the request data");
     let response_data = String::from("This is the response data");
-    let uuri = test_lib::create_rpcserver_uuri();
+    let dst_uuri = test_lib::create_rpcserver_uuri();
 
-    // setup RpcServer callback
+    // Setup RpcServer callback
     let upclient_server_cloned = upclient_server.clone();
     let response_data_cloned = response_data.clone();
     let request_data_cloned = request_data.clone();
@@ -77,10 +78,11 @@ async fn test_rpc_server_client() {
             }
         }
     };
-    upclient_server
-        .register_listener(uuri.clone(), Box::new(callback))
+    let listener_string = upclient_server
+        .register_listener(dst_uuri.clone(), Box::new(callback))
         .await
         .unwrap();
+
     // Need some time for queryable to run
     task::sleep(time::Duration::from_millis(1000)).await;
 
@@ -92,7 +94,7 @@ async fn test_rpc_server_client() {
     };
     let result = upclient_client
         .invoke_method(
-            uuri,
+            dst_uuri.clone(),
             payload,
             CallOptions {
                 ttl: 1000,
@@ -108,4 +110,10 @@ async fn test_rpc_server_client() {
     } else {
         panic!("Failed to get result from invoke_method.");
     }
+
+    // Cleanup
+    upclient_server
+        .unregister_listener(dst_uuri.clone(), &listener_string)
+        .await
+        .unwrap();
 }

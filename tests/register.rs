@@ -21,6 +21,7 @@ use zenoh::config::Config;
 async fn test_utransport_register_and_unregister() {
     test_lib::before_test();
 
+    // Initialization
     let upclient = UPClientZenoh::new(Config::default()).await.unwrap();
     let uuri = test_lib::create_utransport_uuri(0);
 
@@ -54,6 +55,7 @@ async fn test_utransport_register_and_unregister() {
 async fn test_rpcserver_register_and_unregister() {
     test_lib::before_test();
 
+    // Initialization
     let upclient = UPClientZenoh::new(Config::default()).await.unwrap();
     let uuri = test_lib::create_rpcserver_uuri();
 
@@ -87,6 +89,7 @@ async fn test_rpcserver_register_and_unregister() {
 async fn test_utransport_special_uuri_register_and_unregister() {
     test_lib::before_test();
 
+    // Initialization
     let upclient = UPClientZenoh::new(Config::default()).await.unwrap();
     let uuri = test_lib::create_special_uuri();
 

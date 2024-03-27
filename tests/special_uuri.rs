@@ -26,10 +26,10 @@ use zenoh::config::Config;
 async fn test_register_listener_with_special_uuri() {
     test_lib::before_test();
 
+    // Initialization
     let upclient1 = Arc::new(UPClientZenoh::new(Config::default()).await.unwrap());
     let upclient1_clone = upclient1.clone();
     let upclient2 = UPClientZenoh::new(Config::default()).await.unwrap();
-    // Create data
     let publish_data = String::from("Hello World!");
     let publish_data_clone = publish_data.clone();
     let request_data = String::from("This is the request data");
@@ -84,11 +84,13 @@ async fn test_register_listener_with_special_uuri() {
         .await
         .unwrap();
 
-    // send Publish
+    // Send Publish
     {
+        // Initialization
         let mut publish_uuri = test_lib::create_utransport_uuri(0);
         publish_uuri.authority = Some(test_lib::create_authority()).into();
 
+        // Send Publish data
         let umessage = UMessageBuilder::publish(publish_uuri)
             .with_message_id(UUIDBuilder::new().build())
             .build_with_payload(
@@ -101,12 +103,14 @@ async fn test_register_listener_with_special_uuri() {
         // Waiting for the subscriber to receive data
         task::sleep(time::Duration::from_millis(1000)).await;
     }
-    // send Request
+
+    // Send Request
     {
+        // Initialization
         let mut request_uuri = test_lib::create_rpcserver_uuri();
         request_uuri.authority = Some(test_lib::create_authority()).into();
 
-        // Run RpcClient
+        // RpcClient: Send Request data
         let payload = UPayload {
             format: UPayloadFormat::UPAYLOAD_FORMAT_TEXT.into(),
             data: Some(Data::Value(request_data.as_bytes().to_vec())),
@@ -122,6 +126,7 @@ async fn test_register_listener_with_special_uuri() {
                 },
             )
             .await;
+
         // Process the result
         if let Data::Value(v) = result.unwrap().payload.unwrap().data.unwrap() {
             let value = v.into_iter().map(|c| c as char).collect::<String>();

@@ -23,6 +23,7 @@ use zenoh::config::Config;
 async fn test_publish_and_subscribe() {
     test_lib::before_test();
 
+    // Initialization
     let target_data = String::from("Hello World!");
     let upclient = UPClientZenoh::new(Config::default()).await.unwrap();
     let uuri = test_lib::create_utransport_uuri(0);
@@ -71,6 +72,7 @@ async fn test_publish_and_subscribe() {
 async fn test_notification_and_subscribe() {
     test_lib::before_test();
 
+    // Initialization
     let target_data = String::from("Hello World!");
     let upclient = UPClientZenoh::new(Config::default()).await.unwrap();
     let src_uuri = test_lib::create_utransport_uuri(0);
