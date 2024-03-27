@@ -97,7 +97,6 @@ impl RpcClient for UPClientZenoh {
                     log::error!("{msg}");
                     return Err(RpcMapperError::UnexpectedError(msg));
                 };
-                // TODO: Need to check attributes is correct or not
                 Ok(UMessage {
                     attributes: Some(uattributes).into(),
                     payload: Some(UPayload {

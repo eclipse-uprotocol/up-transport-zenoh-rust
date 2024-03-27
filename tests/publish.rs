@@ -18,6 +18,7 @@ use std::time;
 use up_client_zenoh::UPClientZenoh;
 use up_rust::{Data, UMessage, UMessageBuilder, UPayloadFormat, UStatus, UTransport, UUIDBuilder};
 use zenoh::config::Config;
+
 #[async_std::test]
 async fn test_publish_and_subscribe() {
     test_lib::before_test();
@@ -46,6 +47,7 @@ async fn test_publish_and_subscribe() {
         .await
         .unwrap();
 
+    // Send UMessage
     let umessage = UMessageBuilder::publish(uuri.clone())
         .with_message_id(UUIDBuilder::new().build())
         .build_with_payload(
@@ -71,10 +73,11 @@ async fn test_notification_and_subscribe() {
 
     let target_data = String::from("Hello World!");
     let upclient = UPClientZenoh::new(Config::default()).await.unwrap();
-    let uuri = test_lib::create_utransport_uuri(1);
+    let src_uuri = test_lib::create_utransport_uuri(0);
+    let dst_uuri = test_lib::create_utransport_uuri(1);
 
     // Register the listener
-    let uuri_cloned = uuri.clone();
+    let uuri_cloned = dst_uuri.clone();
     let data_cloned = target_data.clone();
     let listener = move |result: Result<UMessage, UStatus>| match result {
         Ok(msg) => {
@@ -89,11 +92,13 @@ async fn test_notification_and_subscribe() {
         Err(ustatus) => panic!("Internal Error: {ustatus:?}"),
     };
     let listener_string = upclient
-        .register_listener(uuri.clone(), Box::new(listener))
+        .register_listener(dst_uuri.clone(), Box::new(listener))
         .await
         .unwrap();
 
-    let umessage = UMessageBuilder::notification(uuri.clone(), uuri.clone())
+    // Send UMessage
+    // TODO: up_rust has bugs while creating UMessageBuilder::notification
+    let umessage = UMessageBuilder::notification(src_uuri.clone(), dst_uuri.clone())
         .with_message_id(UUIDBuilder::new().build())
         .build_with_payload(
             target_data.as_bytes().to_vec().into(),
@@ -107,7 +112,7 @@ async fn test_notification_and_subscribe() {
 
     // Cleanup
     upclient
-        .unregister_listener(uuri.clone(), &listener_string)
+        .unregister_listener(dst_uuri.clone(), &listener_string)
         .await
         .unwrap();
 }
