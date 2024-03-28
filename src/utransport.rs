@@ -396,7 +396,7 @@ impl UPClientZenoh {
             query_map
                 .lock()
                 .unwrap()
-                .insert(u_attribute.reqid.to_string(), query);
+                .insert(u_attribute.id.to_string(), query);
             listener(Ok(msg));
         };
 

@@ -31,11 +31,13 @@ async fn test_register_listener_with_special_uuri() {
     let upclient1_clone = upclient1.clone();
     let upclient2 = UPClientZenoh::new(Config::default()).await.unwrap();
     let publish_data = String::from("Hello World!");
-    let publish_data_clone = publish_data.clone();
     let request_data = String::from("This is the request data");
-    let request_data_clone = request_data.clone();
+    let response_data = String::from("This is the request data");
 
     // Register the listener
+    let publish_data_cloned = publish_data.clone();
+    let request_data_cloned = request_data.clone();
+    let response_data_cloned = response_data.clone();
     let listener_uuri = test_lib::create_special_uuri();
     let listener = move |result: Result<UMessage, UStatus>| match result {
         Ok(msg) => {
@@ -50,25 +52,23 @@ async fn test_register_listener_with_special_uuri() {
                 panic!("The message should be Data::Value type.");
             };
             match attributes.type_.enum_value().unwrap() {
-                UMessageType::UMESSAGE_TYPE_PUBLISH | UMessageType::UMESSAGE_TYPE_NOTIFICATION => {
-                    assert_eq!(publish_data_clone, value);
+                UMessageType::UMESSAGE_TYPE_PUBLISH => {
+                    assert_eq!(publish_data_cloned, value);
+                }
+                UMessageType::UMESSAGE_TYPE_NOTIFICATION => {
+                    panic!("Notification type");
                 }
                 UMessageType::UMESSAGE_TYPE_REQUEST => {
-                    assert_eq!(request_data_clone, value);
-                    // TODO: We should use API to build UMessage
-                    // Set the attributes type to Response
-                    let mut uattributes = attributes.unwrap();
-                    uattributes.type_ = UMessageType::UMESSAGE_TYPE_RESPONSE.into();
-                    // Swap source and sink
-                    (uattributes.sink, uattributes.source) =
-                        (uattributes.source.clone(), uattributes.sink.clone());
+                    assert_eq!(request_data_cloned, value);
                     // Send back result
-                    block_on(upclient1_clone.send(UMessage {
-                        attributes: Some(uattributes).into(),
-                        payload,
-                        ..Default::default()
-                    }))
-                    .unwrap();
+                    let umessage = UMessageBuilder::response_for_request(&attributes)
+                        .with_message_id(UUIDBuilder::new().build())
+                        .build_with_payload(
+                            response_data_cloned.as_bytes().to_vec().into(),
+                            UPayloadFormat::UPAYLOAD_FORMAT_TEXT,
+                        )
+                        .unwrap();
+                    block_on(upclient1_clone.send(umessage)).unwrap();
                 }
                 UMessageType::UMESSAGE_TYPE_RESPONSE => {
                     panic!("Response type");
@@ -131,7 +131,7 @@ async fn test_register_listener_with_special_uuri() {
         // Process the result
         if let Data::Value(v) = result.unwrap().payload.unwrap().data.unwrap() {
             let value = v.into_iter().map(|c| c as char).collect::<String>();
-            assert_eq!(request_data, value);
+            assert_eq!(response_data, value);
         } else {
             panic!("Failed to get result from invoke_method.");
         }

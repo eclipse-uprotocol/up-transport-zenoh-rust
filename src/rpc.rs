@@ -50,7 +50,7 @@ impl RpcClient for UPClientZenoh {
             self.get_response_uuri(),
             options.clone(),
         );
-        // TODO: reqid should be put into UAttributes::request
+        // TODO: We should not have reqid here, but validate Request will fail
         uattributes.reqid = Some(uuid_builder.build()).into();
         // Put into attachment
         let Ok(attachment) = UPClientZenoh::uattributes_to_attachment(&uattributes) else {

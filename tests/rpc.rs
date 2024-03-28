@@ -17,8 +17,8 @@ use async_std::task::{self, block_on};
 use std::{sync::Arc, time};
 use up_client_zenoh::UPClientZenoh;
 use up_rust::{
-    CallOptions, Data, RpcClient, UMessage, UMessageBuilder, UMessageType, UPayload,
-    UPayloadFormat, UStatus, UTransport, UUIDBuilder,
+    CallOptions, Data, RpcClient, UMessage, UMessageBuilder, UPayload, UPayloadFormat, UStatus,
+    UTransport, UUIDBuilder,
 };
 use zenoh::config::Config;
 
@@ -45,34 +45,22 @@ async fn test_rpc_server_client() {
                     payload,
                     ..
                 } = msg;
-                // Get the UUri
-                let source = attributes.clone().unwrap().source.unwrap();
-                let sink = attributes.clone().unwrap().sink.unwrap();
-                // Build the payload to send back
+                // Check the payload of request
                 if let Data::Value(v) = payload.unwrap().data.unwrap() {
                     let value = v.into_iter().map(|c| c as char).collect::<String>();
                     assert_eq!(request_data_cloned, value);
                 } else {
                     panic!("The message should be Data::Value type.");
                 }
-                // TODO: We should use API to build UMessage
-                let upayload = UPayload {
-                    format: UPayloadFormat::UPAYLOAD_FORMAT_TEXT.into(),
-                    data: Some(Data::Value(response_data_cloned.as_bytes().to_vec())),
-                    ..Default::default()
-                };
-                // Set the attributes type to Response
-                let mut uattributes = attributes.unwrap();
-                uattributes.type_ = UMessageType::UMESSAGE_TYPE_RESPONSE.into();
-                uattributes.sink = Some(source.clone()).into();
-                uattributes.source = Some(sink.clone()).into();
                 // Send back result
-                block_on(upclient_server_cloned.send(UMessage {
-                    attributes: Some(uattributes).into(),
-                    payload: Some(upayload).into(),
-                    ..Default::default()
-                }))
-                .unwrap();
+                let umessage = UMessageBuilder::response_for_request(&attributes)
+                    .with_message_id(UUIDBuilder::new().build())
+                    .build_with_payload(
+                        response_data_cloned.as_bytes().to_vec().into(),
+                        UPayloadFormat::UPAYLOAD_FORMAT_TEXT,
+                    )
+                    .unwrap();
+                block_on(upclient_server_cloned.send(umessage)).unwrap();
             }
             Err(ustatus) => {
                 panic!("Internal Error: {ustatus:?}");
@@ -147,7 +135,7 @@ async fn test_rpc_server_client() {
                 UPayloadFormat::UPAYLOAD_FORMAT_TEXT,
             )
             .unwrap();
-        // TODO: The API should include reqid
+        // TODO: We should not have reqid here, but validate Request will fail
         let UMessage {
             attributes,
             payload,
