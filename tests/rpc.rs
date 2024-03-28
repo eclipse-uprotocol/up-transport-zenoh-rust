@@ -17,8 +17,8 @@ use async_std::task::{self, block_on};
 use std::{sync::Arc, time};
 use up_client_zenoh::UPClientZenoh;
 use up_rust::{
-    CallOptions, Data, RpcClient, UMessage, UMessageType, UPayload, UPayloadFormat, UStatus,
-    UTransport,
+    CallOptions, Data, RpcClient, UMessage, UMessageBuilder, UMessageType, UPayload,
+    UPayloadFormat, UStatus, UTransport, UUIDBuilder,
 };
 use zenoh::config::Config;
 
@@ -55,6 +55,7 @@ async fn test_rpc_server_client() {
                 } else {
                     panic!("The message should be Data::Value type.");
                 }
+                // TODO: We should use API to build UMessage
                 let upayload = UPayload {
                     format: UPayloadFormat::UPAYLOAD_FORMAT_TEXT.into(),
                     data: Some(Data::Value(response_data_cloned.as_bytes().to_vec())),
@@ -86,29 +87,83 @@ async fn test_rpc_server_client() {
     // Need some time for queryable to run
     task::sleep(time::Duration::from_millis(1000)).await;
 
-    // Run RpcClient
-    let payload = UPayload {
-        format: UPayloadFormat::UPAYLOAD_FORMAT_TEXT.into(),
-        data: Some(Data::Value(request_data.as_bytes().to_vec())),
-        ..Default::default()
-    };
-    let result = upclient_client
-        .invoke_method(
-            dst_uuri.clone(),
-            payload,
-            CallOptions {
-                ttl: 1000,
-                ..Default::default()
-            },
-        )
-        .await;
+    // Send Request with invoke_method
+    {
+        let payload = UPayload {
+            format: UPayloadFormat::UPAYLOAD_FORMAT_TEXT.into(),
+            data: Some(Data::Value(request_data.as_bytes().to_vec())),
+            ..Default::default()
+        };
+        let result = upclient_client
+            .invoke_method(
+                dst_uuri.clone(),
+                payload,
+                CallOptions {
+                    ttl: 1000,
+                    ..Default::default()
+                },
+            )
+            .await;
 
-    // Process the result
-    if let Data::Value(v) = result.unwrap().payload.unwrap().data.unwrap() {
-        let value = v.into_iter().map(|c| c as char).collect::<String>();
-        assert_eq!(response_data, value);
-    } else {
-        panic!("Failed to get result from invoke_method.");
+        // Process the result
+        if let Data::Value(v) = result.unwrap().payload.unwrap().data.unwrap() {
+            let value = v.into_iter().map(|c| c as char).collect::<String>();
+            assert_eq!(response_data.clone(), value);
+        } else {
+            panic!("Failed to get result from invoke_method.");
+        }
+    }
+
+    // Send Request with send
+    {
+        // Register Response callback
+        let callback = move |result: Result<UMessage, UStatus>| {
+            match result {
+                Ok(msg) => {
+                    let UMessage { payload, .. } = msg;
+                    // Check the response data
+                    if let Data::Value(v) = payload.unwrap().data.unwrap() {
+                        let value = v.into_iter().map(|c| c as char).collect::<String>();
+                        assert_eq!(response_data, value);
+                    } else {
+                        panic!("The message should be Data::Value type.");
+                    }
+                }
+                Err(ustatus) => {
+                    panic!("Internal Error: {ustatus:?}");
+                }
+            }
+        };
+        let response_uuri = upclient_client.get_response_uuri();
+        upclient_client
+            .register_listener(response_uuri.clone(), Box::new(callback))
+            .await
+            .unwrap();
+        // Send request
+        let umessage = UMessageBuilder::request(dst_uuri.clone(), response_uuri, 3000)
+            .with_message_id(UUIDBuilder::new().build())
+            .build_with_payload(
+                request_data.as_bytes().to_vec().into(),
+                UPayloadFormat::UPAYLOAD_FORMAT_TEXT,
+            )
+            .unwrap();
+        // TODO: The API should include reqid
+        let UMessage {
+            attributes,
+            payload,
+            ..
+        } = umessage;
+        let mut attributes = attributes.unwrap();
+        attributes.reqid = Some(UUIDBuilder::new().build()).into();
+        let umessage = UMessage {
+            attributes: Some(attributes).into(),
+            payload,
+            ..Default::default()
+        };
+        upclient_client.send(umessage).await.unwrap();
+
+        // Waiting for the callback to process data
+        task::sleep(time::Duration::from_millis(1000)).await;
     }
 
     // Cleanup

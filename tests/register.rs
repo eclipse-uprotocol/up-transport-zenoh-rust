@@ -100,7 +100,7 @@ async fn test_utransport_special_uuri_register_and_unregister() {
         .unwrap();
     assert_eq!(
         listener_string,
-        "upr/060102030a0b0c/**_0&upr/060102030a0b0c/**_1&upr/060102030a0b0c/**_2"
+        "upr/060102030a0b0c/**&upr/060102030a0b0c/**_0&upr/060102030a0b0c/**_1"
     );
 
     // Able to ungister

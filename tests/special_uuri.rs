@@ -55,6 +55,7 @@ async fn test_register_listener_with_special_uuri() {
                 }
                 UMessageType::UMESSAGE_TYPE_REQUEST => {
                     assert_eq!(request_data_clone, value);
+                    // TODO: We should use API to build UMessage
                     // Set the attributes type to Response
                     let mut uattributes = attributes.unwrap();
                     uattributes.type_ = UMessageType::UMESSAGE_TYPE_RESPONSE.into();

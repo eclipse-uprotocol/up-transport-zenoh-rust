@@ -16,7 +16,7 @@ use async_trait::async_trait;
 use std::{string::ToString, time::Duration};
 use up_rust::{
     CallOptions, Data, RpcClient, RpcClientResult, RpcMapperError, UAttributes, UMessage, UPayload,
-    UResourceBuilder, UUIDBuilder, UUri, UriValidator,
+    UUIDBuilder, UUri, UriValidator,
 };
 use zenoh::prelude::r#async::*;
 
@@ -44,11 +44,12 @@ impl RpcClient for UPClientZenoh {
 
         // Create UAttributes and put into Zenoh user attachment
         let uuid_builder = UUIDBuilder::new();
-        // Create response address (My own UUri)
-        let mut source = self.uuri.clone();
-        source.resource = Some(UResourceBuilder::for_rpc_response()).into();
-        let mut uattributes =
-            UAttributes::request(uuid_builder.build(), topic, source, options.clone());
+        let mut uattributes = UAttributes::request(
+            uuid_builder.build(),
+            topic,
+            self.get_response_uuri(),
+            options.clone(),
+        );
         // TODO: reqid should be put into UAttributes::request
         uattributes.reqid = Some(uuid_builder.build()).into();
         // Put into attachment

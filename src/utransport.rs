@@ -97,20 +97,17 @@ impl UPClientZenoh {
         };
 
         // Retrieve the callback
-        let resp_listener_str = attributes
-            .source
-            .0
-            .ok_or_else(|| {
-                let msg = "Lack of source address".to_string();
-                log::error!("{msg}");
-                UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
-            })?
-            .to_string();
+        let source_uuri = *attributes.source.0.ok_or_else(|| {
+            let msg = "Lack of source address".to_string();
+            log::error!("{msg}");
+            UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
+        })?;
+        let hashmap_key = UPClientZenoh::to_zenoh_key_string(&source_uuri)?;
         let resp_callback = self
             .rpc_callback_map
             .lock()
             .unwrap()
-            .get(&resp_listener_str)
+            .get(&hashmap_key)
             .ok_or_else(|| {
                 let msg = "Unable to get callback".to_string();
                 log::error!("{msg}");
@@ -432,20 +429,13 @@ impl UPClientZenoh {
         // Get Zenoh key
         let zenoh_key = UPClientZenoh::to_zenoh_key_string(topic)?;
 
-        // Generate listener string for users to delete
-        let hashmap_key = format!(
-            "{}_{:X}",
-            zenoh_key,
-            self.callback_counter.fetch_add(1, Ordering::SeqCst)
-        );
-
         // Store the response callback (Will be used in send_request)
         self.rpc_callback_map
             .lock()
             .unwrap()
-            .insert(hashmap_key.clone(), listener);
+            .insert(zenoh_key.clone(), listener);
 
-        Ok(hashmap_key)
+        Ok(zenoh_key)
     }
 }
 

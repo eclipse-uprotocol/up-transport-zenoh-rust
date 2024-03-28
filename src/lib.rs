@@ -19,7 +19,10 @@ use std::{
     collections::HashMap,
     sync::{atomic::AtomicU64, Arc, Mutex},
 };
-use up_rust::{UAttributes, UCode, UEntity, UMessage, UPayloadFormat, UPriority, UStatus, UUri};
+use up_rust::{
+    UAttributes, UCode, UEntity, UMessage, UPayloadFormat, UPriority, UResourceBuilder, UStatus,
+    UUri,
+};
 use zenoh::{
     config::Config,
     prelude::r#async::*,
@@ -73,7 +76,7 @@ impl UPClientZenoh {
         let uuri = UUri {
             entity: Some(UEntity {
                 name: "default.entity".to_string(),
-                id: Some(rand::random()),
+                id: Some(u32::from(rand::random::<u16>())),
                 version_major: Some(1),
                 version_minor: None,
                 ..Default::default()
@@ -104,7 +107,7 @@ impl UPClientZenoh {
     ///     let uuri = UUri {
     ///         entity: Some(UEntity {
     ///             name: "default.entity".to_string(),
-    ///             id: Some(rand::random()),
+    ///             id: Some(u32::from(rand::random::<u16>())),
     ///             version_major: Some(1),
     ///             version_minor: None,
     ///             ..Default::default()
@@ -132,6 +135,28 @@ impl UPClientZenoh {
         })
     }
 
+    /// Get the `UUri` of `UPClientZenoh` in for RPC response
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # async_std::task::block_on(async {
+    ///     use up_client_zenoh::UPClientZenoh;
+    ///     use up_rust::{UUri, UriValidator};
+    ///     use zenoh::config::Config;
+    ///     let upclient = UPClientZenoh::new(Config::default()).await.unwrap();
+    ///     let uuri = upclient.get_response_uuri();
+    ///     assert!(uuri.authority.is_none());
+    ///     assert!(UriValidator::is_rpc_response(&uuri));
+    ///     assert_eq!(uuri.entity.unwrap().name, "default.entity");
+    /// # });
+    /// ```
+    pub fn get_response_uuri(&self) -> UUri {
+        let mut source = self.uuri.clone();
+        source.resource = Some(UResourceBuilder::for_rpc_response()).into();
+        source
+    }
+
     fn get_uauth_from_uuri(uri: &UUri) -> Result<String, UStatus> {
         if let Some(authority) = uri.authority.as_ref() {
             let buf: Vec<u8> = authority.try_into().map_err(|_| {
@@ -154,8 +179,8 @@ impl UPClientZenoh {
         if uri.authority.is_some() && uri.entity.is_none() && uri.resource.is_none() {
             Ok(String::from("upr/") + &UPClientZenoh::get_uauth_from_uuri(uri)? + "/**")
         } else {
-            let micro_uuri: Vec<u8> = uri.try_into().map_err(|_| {
-                let msg = "Unable to serialize into micro format".to_string();
+            let micro_uuri: Vec<u8> = uri.try_into().map_err(|e| {
+                let msg = format!("Unable to serialize into micro format: {e}");
                 log::error!("{msg}");
                 UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
             })?;
