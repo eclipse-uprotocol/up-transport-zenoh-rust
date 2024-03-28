@@ -19,7 +19,7 @@ use std::{
     collections::HashMap,
     sync::{atomic::AtomicU64, Arc, Mutex},
 };
-use up_rust::{UAttributes, UCode, UMessage, UPayloadFormat, UPriority, UStatus, UUri};
+use up_rust::{UAttributes, UCode, UEntity, UMessage, UPayloadFormat, UPriority, UStatus, UUri};
 use zenoh::{
     config::Config,
     prelude::r#async::*,
@@ -43,17 +43,19 @@ pub struct UPClientZenoh {
     query_map: Arc<Mutex<HashMap<String, Query>>>,
     // Save the callback for RPC response
     rpc_callback_map: Arc<Mutex<HashMap<String, Arc<UtransportListener>>>>,
+    // Used to identify different callback
     callback_counter: AtomicU64,
+    // Source UUri in RPC
+    uuri: UUri,
 }
 
 impl UPClientZenoh {
     /// Create `UPClientZenoh` by applying the Zenoh configuration.
-    /// It is suggested to use by advanced users.
-    /// You can refer to [here](https://github.com/eclipse-zenoh/zenoh/blob/0.10.1-rc/DEFAULT_CONFIG.json5) for more configuration details.
+    /// The `UUri` will be generated randomly.
     ///
     /// # Arguments
     ///
-    /// * `config` - Zenoh configuration
+    /// * `config` - Zenoh configuration. You can refer to [here](https://github.com/eclipse-zenoh/zenoh/blob/0.10.1-rc/DEFAULT_CONFIG.json5) for more configuration details.
     ///
     /// # Errors
     /// Will return `Err` if unable to create `UPClientZenoh`
@@ -68,6 +70,52 @@ impl UPClientZenoh {
     /// # });
     /// ```
     pub async fn new(config: Config) -> Result<UPClientZenoh, UStatus> {
+        let uuri = UUri {
+            entity: Some(UEntity {
+                name: "default.entity".to_string(),
+                id: Some(rand::random()),
+                version_major: Some(1),
+                version_minor: None,
+                ..Default::default()
+            })
+            .into(),
+            ..Default::default()
+        };
+        UPClientZenoh::new_with_uuri(config, uuri).await
+    }
+
+    /// Create `UPClientZenoh` by applying the Zenoh configuration and self-defined `UUri`.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - Zenoh configuration. You can refer to [here](https://github.com/eclipse-zenoh/zenoh/blob/0.10.1-rc/DEFAULT_CONFIG.json5) for more configuration details.
+    /// * `uuri` - The `UUri` which is put in source while sending RPC request.
+    ///
+    /// # Errors
+    /// Will return `Err` if unable to create `UPClientZenoh`
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # async_std::task::block_on(async {
+    ///     use up_client_zenoh::UPClientZenoh;
+    ///     use up_rust::{UEntity, UUri};
+    ///     use zenoh::config::Config;
+    ///     let uuri = UUri {
+    ///         entity: Some(UEntity {
+    ///             name: "default.entity".to_string(),
+    ///             id: Some(rand::random()),
+    ///             version_major: Some(1),
+    ///             version_minor: None,
+    ///             ..Default::default()
+    ///         })
+    ///         .into(),
+    ///         ..Default::default()
+    ///     };
+    ///     let upclient = UPClientZenoh::new_with_uuri(Config::default(), uuri).await.unwrap();
+    /// # });
+    /// ```
+    pub async fn new_with_uuri(config: Config, uuri: UUri) -> Result<UPClientZenoh, UStatus> {
         let Ok(session) = zenoh::open(config).res().await else {
             let msg = "Unable to open Zenoh session".to_string();
             log::error!("{msg}");
@@ -80,6 +128,7 @@ impl UPClientZenoh {
             query_map: Arc::new(Mutex::new(HashMap::new())),
             rpc_callback_map: Arc::new(Mutex::new(HashMap::new())),
             callback_counter: AtomicU64::new(0),
+            uuri,
         })
     }
 
