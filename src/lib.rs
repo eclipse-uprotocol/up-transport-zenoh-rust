@@ -237,12 +237,13 @@ impl UPClientZenoh {
         let mut attachment_iter = attachment.iter();
         if let Some((_, value)) = attachment_iter.next() {
             let version = *value.as_slice().first().ok_or_else(|| {
-                let msg = "UAttributes version is empty".to_string();
+                let msg = format!("UAttributes version is empty (should be {UATTRIBUTE_VERSION})");
                 log::error!("{msg}");
                 UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
             })?;
-            if version != 1 {
-                let msg = "UAttributes version should be 1".to_string();
+            if version != UATTRIBUTE_VERSION {
+                let msg =
+                    format!("UAttributes version is {version} (should be {UATTRIBUTE_VERSION})");
                 log::error!("{msg}");
                 return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg).into());
             }
