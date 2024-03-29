@@ -580,7 +580,7 @@ impl UTransport for UPClientZenoh {
         let mut resp_listener_str: Option<&str> = None;
 
         if topic.authority.is_some() && topic.entity.is_none() && topic.resource.is_none() {
-            // This is special UUri which means we need to unregister both listeners
+            // This is special UUri which means we need to unregister all listeners
             let listener_vec = listener.split('&').collect::<Vec<_>>();
             if listener_vec.len() != 3 {
                 let msg = "Invalid listener string".to_string();
