@@ -453,7 +453,7 @@ impl UTransport for UPClientZenoh {
             UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
         })?;
 
-        // Check the type of UAttributes (Publish / Request / Response)
+        // Check the type of UAttributes (Publish / Notification / Request / Response)
         match attributes
             .type_
             .enum_value()
