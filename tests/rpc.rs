@@ -127,6 +127,7 @@ async fn test_rpc_server_client() {
             .register_listener(response_uuri.clone(), Box::new(callback))
             .await
             .unwrap();
+
         // Send request
         let umessage = UMessageBuilder::request(dst_uuri.clone(), response_uuri, 3000)
             .with_message_id(UUIDBuilder::new().build())
@@ -135,19 +136,6 @@ async fn test_rpc_server_client() {
                 UPayloadFormat::UPAYLOAD_FORMAT_TEXT,
             )
             .unwrap();
-        // TODO: We should not have reqid here, but validate Request will fail
-        let UMessage {
-            attributes,
-            payload,
-            ..
-        } = umessage;
-        let mut attributes = attributes.unwrap();
-        attributes.reqid = Some(UUIDBuilder::new().build()).into();
-        let umessage = UMessage {
-            attributes: Some(attributes).into(),
-            payload,
-            ..Default::default()
-        };
         upclient_client.send(umessage).await.unwrap();
 
         // Waiting for the callback to process data

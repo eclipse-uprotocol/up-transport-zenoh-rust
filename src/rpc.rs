@@ -43,16 +43,12 @@ impl RpcClient for UPClientZenoh {
         };
 
         // Create UAttributes and put into Zenoh user attachment
-        let uuid_builder = UUIDBuilder::new();
-        let mut uattributes = UAttributes::request(
-            uuid_builder.build(),
+        let uattributes = UAttributes::request(
+            UUIDBuilder::new().build(),
             topic,
             self.get_response_uuri(),
             options.clone(),
         );
-        // TODO: We should not have reqid here, but validate Request will fail
-        uattributes.reqid = Some(uuid_builder.build()).into();
-        // Put into attachment
         let Ok(attachment) = UPClientZenoh::uattributes_to_attachment(&uattributes) else {
             let msg = "Unable to transform UAttributes to user attachment in Zenoh".to_string();
             log::error!("{msg}");
