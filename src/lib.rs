@@ -20,8 +20,8 @@ use std::{
     sync::{atomic::AtomicU64, Arc, Mutex},
 };
 use up_rust::{
-    UAttributes, UCode, UEntity, UMessage, UPayloadFormat, UPriority, UResourceBuilder, UStatus,
-    UUri,
+    Number, UAttributes, UAuthority, UCode, UEntity, UMessage, UPayloadFormat, UPriority,
+    UResourceBuilder, UStatus, UUri,
 };
 use zenoh::{
     config::Config,
@@ -73,18 +73,19 @@ impl UPClientZenoh {
     /// # });
     /// ```
     pub async fn new(config: Config) -> Result<UPClientZenoh, UStatus> {
-        let uuri = UUri {
-            entity: Some(UEntity {
-                name: "default.entity".to_string(),
-                id: Some(u32::from(rand::random::<u16>())),
-                version_major: Some(1),
-                version_minor: None,
-                ..Default::default()
-            })
-            .into(),
+        let uauthority = UAuthority {
+            name: Some("MyAuthName".to_string()),
+            number: Some(Number::Id(vec![1, 2, 3, 4])),
             ..Default::default()
         };
-        UPClientZenoh::new_with_uuri(config, uuri).await
+        let uentity = UEntity {
+            name: "default.entity".to_string(),
+            id: Some(u32::from(rand::random::<u16>())),
+            version_major: Some(1),
+            version_minor: None,
+            ..Default::default()
+        };
+        UPClientZenoh::new_with_uuri(config, uauthority, uentity).await
     }
 
     /// Create `UPClientZenoh` by applying the Zenoh configuration and self-defined `UUri`.
@@ -102,30 +103,37 @@ impl UPClientZenoh {
     /// ```
     /// # async_std::task::block_on(async {
     ///     use up_client_zenoh::UPClientZenoh;
-    ///     use up_rust::{UEntity, UUri};
+    ///     use up_rust::{Number, UAuthority, UEntity, UUri};
     ///     use zenoh::config::Config;
-    ///     let uuri = UUri {
-    ///         entity: Some(UEntity {
-    ///             name: "default.entity".to_string(),
-    ///             id: Some(u32::from(rand::random::<u16>())),
-    ///             version_major: Some(1),
-    ///             version_minor: None,
-    ///             ..Default::default()
-    ///         })
-    ///         .into(),
+    ///     let uauthority = UAuthority {
+    ///         name: Some("MyAuthName".to_string()),
+    ///         number: Some(Number::Id(vec![1, 2, 3, 4])),
     ///         ..Default::default()
     ///     };
-    ///     let upclient = UPClientZenoh::new_with_uuri(Config::default(), uuri).await.unwrap();
+    ///     let uentity = UEntity {
+    ///         name: "default.entity".to_string(),
+    ///         id: Some(u32::from(rand::random::<u16>())),
+    ///         version_major: Some(1),
+    ///         version_minor: None,
+    ///         ..Default::default()
+    ///     };
+    ///     let upclient = UPClientZenoh::new_with_uuri(Config::default(), uauthority, uentity).await.unwrap();
     /// # });
     /// ```
     pub async fn new_with_uuri(
         config: Config,
-        source_uuri: UUri,
+        uauthority: UAuthority,
+        uentity: UEntity,
     ) -> Result<UPClientZenoh, UStatus> {
         let Ok(session) = zenoh::open(config).res().await else {
             let msg = "Unable to open Zenoh session".to_string();
             log::error!("{msg}");
             return Err(UStatus::fail_with_code(UCode::INTERNAL, msg));
+        };
+        let source_uuri = UUri {
+            authority: Some(uauthority).into(),
+            entity: Some(uentity).into(),
+            ..Default::default()
         };
         Ok(UPClientZenoh {
             session: Arc::new(session),
@@ -149,7 +157,6 @@ impl UPClientZenoh {
     ///     use zenoh::config::Config;
     ///     let upclient = UPClientZenoh::new(Config::default()).await.unwrap();
     ///     let uuri = upclient.get_response_uuri();
-    ///     assert!(uuri.authority.is_none());
     ///     assert!(UriValidator::is_rpc_response(&uuri));
     ///     assert_eq!(uuri.entity.unwrap().name, "default.entity");
     /// # });
