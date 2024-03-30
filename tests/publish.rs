@@ -103,7 +103,6 @@ async fn test_notification_and_subscribe() {
         .unwrap();
 
     // Send UMessage
-    // TODO: up_rust has bugs while creating UMessageBuilder::notification
     let umessage = UMessageBuilder::notification(src_uuri.clone(), dst_uuri.clone())
         .with_message_id(UUIDBuilder::new().build())
         .build_with_payload(
@@ -117,8 +116,9 @@ async fn test_notification_and_subscribe() {
     task::sleep(time::Duration::from_millis(1000)).await;
 
     // Compare the result
-    // TODO: Need to fix up_rust first
-    //assert_eq!(*verified_data.lock().unwrap(), target_data);
+    // TODO: Wait for up-rust to update
+    // https://github.com/eclipse-uprotocol/up-rust/pull/75
+    assert_eq!(*verified_data.lock().unwrap(), target_data);
 
     // Cleanup
     upclient

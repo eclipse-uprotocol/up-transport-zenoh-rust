@@ -475,11 +475,11 @@ impl UTransport for UPClientZenoh {
                 self.send_publish(&zenoh_key, payload, attributes).await
             }
             UMessageType::UMESSAGE_TYPE_NOTIFICATION => {
-                UAttributesValidators::Publish
+                UAttributesValidators::Notification
                     .validator()
                     .validate(&attributes)
                     .map_err(|e| {
-                        let msg = format!("Wrong Publish UAttributes: {e:?}");
+                        let msg = format!("Wrong Notification UAttributes: {e:?}");
                         log::error!("{msg}");
                         UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
                     })?;
