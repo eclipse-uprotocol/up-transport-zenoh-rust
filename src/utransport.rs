@@ -189,7 +189,6 @@ impl UPClientZenoh {
 
     async fn send_response(
         &self,
-        zenoh_key: &str,
         payload: UPayload,
         attributes: UAttributes,
     ) -> Result<(), UStatus> {
@@ -227,14 +226,7 @@ impl UPClientZenoh {
             KnownEncoding::AppCustom,
             payload.format.value().to_string().into(),
         ));
-        let reply = Ok(Sample::new(
-            KeyExpr::new(zenoh_key.to_string()).map_err(|e| {
-                let msg = format!("Unable to create Zenoh key: {e:?}");
-                log::error!("{msg}");
-                UStatus::fail_with_code(UCode::INTERNAL, msg)
-            })?,
-            value,
-        ));
+        let reply = Ok(Sample::new(query.key_expr().clone(), value));
         query
             .reply(reply)
             .with_attachment(attachment.build())
@@ -515,11 +507,8 @@ impl UTransport for UPClientZenoh {
                         log::error!("{msg}");
                         UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
                     })?;
-                // Get Zenoh key
-                let topic = attributes.clone().source;
-                let zenoh_key = UPClientZenoh::to_zenoh_key_string(&topic)?;
                 // Send Response
-                self.send_response(&zenoh_key, payload, attributes).await
+                self.send_response(payload, attributes).await
             }
             UMessageType::UMESSAGE_TYPE_UNSPECIFIED => {
                 let msg = "Wrong Message type in UAttributes".to_string();
