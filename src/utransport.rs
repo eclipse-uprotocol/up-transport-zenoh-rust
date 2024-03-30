@@ -254,7 +254,7 @@ impl UPClientZenoh {
         Ok(())
     }
 
-    async fn register_publish_listener(
+    async fn register_publish_notification_listener(
         &self,
         topic: &UUri,
         listener: Arc<UtransportListener>,
@@ -542,7 +542,7 @@ impl UTransport for UPClientZenoh {
     ) -> Result<String, UStatus> {
         let listener = Arc::new(listener);
         if topic.authority.is_some() && topic.entity.is_none() && topic.resource.is_none() {
-            // This is special UUri which means we need to register for all of Publish, Request, and Response
+            // This is special UUri which means we need to register for all of Publish, Notification, Request, and Response
             // RPC response
             let mut listener_str = self.register_response_listener(&topic, listener.clone())?;
             // RPC request
@@ -550,10 +550,10 @@ impl UTransport for UPClientZenoh {
             listener_str += &self
                 .register_request_listener(&topic, listener.clone())
                 .await?;
-            // Normal publish
+            // Publish & Notification
             listener_str += "&";
             listener_str += &self
-                .register_publish_listener(&topic, listener.clone())
+                .register_publish_notification_listener(&topic, listener.clone())
                 .await?;
             Ok(listener_str)
         } else {
@@ -569,8 +569,8 @@ impl UTransport for UPClientZenoh {
                 self.register_request_listener(&topic, listener.clone())
                     .await
             } else {
-                // Normal publish
-                self.register_publish_listener(&topic, listener.clone())
+                // Publish & Notification
+                self.register_publish_notification_listener(&topic, listener.clone())
                     .await
             }
         }
