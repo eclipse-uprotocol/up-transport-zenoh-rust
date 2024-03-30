@@ -49,7 +49,7 @@ pub struct UPClientZenoh {
     // Used to identify different callback
     callback_counter: AtomicU64,
     // Source UUri in RPC
-    uuri: UUri,
+    source_uuri: UUri,
 }
 
 impl UPClientZenoh {
@@ -92,7 +92,7 @@ impl UPClientZenoh {
     /// # Arguments
     ///
     /// * `config` - Zenoh configuration. You can refer to [here](https://github.com/eclipse-zenoh/zenoh/blob/0.10.1-rc/DEFAULT_CONFIG.json5) for more configuration details.
-    /// * `uuri` - The `UUri` which is put in source while sending RPC request.
+    /// * `source_uuri` - The `UUri` which is put in source while sending RPC request.
     ///
     /// # Errors
     /// Will return `Err` if unable to create `UPClientZenoh`
@@ -118,7 +118,10 @@ impl UPClientZenoh {
     ///     let upclient = UPClientZenoh::new_with_uuri(Config::default(), uuri).await.unwrap();
     /// # });
     /// ```
-    pub async fn new_with_uuri(config: Config, uuri: UUri) -> Result<UPClientZenoh, UStatus> {
+    pub async fn new_with_uuri(
+        config: Config,
+        source_uuri: UUri,
+    ) -> Result<UPClientZenoh, UStatus> {
         let Ok(session) = zenoh::open(config).res().await else {
             let msg = "Unable to open Zenoh session".to_string();
             log::error!("{msg}");
@@ -131,7 +134,7 @@ impl UPClientZenoh {
             query_map: Arc::new(Mutex::new(HashMap::new())),
             rpc_callback_map: Arc::new(Mutex::new(HashMap::new())),
             callback_counter: AtomicU64::new(0),
-            uuri,
+            source_uuri,
         })
     }
 
@@ -152,7 +155,7 @@ impl UPClientZenoh {
     /// # });
     /// ```
     pub fn get_response_uuri(&self) -> UUri {
-        let mut source = self.uuri.clone();
+        let mut source = self.source_uuri.clone();
         source.resource = Some(UResourceBuilder::for_rpc_response()).into();
         source
     }
