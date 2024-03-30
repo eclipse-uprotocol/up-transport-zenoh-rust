@@ -15,20 +15,18 @@ pub mod test_lib;
 
 use async_std::task::{self, block_on};
 use std::{sync::Arc, time};
-use up_client_zenoh::UPClientZenoh;
 use up_rust::{
     CallOptions, Data, RpcClient, UMessage, UMessageBuilder, UPayload, UPayloadFormat, UStatus,
     UTransport, UUIDBuilder,
 };
-use zenoh::config::Config;
 
 #[async_std::test]
 async fn test_rpc_server_client() {
     test_lib::before_test();
 
     // Initialization
-    let upclient_client = UPClientZenoh::new(Config::default()).await.unwrap();
-    let upclient_server = Arc::new(UPClientZenoh::new(Config::default()).await.unwrap());
+    let upclient_client = test_lib::create_up_client_zenoh().await.unwrap();
+    let upclient_server = Arc::new(test_lib::create_up_client_zenoh().await.unwrap());
     let request_data = String::from("This is the request data");
     let response_data = String::from("This is the response data");
     let dst_uuri = test_lib::create_rpcserver_uuri();

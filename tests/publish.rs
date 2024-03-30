@@ -18,9 +18,7 @@ use std::{
     sync::{Arc, Mutex},
     time,
 };
-use up_client_zenoh::UPClientZenoh;
 use up_rust::{Data, UMessage, UMessageBuilder, UPayloadFormat, UStatus, UTransport, UUIDBuilder};
-use zenoh::config::Config;
 
 #[async_std::test]
 async fn test_publish_and_subscribe() {
@@ -28,7 +26,7 @@ async fn test_publish_and_subscribe() {
 
     // Initialization
     let target_data = String::from("Hello World!");
-    let upclient = UPClientZenoh::new(Config::default()).await.unwrap();
+    let upclient = test_lib::create_up_client_zenoh().await.unwrap();
     let uuri = test_lib::create_utransport_uuri(0);
     let verified_data = Arc::new(Mutex::new(String::new()));
 
@@ -79,7 +77,7 @@ async fn test_notification_and_subscribe() {
 
     // Initialization
     let target_data = String::from("Hello World!");
-    let upclient = UPClientZenoh::new(Config::default()).await.unwrap();
+    let upclient = test_lib::create_up_client_zenoh().await.unwrap();
     let src_uuri = test_lib::create_utransport_uuri(0);
     let dst_uuri = test_lib::create_utransport_uuri(1);
     let verified_data = Arc::new(Mutex::new(String::new()));

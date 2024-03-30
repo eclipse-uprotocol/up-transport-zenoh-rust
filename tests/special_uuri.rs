@@ -15,21 +15,19 @@ pub mod test_lib;
 
 use async_std::task::{self, block_on};
 use std::{sync::Arc, time};
-use up_client_zenoh::UPClientZenoh;
 use up_rust::{
     CallOptions, Data, RpcClient, UMessage, UMessageBuilder, UMessageType, UPayload,
     UPayloadFormat, UStatus, UTransport, UUIDBuilder,
 };
-use zenoh::config::Config;
 
 #[async_std::test]
 async fn test_register_listener_with_special_uuri() {
     test_lib::before_test();
 
     // Initialization
-    let upclient1 = Arc::new(UPClientZenoh::new(Config::default()).await.unwrap());
+    let upclient1 = Arc::new(test_lib::create_up_client_zenoh().await.unwrap());
     let upclient1_clone = upclient1.clone();
-    let upclient2 = UPClientZenoh::new(Config::default()).await.unwrap();
+    let upclient2 = test_lib::create_up_client_zenoh().await.unwrap();
     let publish_data = String::from("Hello World!");
     let request_data = String::from("This is the request data");
     let response_data = String::from("This is the request data");

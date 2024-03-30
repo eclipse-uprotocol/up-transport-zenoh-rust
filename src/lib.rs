@@ -20,8 +20,8 @@ use std::{
     sync::{atomic::AtomicU64, Arc, Mutex},
 };
 use up_rust::{
-    Number, UAttributes, UAuthority, UCode, UEntity, UMessage, UPayloadFormat, UPriority,
-    UResourceBuilder, UStatus, UUri,
+    UAttributes, UAuthority, UCode, UEntity, UMessage, UPayloadFormat, UPriority, UResourceBuilder,
+    UStatus, UUri,
 };
 use zenoh::{
     config::Config,
@@ -53,47 +53,13 @@ pub struct UPClientZenoh {
 }
 
 impl UPClientZenoh {
-    /// Create `UPClientZenoh` by applying the Zenoh configuration.
-    /// The `UUri` will be generated randomly.
+    /// Create `UPClientZenoh` by applying the Zenoh configuration, `UAuthority`, and `UEntity`.
     ///
     /// # Arguments
     ///
     /// * `config` - Zenoh configuration. You can refer to [here](https://github.com/eclipse-zenoh/zenoh/blob/0.10.1-rc/DEFAULT_CONFIG.json5) for more configuration details.
-    ///
-    /// # Errors
-    /// Will return `Err` if unable to create `UPClientZenoh`
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # async_std::task::block_on(async {
-    ///     use up_client_zenoh::UPClientZenoh;
-    ///     use zenoh::config::Config;
-    ///     let upclient = UPClientZenoh::new(Config::default()).await.unwrap();
-    /// # });
-    /// ```
-    pub async fn new(config: Config) -> Result<UPClientZenoh, UStatus> {
-        let uauthority = UAuthority {
-            name: Some("MyAuthName".to_string()),
-            number: Some(Number::Id(vec![1, 2, 3, 4])),
-            ..Default::default()
-        };
-        let uentity = UEntity {
-            name: "default.entity".to_string(),
-            id: Some(u32::from(rand::random::<u16>())),
-            version_major: Some(1),
-            version_minor: None,
-            ..Default::default()
-        };
-        UPClientZenoh::new_with_uuri(config, uauthority, uentity).await
-    }
-
-    /// Create `UPClientZenoh` by applying the Zenoh configuration and self-defined `UUri`.
-    ///
-    /// # Arguments
-    ///
-    /// * `config` - Zenoh configuration. You can refer to [here](https://github.com/eclipse-zenoh/zenoh/blob/0.10.1-rc/DEFAULT_CONFIG.json5) for more configuration details.
-    /// * `source_uuri` - The `UUri` which is put in source while sending RPC request.
+    /// * `uauthority` - The `UAuthority` which is put into source address while generating messages.
+    /// * `uentity` - The `UEntity` which is put into source address while generating messages.
     ///
     /// # Errors
     /// Will return `Err` if unable to create `UPClientZenoh`
@@ -117,10 +83,10 @@ impl UPClientZenoh {
     ///         version_minor: None,
     ///         ..Default::default()
     ///     };
-    ///     let upclient = UPClientZenoh::new_with_uuri(Config::default(), uauthority, uentity).await.unwrap();
+    ///     let upclient = UPClientZenoh::new(Config::default(), uauthority, uentity).await.unwrap();
     /// # });
     /// ```
-    pub async fn new_with_uuri(
+    pub async fn new(
         config: Config,
         uauthority: UAuthority,
         uentity: UEntity,
@@ -153,11 +119,24 @@ impl UPClientZenoh {
     /// ```
     /// # async_std::task::block_on(async {
     ///     use up_client_zenoh::UPClientZenoh;
-    ///     use up_rust::{UUri, UriValidator};
+    ///     use up_rust::{Number, UAuthority, UEntity, UriValidator, UUri};
     ///     use zenoh::config::Config;
-    ///     let upclient = UPClientZenoh::new(Config::default()).await.unwrap();
+    ///     let uauthority = UAuthority {
+    ///         name: Some("MyAuthName".to_string()),
+    ///         number: Some(Number::Id(vec![1, 2, 3, 4])),
+    ///         ..Default::default()
+    ///     };
+    ///     let uentity = UEntity {
+    ///         name: "default.entity".to_string(),
+    ///         id: Some(u32::from(rand::random::<u16>())),
+    ///         version_major: Some(1),
+    ///         version_minor: None,
+    ///         ..Default::default()
+    ///     };
+    ///     let upclient = UPClientZenoh::new(Config::default(), uauthority, uentity).await.unwrap();
     ///     let uuri = upclient.get_response_uuri();
     ///     assert!(UriValidator::is_rpc_response(&uuri));
+    ///     assert_eq!(uuri.authority.unwrap().name.unwrap(), "MyAuthName");
     ///     assert_eq!(uuri.entity.unwrap().name, "default.entity");
     /// # });
     /// ```

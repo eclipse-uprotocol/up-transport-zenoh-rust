@@ -12,12 +12,32 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::sync::Once;
-use up_rust::{Number, UAuthority, UEntity, UResource, UResourceBuilder, UUri};
+use up_client_zenoh::UPClientZenoh;
+use up_rust::{Number, UAuthority, UEntity, UResource, UResourceBuilder, UStatus, UUri};
+use zenoh::config::Config;
 
 static INIT: Once = Once::new();
 
 pub fn before_test() {
     INIT.call_once(env_logger::init);
+}
+
+/// # Errors
+/// Will return `Err` if unable to create `UPClientZenoh`
+pub async fn create_up_client_zenoh() -> Result<UPClientZenoh, UStatus> {
+    let uauthority = UAuthority {
+        name: Some("MyAuthName".to_string()),
+        number: Some(Number::Id(vec![1, 2, 3, 4])),
+        ..Default::default()
+    };
+    let uentity = UEntity {
+        name: "default.entity".to_string(),
+        id: Some(u32::from(rand::random::<u16>())),
+        version_major: Some(1),
+        version_minor: None,
+        ..Default::default()
+    };
+    UPClientZenoh::new(Config::default(), uauthority, uentity).await
 }
 
 #[allow(clippy::must_use_candidate)]

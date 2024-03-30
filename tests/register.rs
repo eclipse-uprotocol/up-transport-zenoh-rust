@@ -13,16 +13,14 @@
 //
 pub mod test_lib;
 
-use up_client_zenoh::UPClientZenoh;
 use up_rust::{UCode, UStatus, UTransport};
-use zenoh::config::Config;
 
 #[async_std::test]
 async fn test_utransport_register_and_unregister() {
     test_lib::before_test();
 
     // Initialization
-    let upclient = UPClientZenoh::new(Config::default()).await.unwrap();
+    let upclient = test_lib::create_up_client_zenoh().await.unwrap();
     let uuri = test_lib::create_utransport_uuri(0);
 
     // Compare the return string
@@ -56,7 +54,7 @@ async fn test_rpcserver_register_and_unregister() {
     test_lib::before_test();
 
     // Initialization
-    let upclient = UPClientZenoh::new(Config::default()).await.unwrap();
+    let upclient = test_lib::create_up_client_zenoh().await.unwrap();
     let uuri = test_lib::create_rpcserver_uuri();
 
     // Compare the return string
@@ -90,7 +88,7 @@ async fn test_utransport_special_uuri_register_and_unregister() {
     test_lib::before_test();
 
     // Initialization
-    let upclient = UPClientZenoh::new(Config::default()).await.unwrap();
+    let upclient = test_lib::create_up_client_zenoh().await.unwrap();
     let uuri = test_lib::create_special_uuri();
 
     // Compare the return string
