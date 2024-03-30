@@ -475,14 +475,16 @@ impl UTransport for UPClientZenoh {
                 self.send_publish(&zenoh_key, payload, attributes).await
             }
             UMessageType::UMESSAGE_TYPE_NOTIFICATION => {
-                UAttributesValidators::Notification
-                    .validator()
-                    .validate(&attributes)
-                    .map_err(|e| {
-                        let msg = format!("Wrong Notification UAttributes: {e:?}");
-                        log::error!("{msg}");
-                        UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
-                    })?;
+                // TODO: Wait for up-rust to update
+                // https://github.com/eclipse-uprotocol/up-rust/pull/75
+                //UAttributesValidators::Notification
+                //    .validator()
+                //    .validate(&attributes)
+                //    .map_err(|e| {
+                //        let msg = format!("Wrong Notification UAttributes: {e:?}");
+                //        log::error!("{msg}");
+                //        UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
+                //    })?;
                 // Get Zenoh key: Notification => topic is sink
                 let topic = attributes.clone().sink;
                 let zenoh_key = UPClientZenoh::to_zenoh_key_string(&topic)?;
