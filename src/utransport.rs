@@ -28,7 +28,7 @@ use zenoh::{
 };
 
 impl UPClientZenoh {
-    async fn send_publish(
+    async fn send_publish_notification(
         &self,
         zenoh_key: &str,
         payload: UPayload,
@@ -460,28 +460,28 @@ impl UTransport for UPClientZenoh {
                         log::error!("{msg}");
                         UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
                     })?;
-                // Get Zenoh key: Publication => topic is source
+                // Get Zenoh key: Publication => source is Zenoh key
                 let topic = attributes.clone().source;
                 let zenoh_key = UPClientZenoh::to_zenoh_key_string(&topic)?;
                 // Send Publish
-                self.send_publish(&zenoh_key, payload, attributes).await
+                self.send_publish_notification(&zenoh_key, payload, attributes)
+                    .await
             }
             UMessageType::UMESSAGE_TYPE_NOTIFICATION => {
-                // TODO: Wait for up-rust to update
-                // https://github.com/eclipse-uprotocol/up-rust/pull/75
-                //UAttributesValidators::Notification
-                //    .validator()
-                //    .validate(&attributes)
-                //    .map_err(|e| {
-                //        let msg = format!("Wrong Notification UAttributes: {e:?}");
-                //        log::error!("{msg}");
-                //        UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
-                //    })?;
-                // Get Zenoh key: Notification => topic is sink
+                UAttributesValidators::Notification
+                    .validator()
+                    .validate(&attributes)
+                    .map_err(|e| {
+                        let msg = format!("Wrong Notification UAttributes: {e:?}");
+                        log::error!("{msg}");
+                        UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
+                    })?;
+                // Get Zenoh key: Notification => sink is Zenoh key
                 let topic = attributes.clone().sink;
                 let zenoh_key = UPClientZenoh::to_zenoh_key_string(&topic)?;
                 // Send Publish
-                self.send_publish(&zenoh_key, payload, attributes).await
+                self.send_publish_notification(&zenoh_key, payload, attributes)
+                    .await
             }
             UMessageType::UMESSAGE_TYPE_REQUEST => {
                 UAttributesValidators::Request
@@ -492,7 +492,7 @@ impl UTransport for UPClientZenoh {
                         log::error!("{msg}");
                         UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
                     })?;
-                // Get Zenoh key
+                // Get Zenoh key: Request => sink is Zenoh key
                 let topic = attributes.clone().sink;
                 let zenoh_key = UPClientZenoh::to_zenoh_key_string(&topic)?;
                 // Send Request
