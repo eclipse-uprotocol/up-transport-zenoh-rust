@@ -91,6 +91,16 @@ impl UPClientZenoh {
         uauthority: UAuthority,
         uentity: UEntity,
     ) -> Result<UPClientZenoh, UStatus> {
+        uauthority.validate_micro_form().map_err(|e| {
+            let msg = format!("UAuthority is invalid: {e:?}");
+            log::error!("{msg}");
+            UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
+        })?;
+        uentity.validate_micro_form().map_err(|e| {
+            let msg = format!("UEntity is invalid: {e:?}");
+            log::error!("{msg}");
+            UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
+        })?;
         let Ok(session) = zenoh::open(config).res().await else {
             let msg = "Unable to open Zenoh session".to_string();
             log::error!("{msg}");
@@ -255,7 +265,24 @@ impl UPClientZenoh {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_std::task::block_on;
+    use test_case::test_case;
     use up_rust::{Number, UAuthority, UEntity, UResource, UUri};
+
+    fn invalid_entity() -> UEntity {
+        UEntity {
+            name: "default.entity".to_string(),
+            ..Default::default()
+        }
+    }
+
+    #[test_case(valid_authority(), valid_entity(), true; "succeeds with both valid authority and entity")]
+    #[test_case(invalid_authority(), valid_entity(), false; "fails for invalid authority")]
+    #[test_case(valid_authority(), invalid_entity(), false; "fails for invalid entity")]
+    fn test_new_up_client_zenoh(authority: UAuthority, entity: UEntity, expected_result: bool) {
+        let up_client_zenoh = block_on(UPClientZenoh::new(Config::default(), authority, entity));
+        assert_eq!(up_client_zenoh.is_ok(), expected_result);
+    }
 
     #[test]
     fn test_to_zenoh_key_string() {
@@ -296,5 +323,30 @@ mod tests {
             UPClientZenoh::to_zenoh_key_string(&uuri).unwrap(),
             String::from("upr/060102030a0b0c/**")
         );
+    }
+
+    fn valid_authority() -> UAuthority {
+        UAuthority {
+            name: Some("UAuthName".to_string()),
+            number: Some(Number::Id(vec![1, 2, 3, 10, 11, 12])),
+            ..Default::default()
+        }
+    }
+
+    fn invalid_authority() -> UAuthority {
+        UAuthority {
+            name: Some("UAuthName".to_string()),
+            ..Default::default()
+        }
+    }
+
+    fn valid_entity() -> UEntity {
+        UEntity {
+            name: "default.entity".to_string(),
+            id: Some(u32::from(rand::random::<u16>())),
+            version_major: Some(1),
+            version_minor: None,
+            ..Default::default()
+        }
     }
 }
