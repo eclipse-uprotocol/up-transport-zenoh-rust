@@ -105,8 +105,8 @@ pub fn create_rpcserver_uuri() -> UUri {
 #[allow(clippy::must_use_candidate)]
 pub fn create_authority() -> UAuthority {
     UAuthority {
-        name: Some("UAuthName".to_string()),
-        number: Some(Number::Id(vec![1, 2, 3, 10, 11, 12])),
+        name: Some("MyAuthName".to_string()),
+        number: Some(Number::Id(vec![1, 2, 3, 4])),
         ..Default::default()
     }
 }

@@ -44,7 +44,7 @@ impl RpcClient for UPClientZenoh {
 
         // Create UAttributes and put into Zenoh user attachment
         let uattributes = UAttributes::request(
-            UUIDBuilder::new().build(),
+            UUIDBuilder::build(),
             topic,
             self.get_response_uuri(),
             options.clone(),

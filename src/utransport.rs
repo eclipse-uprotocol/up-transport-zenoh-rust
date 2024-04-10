@@ -11,15 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{UPClientZenoh, UtransportListener};
+use crate::UPClientZenoh;
+use async_std::task::block_on;
 use async_trait::async_trait;
-use std::{
-    sync::{atomic::Ordering, Arc},
-    time::Duration,
-};
+use std::{sync::Arc, time::Duration};
 use up_rust::{
-    Data, UAttributes, UAttributesValidators, UCode, UMessage, UMessageType, UPayload,
-    UPayloadFormat, UStatus, UTransport, UUri, UriValidator,
+    ComparableListener, Data, UAttributes, UAttributesValidators, UCode, UListener, UMessage,
+    UMessageType, UPayload, UPayloadFormat, UStatus, UTransport, UUri, UriValidator,
 };
 use zenoh::{
     prelude::{r#async::*, Sample},
@@ -75,6 +73,8 @@ impl UPClientZenoh {
         Ok(())
     }
 
+    // TODO: Might need some refactors
+    #[allow(clippy::too_many_lines)]
     async fn send_request(
         &self,
         zenoh_key: &str,
@@ -102,12 +102,11 @@ impl UPClientZenoh {
             log::error!("{msg}");
             UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
         })?;
-        let hashmap_key = UPClientZenoh::to_zenoh_key_string(&source_uuri)?;
         let resp_callback = self
             .rpc_callback_map
             .lock()
             .unwrap()
-            .get(&hashmap_key)
+            .get(&source_uuri)
             .ok_or_else(|| {
                 let msg = "Unable to get callback".to_string();
                 log::error!("{msg}");
@@ -115,20 +114,24 @@ impl UPClientZenoh {
             })?
             .clone();
         let zenoh_callback = move |reply: Reply| {
-            let msg = match reply.sample {
+            match reply.sample {
                 Ok(sample) => {
                     // Get the encoding of UPayload
                     let Some(encoding) = UPClientZenoh::to_upayload_format(&sample.encoding) else {
                         let msg = "Unable to get the encoding".to_string();
                         log::error!("{msg}");
-                        resp_callback(Err(UStatus::fail_with_code(UCode::INTERNAL, msg)));
+                        block_on(
+                            resp_callback.on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)),
+                        );
                         return;
                     };
                     // Get UAttribute from the attachment
                     let Some(attachment) = sample.attachment() else {
                         let msg = "Unable to get the attachment".to_string();
                         log::error!("{msg}");
-                        resp_callback(Err(UStatus::fail_with_code(UCode::INTERNAL, msg)));
+                        block_on(
+                            resp_callback.on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)),
+                        );
                         return;
                     };
                     let u_attribute = match UPClientZenoh::attachment_to_uattributes(attachment) {
@@ -137,30 +140,34 @@ impl UPClientZenoh {
                             let msg =
                                 format!("Unable to transform attachment to UAttributes: {e:?}");
                             log::error!("{msg}");
-                            resp_callback(Err(UStatus::fail_with_code(UCode::INTERNAL, msg)));
+                            block_on(
+                                resp_callback
+                                    .on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)),
+                            );
                             return;
                         }
                     };
                     // Create UMessage
-                    Ok(UMessage {
-                        attributes: Some(u_attribute).into(),
-                        payload: Some(UPayload {
-                            length: Some(0),
-                            format: encoding.into(),
-                            data: Some(Data::Value(sample.payload.contiguous().to_vec())),
+                    block_on(
+                        resp_callback.on_receive(UMessage {
+                            attributes: Some(u_attribute).into(),
+                            payload: Some(UPayload {
+                                length: Some(0),
+                                format: encoding.into(),
+                                data: Some(Data::Value(sample.payload.contiguous().to_vec())),
+                                ..Default::default()
+                            })
+                            .into(),
                             ..Default::default()
-                        })
-                        .into(),
-                        ..Default::default()
-                    })
+                        }),
+                    );
                 }
                 Err(e) => {
                     let msg = format!("Error while parsing Zenoh reply: {e:?}");
                     log::error!("{msg}");
-                    Err(UStatus::fail_with_code(UCode::INTERNAL, msg))
+                    block_on(resp_callback.on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)));
                 }
-            };
-            resp_callback(msg);
+            }
         };
 
         // Send query
@@ -249,25 +256,19 @@ impl UPClientZenoh {
     async fn register_publish_notification_listener(
         &self,
         topic: &UUri,
-        listener: Arc<UtransportListener>,
-    ) -> Result<String, UStatus> {
+        listener: Arc<dyn UListener>,
+    ) -> Result<(), UStatus> {
         // Get Zenoh key
         let zenoh_key = UPClientZenoh::to_zenoh_key_string(topic)?;
 
-        // Generate listener string for users to delete
-        let hashmap_key = format!(
-            "{}_{:X}",
-            zenoh_key,
-            self.callback_counter.fetch_add(1, Ordering::SeqCst)
-        );
-
         // Setup callback
+        let listener_cloned = listener.clone();
         let callback = move |sample: Sample| {
             // Get the UAttribute from Zenoh user attachment
             let Some(attachment) = sample.attachment() else {
                 let msg = "Unable to get attachment";
                 log::error!("{msg}");
-                listener(Err(UStatus::fail_with_code(UCode::INTERNAL, msg)));
+                block_on(listener_cloned.on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)));
                 return;
             };
             let u_attribute = match UPClientZenoh::attachment_to_uattributes(attachment) {
@@ -275,7 +276,9 @@ impl UPClientZenoh {
                 Err(e) => {
                     let msg = format!("Unable to transform attachment to UAttributes: {e:?}");
                     log::error!("{msg}");
-                    listener(Err(UStatus::fail_with_code(UCode::INTERNAL, msg)));
+                    block_on(
+                        listener_cloned.on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)),
+                    );
                     return;
                 }
             };
@@ -283,7 +286,7 @@ impl UPClientZenoh {
             let Some(encoding) = UPClientZenoh::to_upayload_format(&sample.encoding) else {
                 let msg = "Unable to get payload encoding";
                 log::error!("{msg}");
-                listener(Err(UStatus::fail_with_code(UCode::INTERNAL, msg)));
+                block_on(listener_cloned.on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)));
                 return;
             };
             let u_payload = UPayload {
@@ -298,7 +301,7 @@ impl UPClientZenoh {
                 payload: Some(u_payload).into(),
                 ..Default::default()
             };
-            listener(Ok(msg));
+            block_on(listener_cloned.on_receive(msg));
         };
 
         // Create Zenoh subscriber
@@ -309,42 +312,36 @@ impl UPClientZenoh {
             .res()
             .await
         {
-            self.subscriber_map
-                .lock()
-                .unwrap()
-                .insert(hashmap_key.clone(), subscriber);
+            self.subscriber_map.lock().unwrap().insert(
+                (topic.clone(), ComparableListener::new(listener)),
+                subscriber,
+            );
         } else {
             let msg = "Unable to register callback with Zenoh";
             log::error!("{msg}");
             return Err(UStatus::fail_with_code(UCode::INTERNAL, msg));
         }
 
-        Ok(hashmap_key)
+        Ok(())
     }
 
     async fn register_request_listener(
         &self,
         topic: &UUri,
-        listener: Arc<UtransportListener>,
-    ) -> Result<String, UStatus> {
+        listener: Arc<dyn UListener>,
+    ) -> Result<(), UStatus> {
         // Get Zenoh key
         let zenoh_key = UPClientZenoh::to_zenoh_key_string(topic)?;
 
-        // Generate listener string for users to delete
-        let hashmap_key = format!(
-            "{}_{:X}",
-            zenoh_key,
-            self.callback_counter.fetch_add(1, Ordering::SeqCst)
-        );
-
         // Setup callback
+        let listener_cloned = listener.clone();
         let query_map = self.query_map.clone();
         let callback = move |query: Query| {
             // Create UAttribute from Zenoh user attachment
             let Some(attachment) = query.attachment() else {
                 let msg = "Unable to get attachment".to_string();
                 log::error!("{msg}");
-                listener(Err(UStatus::fail_with_code(UCode::INTERNAL, msg)));
+                block_on(listener_cloned.on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)));
                 return;
             };
             let u_attribute = match UPClientZenoh::attachment_to_uattributes(attachment) {
@@ -352,7 +349,9 @@ impl UPClientZenoh {
                 Err(e) => {
                     let msg = format!("Unable to transform user attachment to UAttributes: {e:?}");
                     log::error!("{msg}");
-                    listener(Err(UStatus::fail_with_code(UCode::INTERNAL, msg)));
+                    block_on(
+                        listener_cloned.on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)),
+                    );
                     return;
                 }
             };
@@ -362,7 +361,9 @@ impl UPClientZenoh {
                     let Some(encoding) = UPClientZenoh::to_upayload_format(&value.encoding) else {
                         let msg = "Unable to get payload encoding".to_string();
                         log::error!("{msg}");
-                        listener(Err(UStatus::fail_with_code(UCode::INTERNAL, msg)));
+                        block_on(
+                            listener_cloned.on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)),
+                        );
                         return;
                     };
                     UPayload {
@@ -389,7 +390,7 @@ impl UPClientZenoh {
                 .lock()
                 .unwrap()
                 .insert(u_attribute.id.to_string(), query);
-            listener(Ok(msg));
+            block_on(listener_cloned.on_receive(msg));
         };
 
         // Create Zenoh queryable
@@ -400,34 +401,25 @@ impl UPClientZenoh {
             .res()
             .await
         {
-            self.queryable_map
-                .lock()
-                .unwrap()
-                .insert(hashmap_key.clone(), queryable);
+            self.queryable_map.lock().unwrap().insert(
+                (topic.clone(), ComparableListener::new(listener)),
+                queryable,
+            );
         } else {
             let msg = "Unable to register callback with Zenoh".to_string();
             log::error!("{msg}");
             return Err(UStatus::fail_with_code(UCode::INTERNAL, msg));
         }
 
-        Ok(hashmap_key)
+        Ok(())
     }
 
-    fn register_response_listener(
-        &self,
-        topic: &UUri,
-        listener: Arc<UtransportListener>,
-    ) -> Result<String, UStatus> {
-        // Get Zenoh key
-        let zenoh_key = UPClientZenoh::to_zenoh_key_string(topic)?;
-
+    fn register_response_listener(&self, topic: &UUri, listener: Arc<dyn UListener>) {
         // Store the response callback (Will be used in send_request)
         self.rpc_callback_map
             .lock()
             .unwrap()
-            .insert(zenoh_key.clone(), listener);
-
-        Ok(zenoh_key)
+            .insert(topic.clone(), listener);
     }
 }
 
@@ -527,24 +519,19 @@ impl UTransport for UPClientZenoh {
     async fn register_listener(
         &self,
         topic: UUri,
-        listener: Box<dyn Fn(Result<UMessage, UStatus>) + Send + Sync + 'static>,
-    ) -> Result<String, UStatus> {
-        let listener = Arc::new(listener);
+        listener: Arc<dyn UListener>,
+    ) -> Result<(), UStatus> {
         if topic.authority.is_some() && topic.entity.is_none() && topic.resource.is_none() {
             // This is special UUri which means we need to register for all of Publish, Notification, Request, and Response
             // RPC response
-            let mut listener_str = self.register_response_listener(&topic, listener.clone())?;
+            self.register_response_listener(&topic, listener.clone());
             // RPC request
-            listener_str += "&";
-            listener_str += &self
-                .register_request_listener(&topic, listener.clone())
+            self.register_request_listener(&topic, listener.clone())
                 .await?;
             // Publish & Notification
-            listener_str += "&";
-            listener_str += &self
-                .register_publish_notification_listener(&topic, listener.clone())
+            self.register_publish_notification_listener(&topic, listener.clone())
                 .await?;
-            Ok(listener_str)
+            Ok(())
         } else {
             // Do the validation
             UriValidator::validate(&topic)
@@ -552,7 +539,8 @@ impl UTransport for UPClientZenoh {
 
             if UriValidator::is_rpc_response(&topic) {
                 // RPC response
-                self.register_response_listener(&topic, listener.clone())
+                self.register_response_listener(&topic, listener.clone());
+                Ok(())
             } else if UriValidator::is_rpc_method(&topic) {
                 // RPC request
                 self.register_request_listener(&topic, listener.clone())
@@ -565,22 +553,20 @@ impl UTransport for UPClientZenoh {
         }
     }
 
-    async fn unregister_listener(&self, topic: UUri, listener: &str) -> Result<(), UStatus> {
-        let mut pub_listener_str: Option<&str> = None;
-        let mut req_listener_str: Option<&str> = None;
-        let mut resp_listener_str: Option<&str> = None;
+    async fn unregister_listener(
+        &self,
+        topic: UUri,
+        listener: Arc<dyn UListener>,
+    ) -> Result<(), UStatus> {
+        let mut remove_pub_listener = false;
+        let mut remove_req_listener = false;
+        let mut remove_resp_listener = false;
 
         if topic.authority.is_some() && topic.entity.is_none() && topic.resource.is_none() {
             // This is special UUri which means we need to unregister all listeners
-            let listener_vec = listener.split('&').collect::<Vec<_>>();
-            if listener_vec.len() != 3 {
-                let msg = "Invalid listener string".to_string();
-                log::error!("{msg}");
-                return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg));
-            }
-            resp_listener_str = Some(listener_vec[0]);
-            req_listener_str = Some(listener_vec[1]);
-            pub_listener_str = Some(listener_vec[2]);
+            remove_pub_listener = true;
+            remove_req_listener = true;
+            remove_resp_listener = true;
         } else {
             // Do the validation
             UriValidator::validate(&topic).map_err(|_| {
@@ -590,20 +576,20 @@ impl UTransport for UPClientZenoh {
             })?;
 
             if UriValidator::is_rpc_response(&topic) {
-                resp_listener_str = Some(listener);
+                remove_resp_listener = true;
             } else if UriValidator::is_rpc_method(&topic) {
-                req_listener_str = Some(listener);
+                remove_req_listener = true;
             } else {
-                pub_listener_str = Some(listener);
+                remove_pub_listener = true;
             }
         }
-        if let Some(listener) = resp_listener_str {
+        if remove_resp_listener {
             // RPC response
             if self
                 .rpc_callback_map
                 .lock()
                 .unwrap()
-                .remove(listener)
+                .remove(&topic)
                 .is_none()
             {
                 let msg = "RPC response callback doesn't exist".to_string();
@@ -611,13 +597,13 @@ impl UTransport for UPClientZenoh {
                 return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg));
             }
         }
-        if let Some(listener) = req_listener_str {
+        if remove_req_listener {
             // RPC request
             if self
                 .queryable_map
                 .lock()
                 .unwrap()
-                .remove(listener)
+                .remove(&(topic.clone(), ComparableListener::new(listener.clone())))
                 .is_none()
             {
                 let msg = "RPC request listener doesn't exist".to_string();
@@ -625,13 +611,13 @@ impl UTransport for UPClientZenoh {
                 return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg));
             }
         }
-        if let Some(listener) = pub_listener_str {
+        if remove_pub_listener {
             // Normal publish
             if self
                 .subscriber_map
                 .lock()
                 .unwrap()
-                .remove(listener)
+                .remove(&(topic.clone(), ComparableListener::new(listener.clone())))
                 .is_none()
             {
                 let msg = "Publish listener doesn't exist".to_string();

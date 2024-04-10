@@ -17,11 +17,11 @@ pub mod utransport;
 use protobuf::{Enum, Message};
 use std::{
     collections::HashMap,
-    sync::{atomic::AtomicU64, Arc, Mutex},
+    sync::{Arc, Mutex},
 };
 use up_rust::{
-    UAttributes, UAuthority, UCode, UEntity, UMessage, UPayloadFormat, UPriority, UResourceBuilder,
-    UStatus, UUri,
+    ComparableListener, UAttributes, UAuthority, UCode, UEntity, UListener, UPayloadFormat,
+    UPriority, UResourceBuilder, UStatus, UUri,
 };
 use zenoh::{
     config::Config,
@@ -31,23 +31,22 @@ use zenoh::{
     subscriber::Subscriber,
 };
 
-pub type UtransportListener = Box<dyn Fn(Result<UMessage, UStatus>) + Send + Sync + 'static>;
-
 const UATTRIBUTE_VERSION: u8 = 1;
 
-pub struct ZenohListener {}
+type SubscriberMap = Arc<Mutex<HashMap<(UUri, ComparableListener), Subscriber<'static, ()>>>>;
+type QueryableMap = Arc<Mutex<HashMap<(UUri, ComparableListener), Queryable<'static, ()>>>>;
+type QueryMap = Arc<Mutex<HashMap<String, Query>>>;
+type RpcCallbackMap = Arc<Mutex<HashMap<UUri, Arc<dyn UListener>>>>;
 pub struct UPClientZenoh {
     session: Arc<Session>,
     // Able to unregister Subscriber
-    subscriber_map: Arc<Mutex<HashMap<String, Subscriber<'static, ()>>>>,
+    subscriber_map: SubscriberMap,
     // Able to unregister Queryable
-    queryable_map: Arc<Mutex<HashMap<String, Queryable<'static, ()>>>>,
+    queryable_map: QueryableMap,
     // Save the reqid to be able to send back response
-    query_map: Arc<Mutex<HashMap<String, Query>>>,
+    query_map: QueryMap,
     // Save the callback for RPC response
-    rpc_callback_map: Arc<Mutex<HashMap<String, Arc<UtransportListener>>>>,
-    // Used to identify different callback
-    callback_counter: AtomicU64,
+    rpc_callback_map: RpcCallbackMap,
     // Source UUri in RPC
     source_uuri: UUri,
 }
@@ -117,7 +116,6 @@ impl UPClientZenoh {
             queryable_map: Arc::new(Mutex::new(HashMap::new())),
             query_map: Arc::new(Mutex::new(HashMap::new())),
             rpc_callback_map: Arc::new(Mutex::new(HashMap::new())),
-            callback_counter: AtomicU64::new(0),
             source_uuri,
         })
     }
