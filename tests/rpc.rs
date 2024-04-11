@@ -19,10 +19,11 @@ use std::{
     sync::{Arc, Mutex},
     time,
 };
+use test_case::test_case;
 use up_client_zenoh::UPClientZenoh;
 use up_rust::{
     CallOptions, Data, RpcClient, UListener, UMessage, UMessageBuilder, UPayload, UPayloadFormat,
-    UStatus, UTransport, UUIDBuilder,
+    UStatus, UTransport, UUIDBuilder, UUri,
 };
 
 struct RequestListener {
@@ -95,21 +96,21 @@ impl UListener for ResponseListener {
         }
     }
     async fn on_error(&self, _err: UStatus) {
-        // TODO: Check why we also receive timeout after receiving correct data
         //panic!("Internal Error: {err:?}");
     }
 }
 
+#[test_case(test_lib::create_rpcserver_uuri(Some(1), 1), test_lib::create_rpcserver_uuri(Some(1), 1); "Normal RPC UUri")]
+#[test_case(test_lib::create_rpcserver_uuri(Some(1), 1), test_lib::create_special_uuri(1); "Special listen UUri")]
 #[async_std::test]
-async fn test_rpc_server_client() {
+async fn test_rpc_server_client(dst_uuri: UUri, listen_uuri: UUri) {
     test_lib::before_test();
 
     // Initialization
-    let upclient_client = test_lib::create_up_client_zenoh().await.unwrap();
-    let upclient_server = Arc::new(test_lib::create_up_client_zenoh().await.unwrap());
+    let upclient_client = test_lib::create_up_client_zenoh(0, 0).await.unwrap();
+    let upclient_server = Arc::new(test_lib::create_up_client_zenoh(1, 1).await.unwrap());
     let request_data = String::from("This is the request data");
     let response_data = String::from("This is the response data");
-    let dst_uuri = test_lib::create_rpcserver_uuri();
 
     // Setup RpcServer callback
     let request_listener = Arc::new(RequestListener::new(
@@ -118,10 +119,9 @@ async fn test_rpc_server_client() {
         response_data.clone(),
     ));
     upclient_server
-        .register_listener(dst_uuri.clone(), request_listener.clone())
+        .register_listener(listen_uuri.clone(), request_listener.clone())
         .await
         .unwrap();
-
     // Need some time for queryable to run
     task::sleep(time::Duration::from_millis(1000)).await;
 
@@ -163,7 +163,7 @@ async fn test_rpc_server_client() {
             .unwrap();
 
         // Send request
-        let umessage = UMessageBuilder::request(dst_uuri.clone(), response_uuri.clone(), 2000)
+        let umessage = UMessageBuilder::request(dst_uuri.clone(), response_uuri.clone(), 1000)
             .with_message_id(UUIDBuilder::build())
             .build_with_payload(
                 request_data.as_bytes().to_vec().into(),
@@ -187,7 +187,7 @@ async fn test_rpc_server_client() {
 
     // Cleanup
     upclient_server
-        .unregister_listener(dst_uuri.clone(), request_listener.clone())
+        .unregister_listener(listen_uuri.clone(), request_listener.clone())
         .await
         .unwrap();
 }

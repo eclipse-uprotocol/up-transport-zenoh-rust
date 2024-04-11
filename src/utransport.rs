@@ -73,8 +73,6 @@ impl UPClientZenoh {
         Ok(())
     }
 
-    // TODO: Might need some refactors
-    #[allow(clippy::too_many_lines)]
     async fn send_request(
         &self,
         zenoh_key: &str,
@@ -137,8 +135,7 @@ impl UPClientZenoh {
                     let u_attribute = match UPClientZenoh::attachment_to_uattributes(attachment) {
                         Ok(uattr) => uattr,
                         Err(e) => {
-                            let msg =
-                                format!("Unable to transform attachment to UAttributes: {e:?}");
+                            let msg = format!("Transform attachment to UAttributes failed: {e:?}");
                             log::error!("{msg}");
                             block_on(
                                 resp_callback

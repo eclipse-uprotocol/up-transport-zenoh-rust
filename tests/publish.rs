@@ -19,8 +19,10 @@ use std::{
     sync::{Arc, Mutex},
     time,
 };
+use test_case::test_case;
 use up_rust::{
     Data, UListener, UMessage, UMessageBuilder, UPayloadFormat, UStatus, UTransport, UUIDBuilder,
+    UUri,
 };
 
 struct PublishNotificationListener {
@@ -51,31 +53,35 @@ impl UListener for PublishNotificationListener {
     }
 }
 
+#[test_case(test_lib::create_utransport_uuri(Some(0), 0, 0), test_lib::create_utransport_uuri(Some(0), 0, 0); "Normal UUri")]
+#[test_case(test_lib::create_utransport_uuri(Some(0), 0, 0), test_lib::create_special_uuri(0); "Special UUri")]
 #[async_std::test]
-async fn test_publish_and_subscribe() {
+async fn test_publish_and_subscribe(origin_uuri: UUri, dst_uuri: UUri) {
     test_lib::before_test();
 
     // Initialization
     let target_data = String::from("Hello World!");
-    let upclient = test_lib::create_up_client_zenoh().await.unwrap();
-    let uuri = test_lib::create_utransport_uuri(0);
+    let upclient_send = test_lib::create_up_client_zenoh(0, 0).await.unwrap();
+    let upclient_recv = test_lib::create_up_client_zenoh(1, 1).await.unwrap();
 
     // Register the listener
     let pub_listener = Arc::new(PublishNotificationListener::new());
-    upclient
-        .register_listener(uuri.clone(), pub_listener.clone())
+    upclient_recv
+        .register_listener(dst_uuri.clone(), pub_listener.clone())
         .await
         .unwrap();
+    // Waiting for listener to take effect
+    task::sleep(time::Duration::from_millis(1000)).await;
 
     // Send UMessage
-    let umessage = UMessageBuilder::publish(uuri.clone())
+    let umessage = UMessageBuilder::publish(origin_uuri.clone())
         .with_message_id(UUIDBuilder::build())
         .build_with_payload(
             target_data.as_bytes().to_vec().into(),
             UPayloadFormat::UPAYLOAD_FORMAT_TEXT,
         )
         .unwrap();
-    upclient.send(umessage).await.unwrap();
+    upclient_send.send(umessage).await.unwrap();
 
     // Waiting for the subscriber to receive data
     task::sleep(time::Duration::from_millis(1000)).await;
@@ -84,38 +90,41 @@ async fn test_publish_and_subscribe() {
     assert_eq!(pub_listener.get_recv_data(), target_data);
 
     // Cleanup
-    upclient
-        .unregister_listener(uuri.clone(), pub_listener)
+    upclient_recv
+        .unregister_listener(dst_uuri.clone(), pub_listener)
         .await
         .unwrap();
 }
 
+#[test_case(test_lib::create_utransport_uuri(Some(0), 0, 0), test_lib::create_utransport_uuri(Some(1), 1, 1), test_lib::create_utransport_uuri(Some(1), 1, 1); "Normal UUri")]
+#[test_case(test_lib::create_utransport_uuri(Some(0), 0, 0), test_lib::create_utransport_uuri(Some(1), 1, 1), test_lib::create_special_uuri(1); "Special UUri")]
 #[async_std::test]
-async fn test_notification_and_subscribe() {
+async fn test_notification_and_subscribe(origin_uuri: UUri, dst_uuri: UUri, listen_uuri: UUri) {
     test_lib::before_test();
 
     // Initialization
     let target_data = String::from("Hello World!");
-    let upclient = test_lib::create_up_client_zenoh().await.unwrap();
-    let src_uuri = test_lib::create_utransport_uuri(0);
-    let dst_uuri = test_lib::create_utransport_uuri(1);
+    let upclient_notify = test_lib::create_up_client_zenoh(0, 0).await.unwrap();
+    let upclient_recv = test_lib::create_up_client_zenoh(1, 1).await.unwrap();
 
     // Register the listener
     let notification_listener = Arc::new(PublishNotificationListener::new());
-    upclient
-        .register_listener(dst_uuri.clone(), notification_listener.clone())
+    upclient_recv
+        .register_listener(listen_uuri.clone(), notification_listener.clone())
         .await
         .unwrap();
+    // Waiting for listener to take effect
+    task::sleep(time::Duration::from_millis(1000)).await;
 
     // Send UMessage
-    let umessage = UMessageBuilder::notification(src_uuri.clone(), dst_uuri.clone())
+    let umessage = UMessageBuilder::notification(origin_uuri.clone(), dst_uuri.clone())
         .with_message_id(UUIDBuilder::build())
         .build_with_payload(
             target_data.as_bytes().to_vec().into(),
             UPayloadFormat::UPAYLOAD_FORMAT_TEXT,
         )
         .unwrap();
-    upclient.send(umessage).await.unwrap();
+    upclient_notify.send(umessage).await.unwrap();
 
     // Waiting for the subscriber to receive data
     task::sleep(time::Duration::from_millis(1000)).await;
@@ -124,8 +133,8 @@ async fn test_notification_and_subscribe() {
     assert_eq!(notification_listener.get_recv_data(), target_data);
 
     // Cleanup
-    upclient
-        .unregister_listener(dst_uuri.clone(), notification_listener)
+    upclient_recv
+        .unregister_listener(listen_uuri.clone(), notification_listener)
         .await
         .unwrap();
 }
