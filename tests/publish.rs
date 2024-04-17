@@ -56,7 +56,7 @@ impl UListener for PublishNotificationListener {
 #[test_case(test_lib::create_utransport_uuri(Some(0), 0, 0), test_lib::create_utransport_uuri(Some(0), 0, 0); "Normal UUri")]
 #[test_case(test_lib::create_utransport_uuri(Some(0), 0, 0), test_lib::create_special_uuri(0); "Special UUri")]
 #[async_std::test]
-async fn test_publish_and_subscribe(origin_uuri: UUri, dst_uuri: UUri) {
+async fn test_publish_and_subscribe(publish_uuri: UUri, listen_uuri: UUri) {
     test_lib::before_test();
 
     // Initialization
@@ -67,14 +67,14 @@ async fn test_publish_and_subscribe(origin_uuri: UUri, dst_uuri: UUri) {
     // Register the listener
     let pub_listener = Arc::new(PublishNotificationListener::new());
     upclient_recv
-        .register_listener(dst_uuri.clone(), pub_listener.clone())
+        .register_listener(listen_uuri.clone(), pub_listener.clone())
         .await
         .unwrap();
     // Waiting for listener to take effect
     task::sleep(time::Duration::from_millis(1000)).await;
 
     // Send UMessage
-    let umessage = UMessageBuilder::publish(origin_uuri.clone())
+    let umessage = UMessageBuilder::publish(publish_uuri.clone())
         .with_message_id(UUIDBuilder::build())
         .build_with_payload(
             target_data.as_bytes().to_vec().into(),
@@ -91,7 +91,7 @@ async fn test_publish_and_subscribe(origin_uuri: UUri, dst_uuri: UUri) {
 
     // Cleanup
     upclient_recv
-        .unregister_listener(dst_uuri.clone(), pub_listener)
+        .unregister_listener(listen_uuri.clone(), pub_listener)
         .await
         .unwrap();
 }
