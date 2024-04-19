@@ -231,7 +231,7 @@ impl UPClientZenoh {
             .query_map
             .lock()
             .unwrap()
-            .get(&reqid)
+            .remove(&reqid)
             .ok_or_else(|| {
                 let msg = "query doesn't exist".to_string();
                 log::error!("{msg}");

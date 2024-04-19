@@ -131,32 +131,31 @@ async fn test_rpc_server_client(dst_uuri: UUri, listen_uuri: UUri) {
     sleep(Duration::from_millis(1000)).await;
 
     // Send Request with invoke_method
-    // TODO: Comment this for debug
-    //{
-    //    let payload = UPayload {
-    //        format: UPayloadFormat::UPAYLOAD_FORMAT_TEXT.into(),
-    //        data: Some(Data::Value(request_data.as_bytes().to_vec())),
-    //        ..Default::default()
-    //    };
-    //    let result = upclient_client
-    //        .invoke_method(
-    //            dst_uuri.clone(),
-    //            payload,
-    //            CallOptions {
-    //                ttl: 1000,
-    //                ..Default::default()
-    //            },
-    //        )
-    //        .await;
+    {
+        let payload = UPayload {
+            format: UPayloadFormat::UPAYLOAD_FORMAT_TEXT.into(),
+            data: Some(Data::Value(request_data.as_bytes().to_vec())),
+            ..Default::default()
+        };
+        let result = upclient_client
+            .invoke_method(
+                dst_uuri.clone(),
+                payload,
+                CallOptions {
+                    ttl: 1000,
+                    ..Default::default()
+                },
+            )
+            .await;
 
-    //    // Process the result
-    //    if let Data::Value(v) = result.unwrap().payload.unwrap().data.unwrap() {
-    //        let value = v.into_iter().map(|c| c as char).collect::<String>();
-    //        assert_eq!(response_data.clone(), value);
-    //    } else {
-    //        panic!("Failed to get result from invoke_method.");
-    //    }
-    //}
+        // Process the result
+        if let Data::Value(v) = result.unwrap().payload.unwrap().data.unwrap() {
+            let value = v.into_iter().map(|c| c as char).collect::<String>();
+            assert_eq!(response_data.clone(), value);
+        } else {
+            panic!("Failed to get result from invoke_method.");
+        }
+    }
 
     // Send Request with send
     {
