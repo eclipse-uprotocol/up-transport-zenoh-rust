@@ -95,8 +95,8 @@ impl UListener for ResponseListener {
             panic!("The message should be Data::Value type.");
         }
     }
-    async fn on_error(&self, _err: UStatus) {
-        //panic!("Internal Error: {err:?}");
+    async fn on_error(&self, err: UStatus) {
+        panic!("Internal Error: {err:?}");
     }
 }
 
@@ -173,7 +173,7 @@ async fn test_rpc_server_client(dst_uuri: UUri, listen_uuri: UUri) {
         upclient_client.send(umessage).await.unwrap();
 
         // Waiting for the callback to process data
-        task::sleep(time::Duration::from_millis(5000)).await;
+        task::sleep(time::Duration::from_millis(2000)).await;
 
         // Compare the result
         assert_eq!(response_listener.get_response_data(), response_data);
