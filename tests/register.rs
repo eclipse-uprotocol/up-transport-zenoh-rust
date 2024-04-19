@@ -29,7 +29,7 @@ impl UListener for FooListener {
 #[test_case(test_lib::create_utransport_uuri(Some(0), 0, 0); "Publish / Notification register_listener")]
 #[test_case(test_lib::create_rpcserver_uuri(Some(0), 0); "RPC register_listener")]
 #[test_case(test_lib::create_special_uuri(0); "Special UUri register_listener")]
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_register_and_unregister(uuri: UUri) {
     test_lib::before_test();
 

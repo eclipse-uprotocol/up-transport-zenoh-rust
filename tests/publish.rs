@@ -13,13 +13,10 @@
 //
 pub mod test_lib;
 
-use async_std::task;
 use async_trait::async_trait;
-use std::{
-    sync::{Arc, Mutex},
-    time,
-};
+use std::sync::{Arc, Mutex};
 use test_case::test_case;
+use tokio::time::{sleep, Duration};
 use up_rust::{
     Data, UListener, UMessage, UMessageBuilder, UPayloadFormat, UStatus, UTransport, UUIDBuilder,
     UUri,
@@ -53,9 +50,10 @@ impl UListener for PublishNotificationListener {
     }
 }
 
+// TODO: Sometimes special UUri failed. Need more investigation
 #[test_case(test_lib::create_utransport_uuri(Some(0), 0, 0), test_lib::create_utransport_uuri(Some(0), 0, 0); "Normal UUri")]
 #[test_case(test_lib::create_utransport_uuri(Some(0), 0, 0), test_lib::create_special_uuri(0); "Special UUri")]
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_publish_and_subscribe(publish_uuri: UUri, listen_uuri: UUri) {
     test_lib::before_test();
 
@@ -71,7 +69,7 @@ async fn test_publish_and_subscribe(publish_uuri: UUri, listen_uuri: UUri) {
         .await
         .unwrap();
     // Waiting for listener to take effect
-    task::sleep(time::Duration::from_millis(1000)).await;
+    sleep(Duration::from_millis(1000)).await;
 
     // Send UMessage
     let umessage = UMessageBuilder::publish(publish_uuri.clone())
@@ -84,7 +82,7 @@ async fn test_publish_and_subscribe(publish_uuri: UUri, listen_uuri: UUri) {
     upclient_send.send(umessage).await.unwrap();
 
     // Waiting for the subscriber to receive data
-    task::sleep(time::Duration::from_millis(1000)).await;
+    sleep(Duration::from_millis(1000)).await;
 
     // Compare the result
     assert_eq!(pub_listener.get_recv_data(), target_data);
@@ -98,7 +96,7 @@ async fn test_publish_and_subscribe(publish_uuri: UUri, listen_uuri: UUri) {
 
 #[test_case(test_lib::create_utransport_uuri(Some(0), 0, 0), test_lib::create_utransport_uuri(Some(1), 1, 1), test_lib::create_utransport_uuri(Some(1), 1, 1); "Normal UUri")]
 #[test_case(test_lib::create_utransport_uuri(Some(0), 0, 0), test_lib::create_utransport_uuri(Some(1), 1, 1), test_lib::create_special_uuri(1); "Special UUri")]
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_notification_and_subscribe(origin_uuri: UUri, dst_uuri: UUri, listen_uuri: UUri) {
     test_lib::before_test();
 
@@ -114,7 +112,7 @@ async fn test_notification_and_subscribe(origin_uuri: UUri, dst_uuri: UUri, list
         .await
         .unwrap();
     // Waiting for listener to take effect
-    task::sleep(time::Duration::from_millis(1000)).await;
+    sleep(Duration::from_millis(1000)).await;
 
     // Send UMessage
     let umessage = UMessageBuilder::notification(origin_uuri.clone(), dst_uuri.clone())
@@ -127,7 +125,7 @@ async fn test_notification_and_subscribe(origin_uuri: UUri, dst_uuri: UUri, list
     upclient_notify.send(umessage).await.unwrap();
 
     // Waiting for the subscriber to receive data
-    task::sleep(time::Duration::from_millis(1000)).await;
+    sleep(Duration::from_millis(1000)).await;
 
     // Compare the result
     assert_eq!(notification_listener.get_recv_data(), target_data);

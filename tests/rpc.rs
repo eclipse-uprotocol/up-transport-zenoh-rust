@@ -13,13 +13,14 @@
 //
 pub mod test_lib;
 
-use async_std::task::{self, block_on};
 use async_trait::async_trait;
-use std::{
-    sync::{Arc, Mutex},
-    time,
-};
+use std::sync::{Arc, Mutex};
 use test_case::test_case;
+use tokio::{
+    runtime::Handle,
+    task,
+    time::{sleep, Duration},
+};
 use up_client_zenoh::UPClientZenoh;
 use up_rust::{
     CallOptions, Data, RpcClient, UListener, UMessage, UMessageBuilder, UPayload, UPayloadFormat,
@@ -63,7 +64,11 @@ impl UListener for RequestListener {
                 UPayloadFormat::UPAYLOAD_FORMAT_TEXT,
             )
             .unwrap();
-        block_on(self.up_client.send(umessage)).unwrap();
+        task::block_in_place(|| {
+            Handle::current()
+                .block_on(self.up_client.send(umessage))
+                .unwrap();
+        });
     }
     async fn on_error(&self, err: UStatus) {
         panic!("Internal Error: {err:?}");
@@ -96,13 +101,14 @@ impl UListener for ResponseListener {
         }
     }
     async fn on_error(&self, _err: UStatus) {
+        // TODO: Comment it to pass the test
         //panic!("Internal Error: {err:?}");
     }
 }
 
 #[test_case(test_lib::create_rpcserver_uuri(Some(1), 1), test_lib::create_rpcserver_uuri(Some(1), 1); "Normal RPC UUri")]
 #[test_case(test_lib::create_rpcserver_uuri(Some(1), 1), test_lib::create_special_uuri(1); "Special listen UUri")]
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_rpc_server_client(dst_uuri: UUri, listen_uuri: UUri) {
     test_lib::before_test();
 
@@ -123,7 +129,7 @@ async fn test_rpc_server_client(dst_uuri: UUri, listen_uuri: UUri) {
         .await
         .unwrap();
     // Need some time for queryable to run
-    task::sleep(time::Duration::from_millis(1000)).await;
+    sleep(Duration::from_millis(1000)).await;
 
     // Send Request with invoke_method
     {
@@ -173,7 +179,7 @@ async fn test_rpc_server_client(dst_uuri: UUri, listen_uuri: UUri) {
         upclient_client.send(umessage).await.unwrap();
 
         // Waiting for the callback to process data
-        task::sleep(time::Duration::from_millis(5000)).await;
+        sleep(Duration::from_millis(3000)).await;
 
         // Compare the result
         assert_eq!(response_listener.get_response_data(), response_data);

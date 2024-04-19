@@ -12,9 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::UPClientZenoh;
-use async_std::task::block_on;
 use async_trait::async_trait;
 use std::{sync::Arc, time::Duration};
+use tokio::{runtime::Handle, task};
 use up_rust::{
     ComparableListener, Data, UAttributes, UAttributesValidators, UCode, UListener, UMessage,
     UMessageType, UPayload, UPayloadFormat, UStatus, UTransport, UUri, UriValidator,
@@ -118,18 +118,24 @@ impl UPClientZenoh {
                     let Some(encoding) = UPClientZenoh::to_upayload_format(&sample.encoding) else {
                         let msg = "Unable to get the encoding".to_string();
                         log::error!("{msg}");
-                        block_on(
-                            resp_callback.on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)),
-                        );
+                        task::block_in_place(|| {
+                            Handle::current().block_on(
+                                resp_callback
+                                    .on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)),
+                            );
+                        });
                         return;
                     };
                     // Get UAttribute from the attachment
                     let Some(attachment) = sample.attachment() else {
                         let msg = "Unable to get the attachment".to_string();
                         log::error!("{msg}");
-                        block_on(
-                            resp_callback.on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)),
-                        );
+                        task::block_in_place(|| {
+                            Handle::current().block_on(
+                                resp_callback
+                                    .on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)),
+                            );
+                        });
                         return;
                     };
                     let u_attribute = match UPClientZenoh::attachment_to_uattributes(attachment) {
@@ -137,32 +143,40 @@ impl UPClientZenoh {
                         Err(e) => {
                             let msg = format!("Transform attachment to UAttributes failed: {e:?}");
                             log::error!("{msg}");
-                            block_on(
-                                resp_callback
-                                    .on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)),
-                            );
+                            task::block_in_place(|| {
+                                Handle::current().block_on(
+                                    resp_callback
+                                        .on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)),
+                                );
+                            });
                             return;
                         }
                     };
                     // Create UMessage
-                    block_on(
-                        resp_callback.on_receive(UMessage {
-                            attributes: Some(u_attribute).into(),
-                            payload: Some(UPayload {
-                                length: Some(0),
-                                format: encoding.into(),
-                                data: Some(Data::Value(sample.payload.contiguous().to_vec())),
+                    task::block_in_place(|| {
+                        Handle::current().block_on(
+                            resp_callback.on_receive(UMessage {
+                                attributes: Some(u_attribute).into(),
+                                payload: Some(UPayload {
+                                    length: Some(0),
+                                    format: encoding.into(),
+                                    data: Some(Data::Value(sample.payload.contiguous().to_vec())),
+                                    ..Default::default()
+                                })
+                                .into(),
                                 ..Default::default()
-                            })
-                            .into(),
-                            ..Default::default()
-                        }),
-                    );
+                            }),
+                        );
+                    });
                 }
                 Err(e) => {
                     let msg = format!("Error while parsing Zenoh reply: {e:?}");
                     log::error!("{msg}");
-                    block_on(resp_callback.on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)));
+                    task::block_in_place(|| {
+                        Handle::current().block_on(
+                            resp_callback.on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)),
+                        );
+                    });
                 }
             }
         };
@@ -265,7 +279,11 @@ impl UPClientZenoh {
             let Some(attachment) = sample.attachment() else {
                 let msg = "Unable to get attachment";
                 log::error!("{msg}");
-                block_on(listener_cloned.on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)));
+                task::block_in_place(|| {
+                    Handle::current().block_on(
+                        listener_cloned.on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)),
+                    );
+                });
                 return;
             };
             let u_attribute = match UPClientZenoh::attachment_to_uattributes(attachment) {
@@ -273,9 +291,11 @@ impl UPClientZenoh {
                 Err(e) => {
                     let msg = format!("Unable to transform attachment to UAttributes: {e:?}");
                     log::error!("{msg}");
-                    block_on(
-                        listener_cloned.on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)),
-                    );
+                    task::block_in_place(|| {
+                        Handle::current().block_on(
+                            listener_cloned.on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)),
+                        );
+                    });
                     return;
                 }
             };
@@ -283,7 +303,11 @@ impl UPClientZenoh {
             let Some(encoding) = UPClientZenoh::to_upayload_format(&sample.encoding) else {
                 let msg = "Unable to get payload encoding";
                 log::error!("{msg}");
-                block_on(listener_cloned.on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)));
+                task::block_in_place(|| {
+                    Handle::current().block_on(
+                        listener_cloned.on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)),
+                    );
+                });
                 return;
             };
             let u_payload = UPayload {
@@ -298,7 +322,9 @@ impl UPClientZenoh {
                 payload: Some(u_payload).into(),
                 ..Default::default()
             };
-            block_on(listener_cloned.on_receive(msg));
+            task::block_in_place(|| {
+                Handle::current().block_on(listener_cloned.on_receive(msg));
+            });
         };
 
         // Create Zenoh subscriber
@@ -338,7 +364,11 @@ impl UPClientZenoh {
             let Some(attachment) = query.attachment() else {
                 let msg = "Unable to get attachment".to_string();
                 log::error!("{msg}");
-                block_on(listener_cloned.on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)));
+                task::block_in_place(|| {
+                    Handle::current().block_on(
+                        listener_cloned.on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)),
+                    );
+                });
                 return;
             };
             let u_attribute = match UPClientZenoh::attachment_to_uattributes(attachment) {
@@ -346,9 +376,11 @@ impl UPClientZenoh {
                 Err(e) => {
                     let msg = format!("Unable to transform user attachment to UAttributes: {e:?}");
                     log::error!("{msg}");
-                    block_on(
-                        listener_cloned.on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)),
-                    );
+                    task::block_in_place(|| {
+                        Handle::current().block_on(
+                            listener_cloned.on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)),
+                        );
+                    });
                     return;
                 }
             };
@@ -358,9 +390,12 @@ impl UPClientZenoh {
                     let Some(encoding) = UPClientZenoh::to_upayload_format(&value.encoding) else {
                         let msg = "Unable to get payload encoding".to_string();
                         log::error!("{msg}");
-                        block_on(
-                            listener_cloned.on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)),
-                        );
+                        task::block_in_place(|| {
+                            Handle::current().block_on(
+                                listener_cloned
+                                    .on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)),
+                            );
+                        });
                         return;
                     };
                     UPayload {
@@ -387,7 +422,9 @@ impl UPClientZenoh {
                 .lock()
                 .unwrap()
                 .insert(u_attribute.id.to_string(), query);
-            block_on(listener_cloned.on_receive(msg));
+            task::block_in_place(|| {
+                Handle::current().block_on(listener_cloned.on_receive(msg));
+            });
         };
 
         // Create Zenoh queryable
