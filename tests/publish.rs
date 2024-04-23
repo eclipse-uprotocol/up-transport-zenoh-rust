@@ -21,8 +21,7 @@ use std::{
 };
 use test_case::test_case;
 use up_rust::{
-    Data, UListener, UMessage, UMessageBuilder, UPayloadFormat, UStatus, UTransport, UUIDBuilder,
-    UUri,
+    Data, UListener, UMessage, UMessageBuilder, UPayloadFormat, UStatus, UTransport, UUri,
 };
 
 struct PublishNotificationListener {
@@ -75,7 +74,6 @@ async fn test_publish_and_subscribe(publish_uuri: UUri, listen_uuri: UUri) {
 
     // Send UMessage
     let umessage = UMessageBuilder::publish(publish_uuri.clone())
-        .with_message_id(UUIDBuilder::build())
         .build_with_payload(
             target_data.as_bytes().to_vec().into(),
             UPayloadFormat::UPAYLOAD_FORMAT_TEXT,
@@ -118,7 +116,6 @@ async fn test_notification_and_subscribe(origin_uuri: UUri, dst_uuri: UUri, list
 
     // Send UMessage
     let umessage = UMessageBuilder::notification(origin_uuri.clone(), dst_uuri.clone())
-        .with_message_id(UUIDBuilder::build())
         .build_with_payload(
             target_data.as_bytes().to_vec().into(),
             UPayloadFormat::UPAYLOAD_FORMAT_TEXT,
