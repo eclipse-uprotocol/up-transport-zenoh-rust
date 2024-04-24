@@ -25,6 +25,20 @@ use zenoh::{
     queryable::Query,
 };
 
+macro_rules! error_callback {
+    ($listener: expr, $msg: expr) => {
+        let msg = $msg;
+        log::error!("{msg}");
+        block_on($listener.on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)));
+    };
+}
+
+macro_rules! success_callback {
+    ($listener: expr, $msg: expr) => {
+        block_on($listener.on_receive($msg));
+    };
+}
+
 impl UPClientZenoh {
     async fn send_publish_notification(
         &self,
@@ -263,27 +277,22 @@ impl UPClientZenoh {
         let callback = move |sample: Sample| {
             // Get the UAttribute from Zenoh user attachment
             let Some(attachment) = sample.attachment() else {
-                let msg = "Unable to get attachment";
-                log::error!("{msg}");
-                block_on(listener_cloned.on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)));
+                error_callback!(listener_cloned, "Unable to get attachment");
                 return;
             };
             let u_attribute = match UPClientZenoh::attachment_to_uattributes(attachment) {
                 Ok(uattributes) => uattributes,
                 Err(e) => {
-                    let msg = format!("Unable to transform attachment to UAttributes: {e:?}");
-                    log::error!("{msg}");
-                    block_on(
-                        listener_cloned.on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)),
+                    error_callback!(
+                        listener_cloned,
+                        format!("Unable to transform attachment to UAttributes: {e:?}")
                     );
                     return;
                 }
             };
             // Create UPayload
             let Some(encoding) = UPClientZenoh::to_upayload_format(&sample.encoding) else {
-                let msg = "Unable to get payload encoding";
-                log::error!("{msg}");
-                block_on(listener_cloned.on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)));
+                error_callback!(listener_cloned, "Unable to get payload encoding");
                 return;
             };
             let u_payload = UPayload {
@@ -298,7 +307,7 @@ impl UPClientZenoh {
                 payload: Some(u_payload).into(),
                 ..Default::default()
             };
-            block_on(listener_cloned.on_receive(msg));
+            success_callback!(listener_cloned, msg);
         };
 
         // Create Zenoh subscriber
@@ -336,18 +345,15 @@ impl UPClientZenoh {
         let callback = move |query: Query| {
             // Create UAttribute from Zenoh user attachment
             let Some(attachment) = query.attachment() else {
-                let msg = "Unable to get attachment".to_string();
-                log::error!("{msg}");
-                block_on(listener_cloned.on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)));
+                error_callback!(listener_cloned, "Unable to get attachment");
                 return;
             };
             let u_attribute = match UPClientZenoh::attachment_to_uattributes(attachment) {
                 Ok(uattributes) => uattributes,
                 Err(e) => {
-                    let msg = format!("Unable to transform user attachment to UAttributes: {e:?}");
-                    log::error!("{msg}");
-                    block_on(
-                        listener_cloned.on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)),
+                    error_callback!(
+                        listener_cloned,
+                        format!("Unable to transform user attachment to UAttributes: {e:?}")
                     );
                     return;
                 }
@@ -356,11 +362,7 @@ impl UPClientZenoh {
             let u_payload = match query.value() {
                 Some(value) => {
                     let Some(encoding) = UPClientZenoh::to_upayload_format(&value.encoding) else {
-                        let msg = "Unable to get payload encoding".to_string();
-                        log::error!("{msg}");
-                        block_on(
-                            listener_cloned.on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)),
-                        );
+                        error_callback!(listener_cloned, "Unable to get payload encoding");
                         return;
                     };
                     UPayload {
@@ -387,7 +389,7 @@ impl UPClientZenoh {
                 .lock()
                 .unwrap()
                 .insert(u_attribute.id.to_string(), query);
-            block_on(listener_cloned.on_receive(msg));
+            success_callback!(listener_cloned, msg);
         };
 
         // Create Zenoh queryable
