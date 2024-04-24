@@ -138,3 +138,47 @@ async fn test_notification_and_subscribe(origin_uuri: UUri, dst_uuri: UUri, list
         .await
         .unwrap();
 }
+
+#[test_case(false; "uStreamer not subscribed")]
+#[test_case(true; "uStreamer subscribed")]
+#[async_std::test]
+async fn test_receive_own_publish_msg(ustreamer_subscribed: bool) {
+    test_lib::before_test();
+
+    let up_client_ue = test_lib::create_up_client_zenoh(0, 1).await.unwrap();
+    let up_client_streamer = test_lib::create_up_client_zenoh(0, 2).await.unwrap();
+
+    let target_data = String::from("Publish message intended for ue!");
+
+    let origin_uuri = test_lib::create_utransport_uuri(Some(10), 11, 12);
+
+    let ue_listener = Arc::new(PublishNotificationListener::new());
+    up_client_ue
+        .register_listener(origin_uuri.clone(), ue_listener.clone())
+        .await
+        .unwrap();
+
+    let someip_auth_uuri = test_lib::create_special_uuri(10);
+    let streamer_zenoh_listener = Arc::new(PublishNotificationListener::new());
+    if ustreamer_subscribed {
+        up_client_streamer
+            .register_listener(someip_auth_uuri.clone(), streamer_zenoh_listener.clone())
+            .await
+            .unwrap();
+    }
+
+    let publish_msg = UMessageBuilder::publish(origin_uuri.clone())
+        .with_message_id(UUIDBuilder::build())
+        .build_with_payload(
+            target_data.as_bytes().to_vec().into(),
+            UPayloadFormat::UPAYLOAD_FORMAT_TEXT,
+        )
+        .unwrap();
+
+    up_client_streamer.send(publish_msg.clone()).await.unwrap();
+
+    // Waiting for the subscribers to receive data
+    task::sleep(time::Duration::from_millis(2000)).await;
+
+    assert_eq!(streamer_zenoh_listener.get_recv_data(), "");
+}
