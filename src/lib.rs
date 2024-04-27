@@ -127,7 +127,7 @@ impl UPClientZenoh {
         uauthority: UAuthority,
         uentity: UEntity,
     ) -> Result<UPClientZenoh, UStatus> {
-        // Validate th UUri
+        // Validate the UUri
         uauthority.validate_micro_form().map_err(|e| {
             let msg = format!("UAuthority is invalid: {e:?}");
             log::error!("{msg}");
