@@ -54,8 +54,9 @@ impl CallbackThreadPool {
         let mut thread_pool = Vec::with_capacity(thread_num);
         for _ in 0..thread_num {
             let receiver = cb_receiver.clone();
-            thread_pool.push(thread::spawn(move || loop {
-                if let Ok(msg) = receiver.recv() {
+            thread_pool.push(thread::spawn(move || {
+                // if cb_sender is released, break the while-loop and stop the thread
+                while let Ok(msg) = receiver.recv() {
                     block_on(match msg.result {
                         Ok(umessage) => msg.listener.on_receive(umessage),
                         Err(status) => msg.listener.on_error(status),
