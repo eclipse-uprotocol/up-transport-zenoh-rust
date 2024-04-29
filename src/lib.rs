@@ -37,7 +37,10 @@ use zenoh::{
 const UATTRIBUTE_VERSION: u8 = 1;
 const THREAD_NUM: usize = 10;
 
-type CallbackChannelMessage = (Arc<dyn UListener>, Result<UMessage, UStatus>);
+struct CallbackChannelMessage {
+    listener: Arc<dyn UListener>,
+    result: Result<UMessage, UStatus>,
+}
 
 struct CallbackThreadPool {
     _thread_pool: Vec<thread::JoinHandle<()>>,
@@ -52,10 +55,10 @@ impl CallbackThreadPool {
         for _ in 0..thread_num {
             let receiver = cb_receiver.clone();
             thread_pool.push(thread::spawn(move || loop {
-                if let Ok(data) = receiver.recv() {
-                    block_on(match data.1 {
-                        Ok(msg) => data.0.on_receive(msg),
-                        Err(status) => data.0.on_error(status),
+                if let Ok(msg) = receiver.recv() {
+                    block_on(match msg.result {
+                        Ok(umessage) => msg.listener.on_receive(umessage),
+                        Err(status) => msg.listener.on_error(status),
                     });
                 }
             }));

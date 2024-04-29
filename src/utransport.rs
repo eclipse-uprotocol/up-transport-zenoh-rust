@@ -34,10 +34,10 @@ fn error_callback(
 ) {
     log::error!("{msg}");
     if sender
-        .send((
-            listener.clone(),
-            Err(UStatus::fail_with_code(UCode::INTERNAL, msg)),
-        ))
+        .send(CallbackChannelMessage {
+            listener: listener.clone(),
+            result: Err(UStatus::fail_with_code(UCode::INTERNAL, msg)),
+        })
         .is_err()
     {
         log::error!("Unable to call the user callback");
@@ -50,7 +50,13 @@ fn success_callback(
     listener: &Arc<dyn UListener>,
     msg: UMessage,
 ) {
-    if sender.send((listener.clone(), Ok(msg))).is_err() {
+    if sender
+        .send(CallbackChannelMessage {
+            listener: listener.clone(),
+            result: Ok(msg),
+        })
+        .is_err()
+    {
         log::error!("Unable to call the user callback");
     }
 }
