@@ -23,7 +23,7 @@ use test_case::test_case;
 use up_client_zenoh::UPClientZenoh;
 use up_rust::{
     CallOptions, Data, RpcClient, UListener, UMessage, UMessageBuilder, UPayload, UPayloadFormat,
-    UStatus, UTransport, UUIDBuilder, UUri,
+    UStatus, UTransport, UUri,
 };
 
 struct RequestListener {
@@ -57,7 +57,6 @@ impl UListener for RequestListener {
         }
         // Send back result
         let umessage = UMessageBuilder::response_for_request(&attributes)
-            .with_message_id(UUIDBuilder::build())
             .build_with_payload(
                 self.response_data.as_bytes().to_vec().into(),
                 UPayloadFormat::UPAYLOAD_FORMAT_TEXT,
@@ -95,8 +94,8 @@ impl UListener for ResponseListener {
             panic!("The message should be Data::Value type.");
         }
     }
-    async fn on_error(&self, _err: UStatus) {
-        //panic!("Internal Error: {err:?}");
+    async fn on_error(&self, err: UStatus) {
+        panic!("Internal Error: {err:?}");
     }
 }
 
@@ -164,7 +163,6 @@ async fn test_rpc_server_client(dst_uuri: UUri, listen_uuri: UUri) {
 
         // Send request
         let umessage = UMessageBuilder::request(dst_uuri.clone(), response_uuri.clone(), 1000)
-            .with_message_id(UUIDBuilder::build())
             .build_with_payload(
                 request_data.as_bytes().to_vec().into(),
                 UPayloadFormat::UPAYLOAD_FORMAT_TEXT,
@@ -173,7 +171,7 @@ async fn test_rpc_server_client(dst_uuri: UUri, listen_uuri: UUri) {
         upclient_client.send(umessage).await.unwrap();
 
         // Waiting for the callback to process data
-        task::sleep(time::Duration::from_millis(5000)).await;
+        task::sleep(time::Duration::from_millis(2000)).await;
 
         // Compare the result
         assert_eq!(response_listener.get_response_data(), response_data);
