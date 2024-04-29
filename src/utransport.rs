@@ -11,9 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::UPClientZenoh;
+use crate::{CallbackChannelMessage, UPClientZenoh};
 use async_std::task::block_on;
 use async_trait::async_trait;
+use crossbeam_channel::Sender;
 use std::{sync::Arc, time::Duration};
 use up_rust::{
     ComparableListener, Data, UAttributes, UAttributesValidators, UCode, UListener, UMessage,
@@ -25,30 +26,33 @@ use zenoh::{
     queryable::Query,
 };
 
-macro_rules! error_callback {
-    ($sender: expr, $listener: expr, $msg: expr) => {
-        let msg = $msg;
-        log::error!("{msg}");
-        let thread_listener_cloned = $listener.clone();
-        if $sender
-            .send((
-                thread_listener_cloned,
-                Err(UStatus::fail_with_code(UCode::INTERNAL, msg)),
-            ))
-            .is_err()
-        {
-            log::error!("Unable to call the user callback");
-        }
-    };
+#[inline]
+fn error_callback(
+    sender: &Sender<CallbackChannelMessage>,
+    listener: &Arc<dyn UListener>,
+    msg: &str,
+) {
+    log::error!("{msg}");
+    if sender
+        .send((
+            listener.clone(),
+            Err(UStatus::fail_with_code(UCode::INTERNAL, msg)),
+        ))
+        .is_err()
+    {
+        log::error!("Unable to call the user callback");
+    }
 }
 
-macro_rules! success_callback {
-    ($sender: expr, $listener: expr, $msg: expr) => {
-        let thread_listener_cloned = $listener.clone();
-        if $sender.send((thread_listener_cloned, Ok($msg))).is_err() {
-            log::error!("Unable to call the user callback");
-        }
-    };
+#[inline]
+fn success_callback(
+    sender: &Sender<CallbackChannelMessage>,
+    listener: &Arc<dyn UListener>,
+    msg: UMessage,
+) {
+    if sender.send((listener.clone(), Ok(msg))).is_err() {
+        log::error!("Unable to call the user callback");
+    }
 }
 
 impl UPClientZenoh {
@@ -290,23 +294,27 @@ impl UPClientZenoh {
         let callback = move |sample: Sample| {
             // Get the UAttribute from Zenoh user attachment
             let Some(attachment) = sample.attachment() else {
-                error_callback!(cb_sender, listener_cloned, "Unable to get attachment");
+                error_callback(&cb_sender, &listener_cloned, "Unable to get attachment");
                 return;
             };
             let u_attribute = match UPClientZenoh::attachment_to_uattributes(attachment) {
                 Ok(uattributes) => uattributes,
                 Err(e) => {
-                    error_callback!(
-                        cb_sender,
-                        listener_cloned,
-                        format!("Unable to transform attachment to UAttributes: {e:?}")
+                    error_callback(
+                        &cb_sender,
+                        &listener_cloned,
+                        &format!("Unable to transform attachment to UAttributes: {e:?}"),
                     );
                     return;
                 }
             };
             // Create UPayload
             let Some(encoding) = UPClientZenoh::to_upayload_format(&sample.encoding) else {
-                error_callback!(cb_sender, listener_cloned, "Unable to get payload encoding");
+                error_callback(
+                    &cb_sender,
+                    &listener_cloned,
+                    "Unable to get payload encoding",
+                );
                 return;
             };
             let u_payload = UPayload {
@@ -321,7 +329,7 @@ impl UPClientZenoh {
                 payload: Some(u_payload).into(),
                 ..Default::default()
             };
-            success_callback!(cb_sender, listener_cloned, msg);
+            success_callback(&cb_sender, &listener_cloned, msg);
         };
 
         // Create Zenoh subscriber
@@ -360,16 +368,16 @@ impl UPClientZenoh {
         let callback = move |query: Query| {
             // Create UAttribute from Zenoh user attachment
             let Some(attachment) = query.attachment() else {
-                error_callback!(cb_sender, listener_cloned, "Unable to get attachment");
+                error_callback(&cb_sender, &listener_cloned, "Unable to get attachment");
                 return;
             };
             let u_attribute = match UPClientZenoh::attachment_to_uattributes(attachment) {
                 Ok(uattributes) => uattributes,
                 Err(e) => {
-                    error_callback!(
-                        cb_sender,
-                        listener_cloned,
-                        format!("Unable to transform user attachment to UAttributes: {e:?}")
+                    error_callback(
+                        &cb_sender,
+                        &listener_cloned,
+                        &format!("Unable to transform user attachment to UAttributes: {e:?}"),
                     );
                     return;
                 }
@@ -378,10 +386,10 @@ impl UPClientZenoh {
             let u_payload = match query.value() {
                 Some(value) => {
                     let Some(encoding) = UPClientZenoh::to_upayload_format(&value.encoding) else {
-                        error_callback!(
-                            cb_sender,
-                            listener_cloned,
-                            "Unable to get payload encoding"
+                        error_callback(
+                            &cb_sender,
+                            &listener_cloned,
+                            "Unable to get payload encoding",
                         );
                         return;
                     };
@@ -409,7 +417,7 @@ impl UPClientZenoh {
                 .lock()
                 .unwrap()
                 .insert(u_attribute.id.to_string(), query);
-            success_callback!(cb_sender, listener_cloned, msg);
+            success_callback(&cb_sender, &listener_cloned, msg);
         };
 
         // Create Zenoh queryable
