@@ -15,7 +15,7 @@ pub mod rpc;
 pub mod utransport;
 
 use async_std::task::block_on;
-use crossbeam_channel::{unbounded, Receiver, Sender};
+use crossbeam_channel::{bounded, Receiver, Sender};
 use protobuf::{Enum, Message};
 use std::{
     collections::HashMap,
@@ -36,6 +36,7 @@ use zenoh::{
 
 const UATTRIBUTE_VERSION: u8 = 1;
 const THREAD_NUM: usize = 10;
+const CHANNEL_SIZE: usize = 3000;
 
 struct CallbackChannelMessage {
     listener: Arc<dyn UListener>,
@@ -154,7 +155,7 @@ impl UPClientZenoh {
             return Err(UStatus::fail_with_code(UCode::INTERNAL, msg));
         };
         // Create channels for passing user callback
-        let (cb_sender, cb_receiver) = unbounded::<CallbackChannelMessage>();
+        let (cb_sender, cb_receiver) = bounded::<CallbackChannelMessage>(CHANNEL_SIZE);
         CallbackThreadPool::new(THREAD_NUM, &cb_receiver);
         // Return UPClientZenoh
         Ok(UPClientZenoh {
