@@ -11,6 +11,8 @@ cargo clippy --all-targets
 cargo build
 # Run test
 cargo test
+# Test coverage
+cargo tarpaulin -o lcov -o html --output-dir target/tarpaulin
 ```
 
 ## Examples
