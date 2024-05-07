@@ -318,7 +318,6 @@ impl UPClientZenoh {
 mod tests {
     use super::*;
     use test_case::test_case;
-    use tokio::runtime::Runtime;
     use up_rust::{Number, UAuthority, UEntity, UResource, UUri};
 
     fn invalid_entity() -> UEntity {
@@ -331,13 +330,13 @@ mod tests {
     #[test_case(valid_authority(), valid_entity(), true; "succeeds with both valid authority and entity")]
     #[test_case(invalid_authority(), valid_entity(), false; "fails for invalid authority")]
     #[test_case(valid_authority(), invalid_entity(), false; "fails for invalid entity")]
-    fn test_new_up_client_zenoh(authority: UAuthority, entity: UEntity, expected_result: bool) {
-        // Create the runtime
-        let rt = Runtime::new().unwrap();
-        // Get a handle from this runtime
-        let handle = rt.handle();
-        let up_client_zenoh =
-            handle.block_on(UPClientZenoh::new(Config::default(), authority, entity));
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_new_up_client_zenoh(
+        authority: UAuthority,
+        entity: UEntity,
+        expected_result: bool,
+    ) {
+        let up_client_zenoh = UPClientZenoh::new(Config::default(), authority, entity).await;
         assert_eq!(up_client_zenoh.is_ok(), expected_result);
     }
 
