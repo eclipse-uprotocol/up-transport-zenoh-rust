@@ -11,7 +11,13 @@ cargo clippy --all-targets
 cargo build
 # Run test
 cargo test
+# Test coverage
+cargo tarpaulin -o lcov -o html --output-dir target/tarpaulin
 ```
+
+## Examples
+
+The examples of using up-client-zenoh-rust can be found in [up-zenoh-example-rust](https://github.com/eclipse-uprotocol/up-zenoh-example-rust).
 
 ## Note
 

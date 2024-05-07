@@ -14,14 +14,16 @@
 pub mod rpc;
 pub mod utransport;
 
+use crossbeam_channel::{bounded, Receiver, Sender};
 use protobuf::{Enum, Message};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
+    thread,
 };
 use up_rust::{
-    ComparableListener, UAttributes, UAuthority, UCode, UEntity, UListener, UPayloadFormat,
-    UPriority, UResourceBuilder, UStatus, UUri,
+    ComparableListener, UAttributes, UAuthority, UCode, UEntity, UListener, UMessage,
+    UPayloadFormat, UPriority, UResourceBuilder, UStatus, UUri,
 };
 use zenoh::{
     config::Config,
@@ -32,6 +34,43 @@ use zenoh::{
 };
 
 const UATTRIBUTE_VERSION: u8 = 1;
+const THREAD_NUM: usize = 10;
+const CHANNEL_SIZE: usize = 3000;
+
+struct CallbackChannelMessage {
+    listener: Arc<dyn UListener>,
+    result: Result<UMessage, UStatus>,
+}
+
+struct CallbackThreadPool {
+    _thread_pool: Vec<thread::JoinHandle<()>>,
+}
+
+impl CallbackThreadPool {
+    pub fn new(
+        thread_num: usize,
+        cb_receiver: &Receiver<CallbackChannelMessage>,
+    ) -> CallbackThreadPool {
+        let mut thread_pool = Vec::with_capacity(thread_num);
+        for _ in 0..thread_num {
+            let receiver = cb_receiver.clone();
+            thread_pool.push(thread::spawn(move || {
+                // Create a dedicated runtime for the thread
+                let rt = tokio::runtime::Runtime::new().expect("Unable to create runtime");
+                // if cb_sender is released, break the while-loop and stop the thread
+                while let Ok(msg) = receiver.recv() {
+                    rt.block_on(match msg.result {
+                        Ok(umessage) => msg.listener.on_receive(umessage),
+                        Err(status) => msg.listener.on_error(status),
+                    });
+                }
+            }));
+        }
+        CallbackThreadPool {
+            _thread_pool: thread_pool,
+        }
+    }
+}
 
 type SubscriberMap = Arc<Mutex<HashMap<(UUri, ComparableListener), Subscriber<'static, ()>>>>;
 type QueryableMap = Arc<Mutex<HashMap<(UUri, ComparableListener), Queryable<'static, ()>>>>;
@@ -49,6 +88,8 @@ pub struct UPClientZenoh {
     rpc_callback_map: RpcCallbackMap,
     // Source UUri in RPC
     source_uuri: UUri,
+    // Callback Sender
+    cb_sender: Sender<CallbackChannelMessage>,
 }
 
 impl UPClientZenoh {
@@ -67,23 +108,25 @@ impl UPClientZenoh {
     ///
     /// ```
     /// #[tokio::main]
-    /// async fn main() {
-    ///     use up_client_zenoh::UPClientZenoh;
-    ///     use up_rust::{Number, UAuthority, UEntity, UUri};
-    ///     use zenoh::config::Config;
-    ///     let uauthority = UAuthority {
-    ///         name: Some("MyAuthName".to_string()),
-    ///         number: Some(Number::Id(vec![1, 2, 3, 4])),
-    ///         ..Default::default()
-    ///     };
-    ///     let uentity = UEntity {
-    ///         name: "default.entity".to_string(),
-    ///         id: Some(u32::from(rand::random::<u16>())),
-    ///         version_major: Some(1),
-    ///         version_minor: None,
-    ///         ..Default::default()
-    ///     };
-    ///     let upclient = UPClientZenoh::new(Config::default(), uauthority, uentity).await.unwrap();
+    /// # async fn main() {
+    /// use up_client_zenoh::UPClientZenoh;
+    /// use up_rust::{Number, UAuthority, UEntity, UUri};
+    /// use zenoh::config::Config;
+    /// let uauthority = UAuthority {
+    ///     name: Some("MyAuthName".to_string()),
+    ///     number: Some(Number::Id(vec![1, 2, 3, 4])),
+    ///     ..Default::default()
+    /// };
+    /// let uentity = UEntity {
+    ///     name: "default.entity".to_string(),
+    ///     id: Some(u32::from(rand::random::<u16>())),
+    ///     version_major: Some(1),
+    ///     version_minor: None,
+    ///     ..Default::default()
+    /// };
+    /// let upclient = UPClientZenoh::new(Config::default(), uauthority, uentity)
+    ///     .await
+    ///     .unwrap();
     /// # }
     /// ```
     pub async fn new(
@@ -91,6 +134,7 @@ impl UPClientZenoh {
         uauthority: UAuthority,
         uentity: UEntity,
     ) -> Result<UPClientZenoh, UStatus> {
+        // Validate the UUri
         uauthority.validate_micro_form().map_err(|e| {
             let msg = format!("UAuthority is invalid: {e:?}");
             log::error!("{msg}");
@@ -101,16 +145,21 @@ impl UPClientZenoh {
             log::error!("{msg}");
             UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
         })?;
-        let Ok(session) = zenoh::open(config).res().await else {
-            let msg = "Unable to open Zenoh session".to_string();
-            log::error!("{msg}");
-            return Err(UStatus::fail_with_code(UCode::INTERNAL, msg));
-        };
         let source_uuri = UUri {
             authority: Some(uauthority).into(),
             entity: Some(uentity).into(),
             ..Default::default()
         };
+        // Create Zenoh session
+        let Ok(session) = zenoh::open(config).res().await else {
+            let msg = "Unable to open Zenoh session".to_string();
+            log::error!("{msg}");
+            return Err(UStatus::fail_with_code(UCode::INTERNAL, msg));
+        };
+        // Create channels for passing user callback
+        let (cb_sender, cb_receiver) = bounded::<CallbackChannelMessage>(CHANNEL_SIZE);
+        CallbackThreadPool::new(THREAD_NUM, &cb_receiver);
+        // Return UPClientZenoh
         Ok(UPClientZenoh {
             session: Arc::new(session),
             subscriber_map: Arc::new(Mutex::new(HashMap::new())),
@@ -118,6 +167,7 @@ impl UPClientZenoh {
             query_map: Arc::new(Mutex::new(HashMap::new())),
             rpc_callback_map: Arc::new(Mutex::new(HashMap::new())),
             source_uuri,
+            cb_sender,
         })
     }
 
@@ -127,27 +177,29 @@ impl UPClientZenoh {
     ///
     /// ```
     /// #[tokio::main]
-    /// async fn main() {
-    ///     use up_client_zenoh::UPClientZenoh;
-    ///     use up_rust::{Number, UAuthority, UEntity, UriValidator, UUri};
-    ///     use zenoh::config::Config;
-    ///     let uauthority = UAuthority {
-    ///         name: Some("MyAuthName".to_string()),
-    ///         number: Some(Number::Id(vec![1, 2, 3, 4])),
-    ///         ..Default::default()
-    ///     };
-    ///     let uentity = UEntity {
-    ///         name: "default.entity".to_string(),
-    ///         id: Some(u32::from(rand::random::<u16>())),
-    ///         version_major: Some(1),
-    ///         version_minor: None,
-    ///         ..Default::default()
-    ///     };
-    ///     let upclient = UPClientZenoh::new(Config::default(), uauthority, uentity).await.unwrap();
-    ///     let uuri = upclient.get_response_uuri();
-    ///     assert!(UriValidator::is_rpc_response(&uuri));
-    ///     assert_eq!(uuri.authority.unwrap().name.unwrap(), "MyAuthName");
-    ///     assert_eq!(uuri.entity.unwrap().name, "default.entity");
+    /// # async fn main() {
+    /// use up_client_zenoh::UPClientZenoh;
+    /// use up_rust::{Number, UAuthority, UEntity, UUri, UriValidator};
+    /// use zenoh::config::Config;
+    /// let uauthority = UAuthority {
+    ///     name: Some("MyAuthName".to_string()),
+    ///     number: Some(Number::Id(vec![1, 2, 3, 4])),
+    ///     ..Default::default()
+    /// };
+    /// let uentity = UEntity {
+    ///     name: "default.entity".to_string(),
+    ///     id: Some(u32::from(rand::random::<u16>())),
+    ///     version_major: Some(1),
+    ///     version_minor: None,
+    ///     ..Default::default()
+    /// };
+    /// let upclient = UPClientZenoh::new(Config::default(), uauthority, uentity)
+    ///     .await
+    ///     .unwrap();
+    /// let uuri = upclient.get_response_uuri();
+    /// assert!(UriValidator::is_rpc_response(&uuri));
+    /// assert_eq!(uuri.authority.unwrap().name.unwrap(), "MyAuthName");
+    /// assert_eq!(uuri.entity.unwrap().name, "default.entity");
     /// # }
     /// ```
     pub fn get_response_uuri(&self) -> UUri {
