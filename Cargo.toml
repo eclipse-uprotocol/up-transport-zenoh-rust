@@ -23,7 +23,8 @@ prost-types = "0.12"
 protobuf = { version = "3.3" }
 rand = "0.8.5"
 up-rust = { git = "https://github.com/eclipse-uprotocol/up-rust", rev = "1bb08ba7a3666e58c316489fbcf3da3e29dee611" }
-zenoh = { version = "0.11.0-rc.2", features = ["unstable"]}
+zenoh = { git = "https://github.com/eclipse-zenoh/zenoh", rev = "b8dd01d6ce05f851f33497e8d899df308d315afb", features = ["unstable"] }
+#zenoh = { version = "0.11.0-rc.2", features = ["unstable"]}
 
 [dev-dependencies]
 test-case = { version = "3.3" }
