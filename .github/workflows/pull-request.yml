@@ -83,8 +83,5 @@ jobs:
         run: |
           cargo doc --no-deps
 
-  check-msrv:
-    uses: ./.github/workflows/verify-msrv.yaml
-
-  coverage:
-    uses: ./.github/workflows/coverage.yaml
+  nextest:
+    uses: ./.github/workflows/nextest.yaml

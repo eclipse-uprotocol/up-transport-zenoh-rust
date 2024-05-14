@@ -99,15 +99,15 @@ impl UListener for ResponseListener {
     }
 }
 
-#[test_case(test_lib::create_rpcserver_uuri(Some(1), 1), test_lib::create_rpcserver_uuri(Some(1), 1); "Normal RPC UUri")]
-#[test_case(test_lib::create_rpcserver_uuri(Some(1), 1), test_lib::create_special_uuri(1); "Special listen UUri")]
+#[test_case(test_lib::create_rpcserver_uuri(Some(7), 7), test_lib::create_rpcserver_uuri(Some(7), 7); "Normal RPC UUri")]
+#[test_case(test_lib::create_rpcserver_uuri(Some(7), 7), test_lib::create_special_uuri(7); "Special listen UUri")]
 #[async_std::test]
 async fn test_rpc_server_client(dst_uuri: UUri, listen_uuri: UUri) {
     test_lib::before_test();
 
     // Initialization
-    let upclient_client = test_lib::create_up_client_zenoh(0, 0).await.unwrap();
-    let upclient_server = Arc::new(test_lib::create_up_client_zenoh(1, 1).await.unwrap());
+    let upclient_client = test_lib::create_up_client_zenoh(6, 6).await.unwrap();
+    let upclient_server = Arc::new(test_lib::create_up_client_zenoh(7, 7).await.unwrap());
     let request_data = String::from("This is the request data");
     let response_data = String::from("This is the response data");
 
