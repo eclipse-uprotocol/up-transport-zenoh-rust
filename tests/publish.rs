@@ -1,16 +1,15 @@
-//
-// Copyright (c) 2024 ZettaScale Technology
-//
-// This program and the accompanying materials are made available under the
-// terms of the Eclipse Public License 2.0 which is available at
-// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
-// which is available at https://www.apache.org/licenses/LICENSE-2.0.
-//
-// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
-//
-// Contributors:
-//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
-//
+/********************************************************************************
+ * Copyright (c) 2024 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
 pub mod test_lib;
 
 use async_trait::async_trait;
@@ -91,16 +90,16 @@ async fn test_publish_and_subscribe(publish_uuri: UUri, listen_uuri: UUri) {
         .unwrap();
 }
 
-#[test_case(test_lib::create_utransport_uuri(Some(0), 0, 0), test_lib::create_utransport_uuri(Some(1), 1, 1), test_lib::create_utransport_uuri(Some(1), 1, 1); "Normal UUri")]
-#[test_case(test_lib::create_utransport_uuri(Some(0), 0, 0), test_lib::create_utransport_uuri(Some(1), 1, 1), test_lib::create_special_uuri(1); "Special UUri")]
+#[test_case(test_lib::create_utransport_uuri(Some(2), 2, 2), test_lib::create_utransport_uuri(Some(3), 3, 3), test_lib::create_utransport_uuri(Some(3), 3, 3); "Normal UUri")]
+#[test_case(test_lib::create_utransport_uuri(Some(2), 2, 2), test_lib::create_utransport_uuri(Some(3), 3, 3), test_lib::create_special_uuri(3); "Special UUri")]
 #[tokio::test(flavor = "multi_thread")]
 async fn test_notification_and_subscribe(origin_uuri: UUri, dst_uuri: UUri, listen_uuri: UUri) {
     test_lib::before_test();
 
     // Initialization
     let target_data = String::from("Hello World!");
-    let upclient_notify = test_lib::create_up_client_zenoh(0, 0).await.unwrap();
-    let upclient_recv = test_lib::create_up_client_zenoh(1, 1).await.unwrap();
+    let upclient_notify = test_lib::create_up_client_zenoh(2, 2).await.unwrap();
+    let upclient_recv = test_lib::create_up_client_zenoh(3, 3).await.unwrap();
 
     // Register the listener
     let notification_listener = Arc::new(PublishNotificationListener::new());

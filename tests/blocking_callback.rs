@@ -1,16 +1,15 @@
-//
-// Copyright (c) 2024 ZettaScale Technology
-//
-// This program and the accompanying materials are made available under the
-// terms of the Eclipse Public License 2.0 which is available at
-// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
-// which is available at https://www.apache.org/licenses/LICENSE-2.0.
-//
-// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
-//
-// Contributors:
-//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
-//
+/********************************************************************************
+ * Copyright (c) 2024 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
 pub mod test_lib;
 
 use async_trait::async_trait;
@@ -54,14 +53,14 @@ impl UListener for DelayListener {
 }
 
 // The test is used to check whether blocking user callback will affect receiving messages
-#[test_case(test_lib::create_utransport_uuri(Some(0), 0, 0); "Normal UUri")]
+#[test_case(test_lib::create_utransport_uuri(Some(4), 4, 4); "Normal UUri")]
 #[tokio::test(flavor = "multi_thread")]
 async fn test_blocking_user_callback(pub_uuri: UUri) {
     test_lib::before_test();
 
     // Initialization
-    let upclient_send = test_lib::create_up_client_zenoh(0, 0).await.unwrap();
-    let upclient_recv = test_lib::create_up_client_zenoh(1, 1).await.unwrap();
+    let upclient_send = test_lib::create_up_client_zenoh(4, 4).await.unwrap();
+    let upclient_recv = test_lib::create_up_client_zenoh(5, 5).await.unwrap();
 
     // Register the listener
     let pub_listener = Arc::new(DelayListener::new());

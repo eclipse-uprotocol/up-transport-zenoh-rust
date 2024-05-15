@@ -1,16 +1,15 @@
-//
-// Copyright (c) 2024 ZettaScale Technology
-//
-// This program and the accompanying materials are made available under the
-// terms of the Eclipse Public License 2.0 which is available at
-// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
-// which is available at https://www.apache.org/licenses/LICENSE-2.0.
-//
-// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
-//
-// Contributors:
-//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
-//
+/********************************************************************************
+ * Copyright (c) 2024 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
 pub mod test_lib;
 
 use async_trait::async_trait;
@@ -104,15 +103,15 @@ impl UListener for ResponseListener {
     }
 }
 
-#[test_case(test_lib::create_rpcserver_uuri(Some(1), 1), test_lib::create_rpcserver_uuri(Some(1), 1); "Normal RPC UUri")]
-#[test_case(test_lib::create_rpcserver_uuri(Some(1), 1), test_lib::create_special_uuri(1); "Special listen UUri")]
+#[test_case(test_lib::create_rpcserver_uuri(Some(7), 7), test_lib::create_rpcserver_uuri(Some(7), 7); "Normal RPC UUri")]
+#[test_case(test_lib::create_rpcserver_uuri(Some(7), 7), test_lib::create_special_uuri(7); "Special listen UUri")]
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rpc_server_client(dst_uuri: UUri, listen_uuri: UUri) {
     test_lib::before_test();
 
     // Initialization
-    let upclient_client = test_lib::create_up_client_zenoh(0, 0).await.unwrap();
-    let upclient_server = Arc::new(test_lib::create_up_client_zenoh(1, 1).await.unwrap());
+    let upclient_client = test_lib::create_up_client_zenoh(6, 6).await.unwrap();
+    let upclient_server = Arc::new(test_lib::create_up_client_zenoh(7, 7).await.unwrap());
     let request_data = String::from("This is the request data");
     let response_data = String::from("This is the response data");
 
