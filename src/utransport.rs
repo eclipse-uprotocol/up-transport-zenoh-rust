@@ -33,11 +33,11 @@ fn invoke_block_callback(listener: &Arc<dyn UListener>, resp_msg: Result<UMessag
                 Handle::current().block_on(listener.on_receive(umsg));
             });
         }
-        Err(msg) => {
-            log::error!("{msg}");
+        Err(err_msg) => {
+            log::error!("{err_msg}");
             task::block_in_place(|| {
                 Handle::current()
-                    .block_on(listener.on_error(UStatus::fail_with_code(UCode::INTERNAL, msg)));
+                    .block_on(listener.on_error(UStatus::fail_with_code(UCode::INTERNAL, err_msg)));
             });
         }
     }
@@ -58,19 +58,19 @@ fn invoke_nonblock_callback(
                 })
                 .is_err()
             {
-                log::error!("Unable to call the user callback");
+                log::error!("Unable to send user callback to thread pool");
             }
         }
-        Err(msg) => {
-            log::error!("{msg}");
+        Err(err_msg) => {
+            log::error!("{err_msg}");
             if sender
                 .send(CallbackChannelMessage {
                     listener: listener.clone(),
-                    result: Err(UStatus::fail_with_code(UCode::INTERNAL, msg)),
+                    result: Err(UStatus::fail_with_code(UCode::INTERNAL, err_msg)),
                 })
                 .is_err()
             {
-                log::error!("Unable to call the user callback");
+                log::error!("Unable to send user callback to thread pool");
             }
         }
     }
