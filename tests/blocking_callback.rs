@@ -56,14 +56,14 @@ impl UListener for DelayListener {
 }
 
 // The test is used to check whether blocking user callback will affect receiving messages
-#[test_case(test_lib::create_utransport_uuri(Some(0), 0, 0); "Normal UUri")]
+#[test_case(test_lib::create_utransport_uuri(Some(4), 4, 4); "Normal UUri")]
 #[async_std::test]
 async fn test_blocking_user_callback(pub_uuri: UUri) {
     test_lib::before_test();
 
     // Initialization
-    let upclient_send = test_lib::create_up_client_zenoh(0, 0).await.unwrap();
-    let upclient_recv = test_lib::create_up_client_zenoh(1, 1).await.unwrap();
+    let upclient_send = test_lib::create_up_client_zenoh(4, 4).await.unwrap();
+    let upclient_recv = test_lib::create_up_client_zenoh(5, 5).await.unwrap();
 
     // Register the listener
     let pub_listener = Arc::new(DelayListener::new());

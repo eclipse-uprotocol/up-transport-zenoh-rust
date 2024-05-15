@@ -1,7 +1,31 @@
+################################################################################
+# Copyright (c) 2023 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+################################################################################
+
 [package]
-name = "up-client-zenoh"
-version = "0.1.0"
+description = "Zenoh Rust Client library implementation of the Eclipse uProtocol"
 edition = "2021"
+exclude = [
+    "tests/*",
+    ".github/*",
+    ".gitignore",
+]
+keywords = ["uProtocol", "SDK", "Zenoh"]
+license = "Apache-2.0"
+name = "up-client-zenoh"
+readme = "README.md"
+repository = "https://github.com/eclipse-uprotocol/up-client-zenoh-rust"
+rust-version = "1.74.0"
+version = "0.1.0"
 
 [lints.clippy]
 all = "deny"

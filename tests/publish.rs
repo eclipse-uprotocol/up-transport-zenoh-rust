@@ -93,16 +93,16 @@ async fn test_publish_and_subscribe(publish_uuri: UUri, listen_uuri: UUri) {
         .unwrap();
 }
 
-#[test_case(test_lib::create_utransport_uuri(Some(0), 0, 0), test_lib::create_utransport_uuri(Some(1), 1, 1), test_lib::create_utransport_uuri(Some(1), 1, 1); "Normal UUri")]
-#[test_case(test_lib::create_utransport_uuri(Some(0), 0, 0), test_lib::create_utransport_uuri(Some(1), 1, 1), test_lib::create_special_uuri(1); "Special UUri")]
+#[test_case(test_lib::create_utransport_uuri(Some(2), 2, 2), test_lib::create_utransport_uuri(Some(3), 3, 3), test_lib::create_utransport_uuri(Some(3), 3, 3); "Normal UUri")]
+#[test_case(test_lib::create_utransport_uuri(Some(2), 2, 2), test_lib::create_utransport_uuri(Some(3), 3, 3), test_lib::create_special_uuri(3); "Special UUri")]
 #[async_std::test]
 async fn test_notification_and_subscribe(origin_uuri: UUri, dst_uuri: UUri, listen_uuri: UUri) {
     test_lib::before_test();
 
     // Initialization
     let target_data = String::from("Hello World!");
-    let upclient_notify = test_lib::create_up_client_zenoh(0, 0).await.unwrap();
-    let upclient_recv = test_lib::create_up_client_zenoh(1, 1).await.unwrap();
+    let upclient_notify = test_lib::create_up_client_zenoh(2, 2).await.unwrap();
+    let upclient_recv = test_lib::create_up_client_zenoh(3, 3).await.unwrap();
 
     // Register the listener
     let notification_listener = Arc::new(PublishNotificationListener::new());
