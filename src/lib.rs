@@ -13,7 +13,6 @@
 pub mod rpc;
 pub mod utransport;
 
-use async_std::task::block_on;
 use crossbeam_channel::{bounded, Receiver, Sender};
 use protobuf::{Enum, Message};
 use std::{
@@ -55,9 +54,11 @@ impl CallbackThreadPool {
         for _ in 0..thread_num {
             let receiver = cb_receiver.clone();
             thread_pool.push(thread::spawn(move || {
+                // Create a dedicated runtime for the thread
+                let rt = tokio::runtime::Runtime::new().expect("Unable to create runtime");
                 // if cb_sender is released, break the while-loop and stop the thread
                 while let Ok(msg) = receiver.recv() {
-                    block_on(match msg.result {
+                    rt.block_on(match msg.result {
                         Ok(umessage) => msg.listener.on_receive(umessage),
                         Err(status) => msg.listener.on_error(status),
                     });
@@ -105,7 +106,8 @@ impl UPClientZenoh {
     /// # Examples
     ///
     /// ```
-    /// # async_std::task::block_on(async {
+    /// #[tokio::main]
+    /// # async fn main() {
     /// use up_client_zenoh::UPClientZenoh;
     /// use up_rust::{Number, UAuthority, UEntity, UUri};
     /// use zenoh::config::Config;
@@ -124,7 +126,7 @@ impl UPClientZenoh {
     /// let upclient = UPClientZenoh::new(Config::default(), uauthority, uentity)
     ///     .await
     ///     .unwrap();
-    /// # });
+    /// # }
     /// ```
     pub async fn new(
         config: Config,
@@ -173,7 +175,8 @@ impl UPClientZenoh {
     /// # Examples
     ///
     /// ```
-    /// # async_std::task::block_on(async {
+    /// #[tokio::main]
+    /// # async fn main() {
     /// use up_client_zenoh::UPClientZenoh;
     /// use up_rust::{Number, UAuthority, UEntity, UUri, UriValidator};
     /// use zenoh::config::Config;
@@ -196,7 +199,7 @@ impl UPClientZenoh {
     /// assert!(UriValidator::is_rpc_response(&uuri));
     /// assert_eq!(uuri.authority.unwrap().name.unwrap(), "MyAuthName");
     /// assert_eq!(uuri.entity.unwrap().name, "default.entity");
-    /// # });
+    /// # }
     /// ```
     pub fn get_response_uuri(&self) -> UUri {
         let mut source = self.source_uuri.clone();
@@ -313,7 +316,6 @@ impl UPClientZenoh {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use async_std::task::block_on;
     use test_case::test_case;
     use up_rust::{Number, UAuthority, UEntity, UResource, UUri};
 
@@ -327,8 +329,13 @@ mod tests {
     #[test_case(valid_authority(), valid_entity(), true; "succeeds with both valid authority and entity")]
     #[test_case(invalid_authority(), valid_entity(), false; "fails for invalid authority")]
     #[test_case(valid_authority(), invalid_entity(), false; "fails for invalid entity")]
-    fn test_new_up_client_zenoh(authority: UAuthority, entity: UEntity, expected_result: bool) {
-        let up_client_zenoh = block_on(UPClientZenoh::new(Config::default(), authority, entity));
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_new_up_client_zenoh(
+        authority: UAuthority,
+        entity: UEntity,
+        expected_result: bool,
+    ) {
+        let up_client_zenoh = UPClientZenoh::new(Config::default(), authority, entity).await;
         assert_eq!(up_client_zenoh.is_ok(), expected_result);
     }
 

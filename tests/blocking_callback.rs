@@ -12,13 +12,10 @@
  ********************************************************************************/
 pub mod test_lib;
 
-use async_std::task;
 use async_trait::async_trait;
-use std::{
-    sync::{Arc, Mutex},
-    time,
-};
+use std::sync::{Arc, Mutex};
 use test_case::test_case;
+use tokio::time::{sleep, Duration};
 use up_rust::{
     Data, UListener, UMessage, UMessageBuilder, UPayloadFormat, UStatus, UTransport, UUri,
 };
@@ -43,7 +40,7 @@ impl UListener for DelayListener {
             let value = v.into_iter().map(|c| c as char).collect::<String>();
             // Delay the receive time of the first message
             if value == "Pub 0" {
-                task::sleep(time::Duration::from_millis(3000)).await;
+                sleep(Duration::from_millis(3000)).await;
             }
             *self.recv_data.lock().unwrap() = value;
         } else {
@@ -57,7 +54,7 @@ impl UListener for DelayListener {
 
 // The test is used to check whether blocking user callback will affect receiving messages
 #[test_case(test_lib::create_utransport_uuri(Some(4), 4, 4); "Normal UUri")]
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_blocking_user_callback(pub_uuri: UUri) {
     test_lib::before_test();
 
@@ -72,7 +69,7 @@ async fn test_blocking_user_callback(pub_uuri: UUri) {
         .await
         .unwrap();
     // Waiting for listener to take effect
-    task::sleep(time::Duration::from_millis(1000)).await;
+    sleep(Duration::from_millis(1000)).await;
 
     // Send 2 UMessage
     let umsg0 = UMessageBuilder::publish(pub_uuri.clone())
@@ -92,10 +89,10 @@ async fn test_blocking_user_callback(pub_uuri: UUri) {
 
     // Receive the data in reverse order due to the delay time
     // Waiting for the subscriber to receive 2nd data
-    task::sleep(time::Duration::from_millis(1000)).await;
+    sleep(Duration::from_millis(1000)).await;
     assert_eq!(pub_listener.get_recv_data(), "Pub 1".to_string());
     // Waiting for the subscriber to receive 1st data
-    task::sleep(time::Duration::from_millis(3000)).await;
+    sleep(Duration::from_millis(3000)).await;
     assert_eq!(pub_listener.get_recv_data(), "Pub 0".to_string());
 
     // Cleanup
