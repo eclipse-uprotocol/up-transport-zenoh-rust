@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   check-msrv:
-    uses: ./.github/workflows/yamls/verify-msrv.yaml
+    uses: ./.github/workflows/verify-msrv.yaml
 
   coverage:
-    uses: ./.github/workflows/yamls/coverage.yaml
+    uses: ./.github/workflows/coverage.yaml

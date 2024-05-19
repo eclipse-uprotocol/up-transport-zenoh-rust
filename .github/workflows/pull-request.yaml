@@ -71,7 +71,7 @@ jobs:
           cargo clippy --all-targets -- -W warnings -D warnings
 
   test-build-docs:
-    uses: ./.github/workflows/yamls/docs.yaml
+    uses: ./.github/workflows/docs.yaml
 
   nextest:
-    uses: ./.github/workflows/yamls/nextest.yaml
+    uses: ./.github/workflows/nextest.yaml
