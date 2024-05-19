@@ -70,18 +70,8 @@ jobs:
           cargo clippy --version
           cargo clippy --all-targets -- -W warnings -D warnings
 
-  build-docs:
-    runs-on: ubuntu-latest
-    env:
-      RUSTDOCFLAGS: -Dwarnings
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
-        with: 
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-      - name: Create Documentation
-        run: |
-          cargo doc --no-deps
+  test-build-docs:
+    uses: ./.github/workflows/yamls/docs.yaml
 
   nextest:
-    uses: ./.github/workflows/nextest.yaml
+    uses: ./.github/workflows/yamls/nextest.yaml
