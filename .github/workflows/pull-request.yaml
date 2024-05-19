@@ -70,8 +70,36 @@ jobs:
           cargo clippy --version
           cargo clippy --all-targets -- -W warnings -D warnings
 
-  test-build-docs:
-    uses: ./.github/workflows/docs.yaml
+  run-doctest:
+    runs-on: ubuntu-latest
+    env:
+      RUSTDOCFLAGS: -Dwarnings
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with: 
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Run doc tests
+        run: |
+          RUSTC_BOOTSTRAP=1 cargo test --doc -- -Z unstable-options --format json --report-time > doctestresults.json
+      - name: Upload doctest results artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: doctest-results
+          path: doctestresults.json
+
+  build-docs:
+    runs-on: ubuntu-latest
+    env:
+      RUSTDOCFLAGS: -Dwarnings
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with: 
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Create Documentation
+        run: |
+          cargo doc --no-deps
 
   nextest:
     uses: ./.github/workflows/nextest.yaml
