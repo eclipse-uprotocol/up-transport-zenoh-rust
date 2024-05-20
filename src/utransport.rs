@@ -10,9 +10,8 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  ********************************************************************************/
-use crate::{CallbackChannelMessage, UPClientZenoh};
+use crate::{UPClientZenoh, CB_RUNTIME};
 use async_trait::async_trait;
-use crossbeam_channel::Sender;
 use std::{sync::Arc, time::Duration};
 use tokio::{runtime::Handle, task};
 use up_rust::{
@@ -44,34 +43,22 @@ fn invoke_block_callback(listener: &Arc<dyn UListener>, resp_msg: Result<UMessag
 }
 
 #[inline]
-fn invoke_nonblock_callback(
-    sender: &Sender<CallbackChannelMessage>,
-    listener: &Arc<dyn UListener>,
-    listener_msg: Result<UMessage, &str>,
-) {
+fn spawn_nonblock_callback(listener: &Arc<dyn UListener>, listener_msg: Result<UMessage, &str>) {
+    let listener = listener.clone();
     match listener_msg {
         Ok(umsg) => {
-            if sender
-                .send(CallbackChannelMessage {
-                    listener: listener.clone(),
-                    result: Ok(umsg),
-                })
-                .is_err()
-            {
-                log::error!("Unable to send user callback to thread pool");
-            }
+            CB_RUNTIME.spawn(async move {
+                listener.on_receive(umsg).await;
+            });
         }
         Err(err_msg) => {
             log::error!("{err_msg}");
-            if sender
-                .send(CallbackChannelMessage {
-                    listener: listener.clone(),
-                    result: Err(UStatus::fail_with_code(UCode::INTERNAL, err_msg)),
-                })
-                .is_err()
-            {
-                log::error!("Unable to send user callback to thread pool");
-            }
+            let err_msg = err_msg.to_string();
+            CB_RUNTIME.spawn(async move {
+                listener
+                    .on_error(UStatus::fail_with_code(UCode::INTERNAL, err_msg))
+                    .await;
+            });
         }
     }
 }
@@ -305,22 +292,16 @@ impl UPClientZenoh {
 
         // Setup callback
         let listener_cloned = listener.clone();
-        let cb_sender = self.cb_sender.clone();
         let callback = move |sample: Sample| {
             // Get the UAttribute from Zenoh user attachment
             let Some(attachment) = sample.attachment() else {
-                invoke_nonblock_callback(
-                    &cb_sender,
-                    &listener_cloned,
-                    Err("Unable to get attachment"),
-                );
+                spawn_nonblock_callback(&listener_cloned, Err("Unable to get attachment"));
                 return;
             };
             let u_attribute = match UPClientZenoh::attachment_to_uattributes(attachment) {
                 Ok(uattributes) => uattributes,
                 Err(e) => {
-                    invoke_nonblock_callback(
-                        &cb_sender,
+                    spawn_nonblock_callback(
                         &listener_cloned,
                         Err(&format!(
                             "Unable to transform attachment to UAttributes: {e:?}"
@@ -331,11 +312,7 @@ impl UPClientZenoh {
             };
             // Create UPayload
             let Some(encoding) = UPClientZenoh::to_upayload_format(&sample.encoding) else {
-                invoke_nonblock_callback(
-                    &cb_sender,
-                    &listener_cloned,
-                    Err("Unable to get payload encoding"),
-                );
+                spawn_nonblock_callback(&listener_cloned, Err("Unable to get payload encoding"));
                 return;
             };
             let u_payload = UPayload {
@@ -350,7 +327,7 @@ impl UPClientZenoh {
                 payload: Some(u_payload).into(),
                 ..Default::default()
             };
-            invoke_nonblock_callback(&cb_sender, &listener_cloned, Ok(msg));
+            spawn_nonblock_callback(&listener_cloned, Ok(msg));
         };
 
         // Create Zenoh subscriber
@@ -385,22 +362,16 @@ impl UPClientZenoh {
         // Setup callback
         let listener_cloned = listener.clone();
         let query_map = self.query_map.clone();
-        let cb_sender = self.cb_sender.clone();
         let callback = move |query: Query| {
             // Create UAttribute from Zenoh user attachment
             let Some(attachment) = query.attachment() else {
-                invoke_nonblock_callback(
-                    &cb_sender,
-                    &listener_cloned,
-                    Err("Unable to get attachment"),
-                );
+                spawn_nonblock_callback(&listener_cloned, Err("Unable to get attachment"));
                 return;
             };
             let u_attribute = match UPClientZenoh::attachment_to_uattributes(attachment) {
                 Ok(uattributes) => uattributes,
                 Err(e) => {
-                    invoke_nonblock_callback(
-                        &cb_sender,
+                    spawn_nonblock_callback(
                         &listener_cloned,
                         Err(&format!(
                             "Unable to transform user attachment to UAttributes: {e:?}"
@@ -413,8 +384,7 @@ impl UPClientZenoh {
             let u_payload = match query.value() {
                 Some(value) => {
                     let Some(encoding) = UPClientZenoh::to_upayload_format(&value.encoding) else {
-                        invoke_nonblock_callback(
-                            &cb_sender,
+                        spawn_nonblock_callback(
                             &listener_cloned,
                             Err("Unable to get payload encoding"),
                         );
@@ -444,7 +414,7 @@ impl UPClientZenoh {
                 .lock()
                 .unwrap()
                 .insert(u_attribute.id.to_string(), query);
-            invoke_nonblock_callback(&cb_sender, &listener_cloned, Ok(msg));
+            spawn_nonblock_callback(&listener_cloned, Ok(msg));
         };
 
         // Create Zenoh queryable

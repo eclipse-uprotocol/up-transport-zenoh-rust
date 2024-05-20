@@ -13,16 +13,15 @@
 pub mod rpc;
 pub mod utransport;
 
-use crossbeam_channel::{bounded, Receiver, Sender};
 use protobuf::{Enum, Message};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
-    thread,
 };
+use tokio::runtime::Runtime;
 use up_rust::{
-    ComparableListener, UAttributes, UAuthority, UCode, UEntity, UListener, UMessage,
-    UPayloadFormat, UPriority, UResourceBuilder, UStatus, UUri,
+    ComparableListener, UAttributes, UAuthority, UCode, UEntity, UListener, UPayloadFormat,
+    UPriority, UResourceBuilder, UStatus, UUri,
 };
 use zenoh::{
     config::Config,
@@ -34,41 +33,14 @@ use zenoh::{
 
 const UATTRIBUTE_VERSION: u8 = 1;
 const THREAD_NUM: usize = 10;
-const CHANNEL_SIZE: usize = 3000;
 
-struct CallbackChannelMessage {
-    listener: Arc<dyn UListener>,
-    result: Result<UMessage, UStatus>,
-}
-
-struct CallbackThreadPool {
-    _thread_pool: Vec<thread::JoinHandle<()>>,
-}
-
-impl CallbackThreadPool {
-    pub fn new(
-        thread_num: usize,
-        cb_receiver: &Receiver<CallbackChannelMessage>,
-    ) -> CallbackThreadPool {
-        let mut thread_pool = Vec::with_capacity(thread_num);
-        for _ in 0..thread_num {
-            let receiver = cb_receiver.clone();
-            thread_pool.push(thread::spawn(move || {
-                // Create a dedicated runtime for the thread
-                let rt = tokio::runtime::Runtime::new().expect("Unable to create runtime");
-                // if cb_sender is released, break the while-loop and stop the thread
-                while let Ok(msg) = receiver.recv() {
-                    rt.block_on(match msg.result {
-                        Ok(umessage) => msg.listener.on_receive(umessage),
-                        Err(status) => msg.listener.on_error(status),
-                    });
-                }
-            }));
-        }
-        CallbackThreadPool {
-            _thread_pool: thread_pool,
-        }
-    }
+// Create a separate tokio Runtime for running the callback
+lazy_static::lazy_static! {
+    static ref CB_RUNTIME: Runtime = tokio::runtime::Builder::new_multi_thread()
+               .worker_threads(THREAD_NUM)
+               .enable_all()
+               .build()
+               .expect("Unable to create callback runtime");
 }
 
 type SubscriberMap = Arc<Mutex<HashMap<(UUri, ComparableListener), Subscriber<'static, ()>>>>;
@@ -87,8 +59,6 @@ pub struct UPClientZenoh {
     rpc_callback_map: RpcCallbackMap,
     // Source UUri in RPC
     source_uuri: UUri,
-    // Callback Sender
-    cb_sender: Sender<CallbackChannelMessage>,
 }
 
 impl UPClientZenoh {
@@ -155,9 +125,6 @@ impl UPClientZenoh {
             log::error!("{msg}");
             return Err(UStatus::fail_with_code(UCode::INTERNAL, msg));
         };
-        // Create channels for passing user callback
-        let (cb_sender, cb_receiver) = bounded::<CallbackChannelMessage>(CHANNEL_SIZE);
-        CallbackThreadPool::new(THREAD_NUM, &cb_receiver);
         // Return UPClientZenoh
         Ok(UPClientZenoh {
             session: Arc::new(session),
@@ -166,7 +133,6 @@ impl UPClientZenoh {
             query_map: Arc::new(Mutex::new(HashMap::new())),
             rpc_callback_map: Arc::new(Mutex::new(HashMap::new())),
             source_uuri,
-            cb_sender,
         })
     }
 
