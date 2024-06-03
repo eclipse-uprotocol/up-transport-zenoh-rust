@@ -13,16 +13,14 @@
 pub mod rpc;
 pub mod utransport;
 
-use protobuf::{Enum, Message};
+use bitmask_enum::bitmask;
+use protobuf::Message;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
 };
 use tokio::runtime::Runtime;
-use up_rust::{
-    ComparableListener, UAttributes, UAuthority, UCode, UEntity, UListener, UPayloadFormat,
-    UPriority, UResourceBuilder, UStatus, UUri,
-};
+use up_rust::{ComparableListener, UAttributes, UCode, UListener, UPriority, UStatus, UUri};
 use zenoh::{
     config::Config,
     prelude::r#async::*,
@@ -30,6 +28,15 @@ use zenoh::{
     sample::{Attachment, AttachmentBuilder},
     subscriber::Subscriber,
 };
+
+// CY_TODO: Whether to expose from up_rust or not
+const _WILDCARD_AUTHORITY: &str = "*";
+const WILDCARD_ENTITY_ID: u32 = 0x0000_FFFF;
+const WILDCARD_ENTITY_VERSION: u32 = 0x0000_00FF;
+const WILDCARD_RESOURCE_ID: u32 = 0x0000_FFFF;
+
+const _RESOURCE_ID_RESPONSE: u32 = 0;
+const _RESOURCE_ID_MIN_EVENT: u32 = 0x8000;
 
 const UATTRIBUTE_VERSION: u8 = 1;
 const THREAD_NUM: usize = 10;
@@ -43,10 +50,18 @@ lazy_static::lazy_static! {
                .expect("Unable to create callback runtime");
 }
 
-type SubscriberMap = Arc<Mutex<HashMap<(UUri, ComparableListener), Subscriber<'static, ()>>>>;
-type QueryableMap = Arc<Mutex<HashMap<(UUri, ComparableListener), Queryable<'static, ()>>>>;
+#[bitmask(u8)]
+enum MessageFlag {
+    Publish,
+    Notification,
+    Request,
+    Response,
+}
+
+type SubscriberMap = Arc<Mutex<HashMap<(String, ComparableListener), Subscriber<'static, ()>>>>;
+type QueryableMap = Arc<Mutex<HashMap<(String, ComparableListener), Queryable<'static, ()>>>>;
 type QueryMap = Arc<Mutex<HashMap<String, Query>>>;
-type RpcCallbackMap = Arc<Mutex<HashMap<UUri, Arc<dyn UListener>>>>;
+type RpcCallbackMap = Arc<Mutex<HashMap<String, Arc<dyn UListener>>>>;
 pub struct UPClientZenoh {
     session: Arc<Session>,
     // Able to unregister Subscriber
@@ -57,8 +72,8 @@ pub struct UPClientZenoh {
     query_map: QueryMap,
     // Save the callback for RPC response
     rpc_callback_map: RpcCallbackMap,
-    // Source UUri in RPC
-    source_uuri: UUri,
+    // My authority
+    authority_name: String,
 }
 
 impl UPClientZenoh {
@@ -66,9 +81,8 @@ impl UPClientZenoh {
     ///
     /// # Arguments
     ///
-    /// * `config` - Zenoh configuration. You can refer to [here](https://github.com/eclipse-zenoh/zenoh/blob/0.10.1-rc/DEFAULT_CONFIG.json5) for more configuration details.
-    /// * `uauthority` - The `UAuthority` which is put into source address while generating messages.
-    /// * `uentity` - The `UEntity` which is put into source address while generating messages.
+    /// * `config` - Zenoh configuration. You can refer to [here](https://github.com/eclipse-zenoh/zenoh/blob/0.11.0-rc.3/DEFAULT_CONFIG.json5) for more configuration details.
+    /// * `authority_name` - The authority name. We need it to generate Zenoh key since authority might be omitted in `UUri`.
     ///
     /// # Errors
     /// Will return `Err` if unable to create `UPClientZenoh`
@@ -79,46 +93,13 @@ impl UPClientZenoh {
     /// #[tokio::main]
     /// # async fn main() {
     /// use up_client_zenoh::UPClientZenoh;
-    /// use up_rust::{Number, UAuthority, UEntity, UUri};
     /// use zenoh::config::Config;
-    /// let uauthority = UAuthority {
-    ///     name: Some("MyAuthName".to_string()),
-    ///     number: Some(Number::Id(vec![1, 2, 3, 4])),
-    ///     ..Default::default()
-    /// };
-    /// let uentity = UEntity {
-    ///     name: "default.entity".to_string(),
-    ///     id: Some(u32::from(rand::random::<u16>())),
-    ///     version_major: Some(1),
-    ///     version_minor: None,
-    ///     ..Default::default()
-    /// };
-    /// let upclient = UPClientZenoh::new(Config::default(), uauthority, uentity)
+    /// let upclient = UPClientZenoh::new(Config::default(), String::from("MyAuthName"))
     ///     .await
     ///     .unwrap();
     /// # }
     /// ```
-    pub async fn new(
-        config: Config,
-        uauthority: UAuthority,
-        uentity: UEntity,
-    ) -> Result<UPClientZenoh, UStatus> {
-        // Validate the UUri
-        uauthority.validate_micro_form().map_err(|e| {
-            let msg = format!("UAuthority is invalid: {e:?}");
-            log::error!("{msg}");
-            UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
-        })?;
-        uentity.validate_micro_form().map_err(|e| {
-            let msg = format!("UEntity is invalid: {e:?}");
-            log::error!("{msg}");
-            UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
-        })?;
-        let source_uuri = UUri {
-            authority: Some(uauthority).into(),
-            entity: Some(uentity).into(),
-            ..Default::default()
-        };
+    pub async fn new(config: Config, authority_name: String) -> Result<UPClientZenoh, UStatus> {
         // Create Zenoh session
         let Ok(session) = zenoh::open(config).res().await else {
             let msg = "Unable to open Zenoh session".to_string();
@@ -132,91 +113,49 @@ impl UPClientZenoh {
             queryable_map: Arc::new(Mutex::new(HashMap::new())),
             query_map: Arc::new(Mutex::new(HashMap::new())),
             rpc_callback_map: Arc::new(Mutex::new(HashMap::new())),
-            source_uuri,
+            authority_name,
         })
     }
 
-    /// Get the `UUri` of `UPClientZenoh` in for RPC response
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// #[tokio::main]
-    /// # async fn main() {
-    /// use up_client_zenoh::UPClientZenoh;
-    /// use up_rust::{Number, UAuthority, UEntity, UUri, UriValidator};
-    /// use zenoh::config::Config;
-    /// let uauthority = UAuthority {
-    ///     name: Some("MyAuthName".to_string()),
-    ///     number: Some(Number::Id(vec![1, 2, 3, 4])),
-    ///     ..Default::default()
-    /// };
-    /// let uentity = UEntity {
-    ///     name: "default.entity".to_string(),
-    ///     id: Some(u32::from(rand::random::<u16>())),
-    ///     version_major: Some(1),
-    ///     version_minor: None,
-    ///     ..Default::default()
-    /// };
-    /// let upclient = UPClientZenoh::new(Config::default(), uauthority, uentity)
-    ///     .await
-    ///     .unwrap();
-    /// let uuri = upclient.get_response_uuri();
-    /// assert!(UriValidator::is_rpc_response(&uuri));
-    /// assert_eq!(uuri.authority.unwrap().name.unwrap(), "MyAuthName");
-    /// assert_eq!(uuri.entity.unwrap().name, "default.entity");
-    /// # }
-    /// ```
-    pub fn get_response_uuri(&self) -> UUri {
-        let mut source = self.source_uuri.clone();
-        source.resource = Some(UResourceBuilder::for_rpc_response()).into();
-        source
+    fn uri_to_zenoh_key(&self, uri: &UUri) -> String {
+        // CY_TODO: Update Zenoh spec
+        // authority_name
+        let authority = if uri.authority_name.is_empty() {
+            &self.authority_name
+        } else {
+            &uri.authority_name
+        };
+        // ue_id
+        let ue_id = if uri.ue_id == WILDCARD_ENTITY_ID {
+            "*"
+        } else {
+            &format!("{:X}", uri.ue_id)
+        };
+        // ue_version_major
+        let ue_version_major = if uri.ue_version_major == WILDCARD_ENTITY_VERSION {
+            "*"
+        } else {
+            &format!("{:X}", uri.ue_version_major)
+        };
+        // resource_id
+        let resource_id = if uri.resource_id == WILDCARD_RESOURCE_ID {
+            "*"
+        } else {
+            &format!("{:X}", uri.resource_id)
+        };
+        format!("{authority}/{ue_id}/{ue_version_major}/{resource_id}")
     }
 
-    fn get_uauth_from_uuri(uri: &UUri) -> Result<String, UStatus> {
-        if let Some(authority) = uri.authority.as_ref() {
-            let buf: Vec<u8> = authority.try_into().map_err(|_| {
-                let msg = "Unable to transform UAuthority into micro form".to_string();
-                log::error!("{msg}");
-                UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
-            })?;
-            Ok(buf
-                .iter()
-                .fold(String::new(), |s, c| s + &format!("{c:02x}")))
+    // The format of Zenoh key should be
+    // up/[src.authority]/[src.ue_id]/[src.ue_version_major]/[src.resource_id]/[sink.authority]/[sink.ue_id]/[sink.ue_version_major]/[sink.resource_id]
+    fn to_zenoh_key_string(&self, src_uri: &UUri, dst_uri: Option<&UUri>) -> String {
+        let src = self.uri_to_zenoh_key(src_uri);
+        let dst = if let Some(dst) = dst_uri {
+            self.uri_to_zenoh_key(dst)
         } else {
-            let msg = "UAuthority is empty".to_string();
-            log::error!("{msg}");
-            Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg))
-        }
-    }
-
-    // The UURI format should be "upr/<UAuthority id or ip>/<the rest of remote UUri>" or "upl/<local UUri>"
-    fn to_zenoh_key_string(uri: &UUri) -> Result<String, UStatus> {
-        if uri.authority.is_some() && uri.entity.is_none() && uri.resource.is_none() {
-            Ok(String::from("upr/") + &UPClientZenoh::get_uauth_from_uuri(uri)? + "/**")
-        } else {
-            let micro_uuri: Vec<u8> = uri.try_into().map_err(|e| {
-                let msg = format!("Unable to serialize into micro format: {e}");
-                log::error!("{msg}");
-                UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
-            })?;
-            // If the UUri is larger than 8 bytes, then it should be remote UUri with UAuthority
-            // We should prepend it to the Zenoh key.
-            let mut micro_zenoh_key = if micro_uuri.len() > 8 {
-                String::from("upr/")
-                    + &micro_uuri[8..]
-                        .iter()
-                        .fold(String::new(), |s, c| s + &format!("{c:02x}"))
-                    + "/"
-            } else {
-                String::from("upl/")
-            };
-            // The rest part of UUri (UEntity + UResource)
-            micro_zenoh_key += &micro_uuri[..8]
-                .iter()
-                .fold(String::new(), |s, c| s + &format!("{c:02x}"));
-            Ok(micro_zenoh_key)
-        }
+            "{}/{}/{}/{}".to_string()
+        };
+        format!("up/{src}/{dst}")
     }
 
     #[allow(clippy::match_same_arms)]
@@ -233,13 +172,6 @@ impl UPClientZenoh {
             // https://github.com/eclipse-uprotocol/uprotocol-spec/blob/main/basics/qos.adoc
             UPriority::UPRIORITY_UNSPECIFIED => Priority::DataLow,
         }
-    }
-
-    fn to_upayload_format(encoding: &Encoding) -> Option<UPayloadFormat> {
-        let Ok(value) = encoding.suffix().parse::<i32>() else {
-            return None;
-        };
-        UPayloadFormat::from_i32(value)
     }
 
     fn uattributes_to_attachment(uattributes: &UAttributes) -> anyhow::Result<AttachmentBuilder> {
@@ -277,97 +209,93 @@ impl UPClientZenoh {
         };
         Ok(uattributes)
     }
+
+    // CY_TODO: Add table here
+    /*
+     *  How resource_id maps to Message type
+     *  Publish: {[8000-FFFF), None}
+     *  Notification: {[8000-FFFF), 0}, {[8000-FFFF), FFFF]}, {FFFF, 0}, {FFFF, FFFF}
+     *  Request: {0, (0-8000)}, {0, FFFF}, {FFFF, (0-8000)}, {FFFF, FFFF}
+     *  Response: {(0-8000), 0}, {(0-8000), FFFF}, (FFFF, 0), {FFFF, FFFF}
+     */
+    fn get_listener_message_type(
+        source_uuri: &UUri,
+        sink_uuri: Option<&UUri>,
+    ) -> Result<MessageFlag, UStatus> {
+        let rpc_range = 1..0x7FFF_u32;
+        let nonrpc_range = 0x8000..0xFFFE_u32;
+
+        let src_resource = source_uuri.resource_id;
+        // Notification / Request / Response
+        if let Some(dst_uuri) = sink_uuri {
+            let dst_resource = dst_uuri.resource_id;
+
+            if (nonrpc_range.contains(&src_resource) && dst_resource == 0)
+                || (nonrpc_range.contains(&src_resource) && dst_resource == 0xFFFF)
+                || (src_resource == 0xFFFF && dst_resource == 0)
+                || (src_resource == 0xFFFF && dst_resource == 0xFFFF)
+            {
+                return Ok(MessageFlag::Notification);
+            } else if (src_resource == 0 && rpc_range.contains(&dst_resource))
+                || (src_resource == 0 && dst_resource == 0xFFFF)
+                || (src_resource == 0xFFFF && rpc_range.contains(&dst_resource))
+                || (src_resource == 0xFFFF && dst_resource == 0xFFFF)
+            {
+                return Ok(MessageFlag::Request);
+            } else if (rpc_range.contains(&src_resource) && dst_resource == 0)
+                || (rpc_range.contains(&src_resource) && dst_resource == 0xFFFF)
+                || (src_resource == 0xFFFF && dst_resource == 0)
+                || (src_resource == 0xFFFF && dst_resource == 0xFFFF)
+            {
+                return Ok(MessageFlag::Response);
+            }
+        } else if nonrpc_range.contains(&src_resource) || src_resource == 0xFFFF {
+            return Ok(MessageFlag::Publish);
+        }
+        Err(UStatus::fail_with_code(
+            UCode::INTERNAL,
+            "Wrong combination of source UUri and sink UUri",
+        ))
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
     use test_case::test_case;
-    use up_rust::{Number, UAuthority, UEntity, UResource, UUri};
+    use up_rust::UUri;
 
-    fn invalid_entity() -> UEntity {
-        UEntity {
-            name: "default.entity".to_string(),
-            ..Default::default()
-        }
-    }
-
-    #[test_case(valid_authority(), valid_entity(), true; "succeeds with both valid authority and entity")]
-    #[test_case(invalid_authority(), valid_entity(), false; "fails for invalid authority")]
-    #[test_case(valid_authority(), invalid_entity(), false; "fails for invalid entity")]
+    // CY_TODO: Test invalid authority
+    #[test_case("vehicle1".to_string(), true; "succeeds with both valid authority and entity")]
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_new_up_client_zenoh(
-        authority: UAuthority,
-        entity: UEntity,
-        expected_result: bool,
-    ) {
-        let up_client_zenoh = UPClientZenoh::new(Config::default(), authority, entity).await;
+    async fn test_new_up_client_zenoh(authority: String, expected_result: bool) {
+        let up_client_zenoh = UPClientZenoh::new(Config::default(), authority).await;
         assert_eq!(up_client_zenoh.is_ok(), expected_result);
     }
 
-    #[test]
-    fn test_to_zenoh_key_string() {
-        // create uuri for test
-        let uuri = UUri {
-            entity: Some(UEntity {
-                name: "body.access".to_string(),
-                version_major: Some(1),
-                id: Some(1234),
-                ..Default::default()
-            })
-            .into(),
-            resource: Some(UResource {
-                name: "door".to_string(),
-                instance: Some("front_left".to_string()),
-                message: Some("Door".to_string()),
-                id: Some(5678),
-                ..Default::default()
-            })
-            .into(),
-            ..Default::default()
-        };
-        assert_eq!(
-            UPClientZenoh::to_zenoh_key_string(&uuri).unwrap(),
-            String::from("upl/0100162e04d20100")
-        );
-        // create special uuri for test
-        let uuri = UUri {
-            authority: Some(UAuthority {
-                name: Some("UAuthName".to_string()),
-                number: Some(Number::Id(vec![1, 2, 3, 10, 11, 12])),
-                ..Default::default()
-            })
-            .into(),
-            ..Default::default()
-        };
-        assert_eq!(
-            UPClientZenoh::to_zenoh_key_string(&uuri).unwrap(),
-            String::from("upr/060102030a0b0c/**")
-        );
-    }
-
-    fn valid_authority() -> UAuthority {
-        UAuthority {
-            name: Some("UAuthName".to_string()),
-            number: Some(Number::Id(vec![1, 2, 3, 10, 11, 12])),
-            ..Default::default()
-        }
-    }
-
-    fn invalid_authority() -> UAuthority {
-        UAuthority {
-            name: Some("UAuthName".to_string()),
-            ..Default::default()
-        }
-    }
-
-    fn valid_entity() -> UEntity {
-        UEntity {
-            name: "default.entity".to_string(),
-            id: Some(u32::from(rand::random::<u16>())),
-            version_major: Some(1),
-            version_minor: None,
-            ..Default::default()
+    // CY_TODO: Test Request and Response
+    #[test_case("//vehicle1/A8000/2/1A50", None, "up/vehicle1/A8000/2/1A50/{}/{}/{}/{}"; "Publish transformation")]
+    #[test_case("//vehicle1/A8000/2/1A50", Some("//vehicle2/A8001/3/2B61"), "up/vehicle1/A8000/2/1A50/vehicle2/A8001/3/2B61"; "Notification transformation")]
+    #[test_case("/A8000/2/1A50", None, "up/vehicle1/A8000/2/1A50/{}/{}/{}/{}"; "Publish with local UUri")]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_to_zenoh_key_string(src_uri: &str, sink_uri: Option<&str>, zenoh_key: &str) {
+        let up_client_zenoh = UPClientZenoh::new(Config::default(), String::from("vehicle1"))
+            .await
+            .unwrap();
+        let src = UUri::from_str(src_uri).unwrap();
+        if let Some(sink) = sink_uri {
+            let sink = UUri::from_str(sink).unwrap();
+            assert_eq!(
+                up_client_zenoh.to_zenoh_key_string(&src, Some(&sink)),
+                zenoh_key.to_string()
+            );
+        } else {
+            assert_eq!(
+                up_client_zenoh.to_zenoh_key_string(&src, None),
+                zenoh_key.to_string()
+            );
         }
     }
 }
