@@ -288,13 +288,17 @@ mod tests {
         assert_eq!(up_client_zenoh.is_ok(), expected_result);
     }
 
-    // CY_TODO: Test Request, Response and special UUri
-    #[test_case("//vehicle1/A8000/2/1A50", None, "up/vehicle1/A8000/2/1A50/{}/{}/{}/{}"; "Publish transformation")]
-    #[test_case("//vehicle1/A8000/2/1A50", Some("//vehicle2/A8001/3/2B61"), "up/vehicle1/A8000/2/1A50/vehicle2/A8001/3/2B61"; "Notification transformation")]
-    #[test_case("/A8000/2/1A50", None, "up/vehicle1/A8000/2/1A50/{}/{}/{}/{}"; "Publish with local UUri")]
+    // Mapping with the examples in Zenoh spec
+    #[test_case("/10AB/3/80CD", None, "up/192.168.1.100/10AB/3/80CD/{}/{}/{}/{}"; "Send Publish")]
+    #[test_case("//192.168.1.100/10AB/3/80CD", None, "up/192.168.1.100/10AB/3/80CD/{}/{}/{}/{}"; "Subscribe messages")]
+    #[test_case("//192.168.1.100/10AB/3/80CD", Some("//192.168.1.101/20EF/4/0"), "up/192.168.1.100/10AB/3/80CD/192.168.1.101/20EF/4/0"; "Send Notification")]
+    #[test_case("//*/FFFF/FF/FFFF", Some("//192.168.1.101/20EF/4/0"), "up/*/*/*/*/192.168.1.101/20EF/4/0"; "Receive all Notifications")]
+    #[test_case("//my-host1/10AB/3/0", Some("//my-host2/20EF/4/B"), "up/my-host1/10AB/3/0/my-host2/20EF/4/B"; "Send Request")]
+    #[test_case("//*/FFFF/FF/FFFF", Some("//my-host2/20EF/4/B"), "up/*/*/*/*/my-host2/20EF/4/B"; "Receive all Requests")]
+    #[test_case("//*/FFFF/FF/FFFF", Some("//[::1]/FFFF/FF/FFFF"), "up/*/*/*/*/[::1]/*/*/*"; "Receive all messages to a device")]
     #[tokio::test(flavor = "multi_thread")]
     async fn test_to_zenoh_key_string(src_uri: &str, sink_uri: Option<&str>, zenoh_key: &str) {
-        let up_client_zenoh = UPClientZenoh::new(Config::default(), String::from("vehicle1"))
+        let up_client_zenoh = UPClientZenoh::new(Config::default(), String::from("192.168.1.100"))
             .await
             .unwrap();
         let src = UUri::from_str(src_uri).unwrap();
