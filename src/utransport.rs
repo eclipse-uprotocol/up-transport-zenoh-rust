@@ -164,7 +164,6 @@ impl UPClientZenoh {
         };
 
         // Send query
-        // CY_TODO: Check whehter copy the value too many times
         let value = Value::new(payload.to_vec().into());
         let getbuilder = self
             .session
@@ -208,7 +207,6 @@ impl UPClientZenoh {
             .clone();
 
         // Send back the query
-        // CY_TODO: Find a way to reduce copy
         let value = Value::new(payload.to_vec().into());
         let reply = Ok(Sample::new(query.key_expr().clone(), value));
         query
@@ -378,7 +376,6 @@ impl UTransport for UPClientZenoh {
         };
 
         // Get payload
-        // CY_TODO: Reduce copy
         let payload = if let Some(payload) = message.payload {
             payload.to_vec()
         } else {

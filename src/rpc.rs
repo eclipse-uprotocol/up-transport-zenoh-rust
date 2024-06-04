@@ -47,13 +47,11 @@ impl RpcClient for UPClientZenoh {
         };
 
         // Get the data from UPayload
-        // CY_TODO: Reduce the copy
-        let payload = if let Some(payload) = request.payload {
-            payload.to_vec()
+        let value = if let Some(payload) = request.payload {
+            Value::new(payload.to_vec().into())
         } else {
-            vec![]
+            Value::new(vec![].into())
         };
-        let value = Value::new(payload.into());
 
         // Send the query
         let mut getbuilder = self
