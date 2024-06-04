@@ -54,10 +54,7 @@ impl RpcClient for UPClientZenoh {
         } else {
             vec![]
         };
-        let value = Value::new(payload.into()).encoding(Encoding::WithSuffix(
-            KnownEncoding::AppCustom,
-            request.attributes.payload_format.value().to_string().into(),
-        ));
+        let value = Value::new(payload.into());
 
         // Send the query
         let mut getbuilder = self

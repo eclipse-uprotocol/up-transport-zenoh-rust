@@ -86,14 +86,9 @@ impl UPClientZenoh {
             })?);
 
         // Send data
-        // CY_TODO: Check encoding issue
         let putbuilder = self
             .session
             .put(zenoh_key, payload)
-            .encoding(Encoding::WithSuffix(
-                KnownEncoding::AppCustom,
-                attributes.payload_format.value().to_string().into(),
-            ))
             .priority(priority)
             .with_attachment(attachment.build());
         putbuilder
@@ -170,10 +165,7 @@ impl UPClientZenoh {
 
         // Send query
         // CY_TODO: Check whehter copy the value too many times
-        let value = Value::new(payload.to_vec().into()).encoding(Encoding::WithSuffix(
-            KnownEncoding::AppCustom,
-            attributes.payload_format.value().to_string().into(),
-        ));
+        let value = Value::new(payload.to_vec().into());
         let getbuilder = self
             .session
             .get(zenoh_key)
@@ -217,10 +209,7 @@ impl UPClientZenoh {
 
         // Send back the query
         // CY_TODO: Find a way to reduce copy
-        let value = Value::new(payload.to_vec().into()).encoding(Encoding::WithSuffix(
-            KnownEncoding::AppCustom,
-            attributes.payload_format.value().to_string().into(),
-        ));
+        let value = Value::new(payload.to_vec().into());
         let reply = Ok(Sample::new(query.key_expr().clone(), value));
         query
             .reply(reply)
