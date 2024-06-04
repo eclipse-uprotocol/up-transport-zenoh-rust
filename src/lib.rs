@@ -118,7 +118,6 @@ impl UPClientZenoh {
     }
 
     fn uri_to_zenoh_key(&self, uri: &UUri) -> String {
-        // CY_TODO: Update Zenoh spec
         // authority_name
         let authority = if uri.authority_name.is_empty() {
             &self.authority_name
@@ -127,21 +126,21 @@ impl UPClientZenoh {
         };
         // ue_id
         let ue_id = if uri.ue_id == WILDCARD_ENTITY_ID {
-            "*"
+            "*".to_string()
         } else {
-            &format!("{:X}", uri.ue_id)
+            format!("{:X}", uri.ue_id)
         };
         // ue_version_major
         let ue_version_major = if uri.ue_version_major == WILDCARD_ENTITY_VERSION {
-            "*"
+            "*".to_string()
         } else {
-            &format!("{:X}", uri.ue_version_major)
+            format!("{:X}", uri.ue_version_major)
         };
         // resource_id
         let resource_id = if uri.resource_id == WILDCARD_RESOURCE_ID {
-            "*"
+            "*".to_string()
         } else {
-            &format!("{:X}", uri.resource_id)
+            format!("{:X}", uri.resource_id)
         };
         format!("{authority}/{ue_id}/{ue_version_major}/{resource_id}")
     }
@@ -210,14 +209,28 @@ impl UPClientZenoh {
         Ok(uattributes)
     }
 
-    // CY_TODO: Add table here
-    /*
-     *  How resource_id maps to Message type
-     *  Publish: {[8000-FFFF), None}
-     *  Notification: {[8000-FFFF), 0}, {[8000-FFFF), FFFF]}, {FFFF, 0}, {FFFF, FFFF}
-     *  Request: {0, (0-8000)}, {0, FFFF}, {FFFF, (0-8000)}, {FFFF, FFFF}
-     *  Response: {(0-8000), 0}, {(0-8000), FFFF}, (FFFF, 0), {FFFF, FFFF}
+    /*        The table for mapping resource ID to message type
+     *
+     *  |   src rid   | sink rid | Publish | Notification | Request | Response |
+     *  |-------------|----------|---------|--------------|---------|----------|
+     *  | [8000-FFFF) |   None   |    V    |              |         |          |
+     *  | [8000-FFFF) |     0    |         |      V       |         |          |
+     *  |      0      | (0-8000) |         |              |    V    |          |
+     *  |   (0-8000)  |     0    |         |              |         |    V     |
+     *  |     FFFF    |     0    |         |      V       |         |    V     |
+     *  |     FFFF    | (0-8000) |         |              |    V    |          |
+     *  |      0      |   FFFF   |         |              |    V    |          |
+     *  |   (0-8000)  |   FFFF   |         |              |         |    V     |
+     *  | [8000-FFFF) |   FFFF   |         |      V       |         |          |
+     *  |     FFFF    |   FFFF   |         |      V       |    V    |    V     |
+     *
+     *  Some organization:
+     *  - Publish: {[8000-FFFF), None}
+     *  - Notification: {[8000-FFFF), 0}, {[8000-FFFF), FFFF]}, {FFFF, 0}, {FFFF, FFFF}
+     *  - Request: {0, (0-8000)}, {0, FFFF}, {FFFF, (0-8000)}, {FFFF, FFFF}
+     *  - Response: {(0-8000), 0}, {(0-8000), FFFF}, (FFFF, 0), {FFFF, FFFF}
      */
+    #[allow(clippy::nonminimal_bool)] // Don't simplify the boolean expression for better understanding
     fn get_listener_message_type(
         source_uuri: &UUri,
         sink_uuri: Option<&UUri>,
@@ -275,7 +288,7 @@ mod tests {
         assert_eq!(up_client_zenoh.is_ok(), expected_result);
     }
 
-    // CY_TODO: Test Request and Response
+    // CY_TODO: Test Request, Response and special UUri
     #[test_case("//vehicle1/A8000/2/1A50", None, "up/vehicle1/A8000/2/1A50/{}/{}/{}/{}"; "Publish transformation")]
     #[test_case("//vehicle1/A8000/2/1A50", Some("//vehicle2/A8001/3/2B61"), "up/vehicle1/A8000/2/1A50/vehicle2/A8001/3/2B61"; "Notification transformation")]
     #[test_case("/A8000/2/1A50", None, "up/vehicle1/A8000/2/1A50/{}/{}/{}/{}"; "Publish with local UUri")]

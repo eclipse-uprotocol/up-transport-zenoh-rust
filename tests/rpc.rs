@@ -153,7 +153,6 @@ async fn test_rpc_server_client(
     {
         // Register Response callback
         let response_listener = Arc::new(ResponseListener::new());
-        // CY_TODO: Check how to get src and sink callback
         upclient_client
             .register_listener(sink_uuri, Some(src_uuri), response_listener.clone())
             .await
