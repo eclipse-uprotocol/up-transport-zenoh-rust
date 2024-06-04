@@ -18,7 +18,6 @@ use zenoh::prelude::r#async::*;
 
 #[async_trait]
 impl RpcClient for UPClientZenoh {
-    // CY_TODO: Check the return error
     // CY_TODO: Should remove method in the future
     async fn invoke_method(&self, _method: UUri, request: UMessage) -> RpcClientResult {
         // Get Zenoh key

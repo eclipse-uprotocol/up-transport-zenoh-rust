@@ -517,7 +517,7 @@ impl UTransport for UPClientZenoh {
             {
                 let msg = "Publish / Notifcation listener doesn't exist".to_string();
                 log::warn!("{msg}");
-                return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg));
+                return Err(UStatus::fail_with_code(UCode::NOT_FOUND, msg));
             }
         }
         // RPC request
@@ -533,7 +533,7 @@ impl UTransport for UPClientZenoh {
             {
                 let msg = "RPC request listener doesn't exist".to_string();
                 log::warn!("{msg}");
-                return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg));
+                return Err(UStatus::fail_with_code(UCode::NOT_FOUND, msg));
             }
         }
         // RPC response
@@ -550,7 +550,7 @@ impl UTransport for UPClientZenoh {
                 {
                     let msg = "RPC response callback doesn't exist".to_string();
                     log::warn!("{msg}");
-                    return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg));
+                    return Err(UStatus::fail_with_code(UCode::NOT_FOUND, msg));
                 }
             } else {
                 return Err(UStatus::fail_with_code(
