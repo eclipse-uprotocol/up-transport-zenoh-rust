@@ -19,9 +19,9 @@ use up_rust::{
     UMessageType, UStatus, UTransport, UUri,
 };
 use zenoh::{
-    prelude::{r#async::*, Sample},
-    query::Reply,
-    queryable::Query,
+    prelude::*,
+    query::{Query, QueryTarget, Reply},
+    sample::{QoSBuilderTrait, Sample, ValueBuilderTrait},
 };
 
 #[inline]
@@ -90,9 +90,8 @@ impl UPClientZenoh {
             .session
             .put(zenoh_key, payload)
             .priority(priority)
-            .with_attachment(attachment.build());
+            .attachment(attachment);
         putbuilder
-            .res()
             .await
             .map_err(|_| UStatus::fail_with_code(UCode::INTERNAL, "Unable to send with Zenoh"))?;
 
@@ -125,7 +124,7 @@ impl UPClientZenoh {
             })?
             .clone();
         let zenoh_callback = move |reply: Reply| {
-            match reply.sample {
+            match reply.result() {
                 Ok(sample) => {
                     // Get UAttribute from the attachment
                     let Some(attachment) = sample.attachment() else {
@@ -149,7 +148,7 @@ impl UPClientZenoh {
                         &resp_callback,
                         Ok(UMessage {
                             attributes: Some(u_attribute).into(),
-                            payload: Some(sample.payload.contiguous().to_vec().into()),
+                            payload: Some(sample.payload().into::<Vec<u8>>().into()),
                             ..Default::default()
                         }),
                     );
@@ -164,18 +163,17 @@ impl UPClientZenoh {
         };
 
         // Send query
-        let value = Value::new(payload.to_vec().into());
         let getbuilder = self
             .session
             .get(zenoh_key)
-            .with_value(value)
-            .with_attachment(attachment.build())
+            .value(payload.to_vec())
+            .attachment(attachment)
             .target(QueryTarget::BestMatching)
             .timeout(Duration::from_millis(u64::from(
                 attributes.ttl.unwrap_or(1000),
             )))
             .callback(zenoh_callback);
-        getbuilder.res().await.map_err(|e| {
+        getbuilder.await.map_err(|e| {
             let msg = format!("Unable to send get with Zenoh: {e:?}");
             log::error!("{msg}");
             UStatus::fail_with_code(UCode::INTERNAL, msg)
@@ -207,17 +205,9 @@ impl UPClientZenoh {
             .clone();
 
         // Send back the query
-        let value = Value::new(payload.to_vec().into());
-        let reply = Ok(Sample::new(query.key_expr().clone(), value));
         query
-            .reply(reply)
-            .with_attachment(attachment.build())
-            .map_err(|_| {
-                let msg = "Unable to add attachment";
-                log::error!("{msg}");
-                UStatus::fail_with_code(UCode::INTERNAL, msg)
-            })?
-            .res()
+            .reply(query.key_expr().clone(), payload)
+            .attachment(attachment)
             .await
             .map_err(|e| {
                 let msg = format!("Unable to reply with Zenoh: {e:?}");
@@ -256,7 +246,7 @@ impl UPClientZenoh {
             // Create UMessage
             let msg = UMessage {
                 attributes: Some(u_attribute).into(),
-                payload: Some(sample.payload.contiguous().to_vec().into()),
+                payload: Some(sample.payload().into::<Vec<u8>>().into()),
                 ..Default::default()
             };
             spawn_nonblock_callback(&listener_cloned, Ok(msg));
@@ -267,7 +257,6 @@ impl UPClientZenoh {
             .session
             .declare_subscriber(zenoh_key)
             .callback_mut(callback)
-            .res()
             .await
         {
             self.subscriber_map.lock().unwrap().insert(
@@ -314,7 +303,7 @@ impl UPClientZenoh {
                 attributes: Some(u_attribute.clone()).into(),
                 payload: query
                     .value()
-                    .map(|value| value.payload.contiguous().to_vec().into()),
+                    .map(|value| value.payload().into::<Vec<u8>>().into()),
                 ..Default::default()
             };
             query_map
@@ -329,7 +318,6 @@ impl UPClientZenoh {
             .session
             .declare_queryable(zenoh_key)
             .callback_mut(callback)
-            .res()
             .await
         {
             self.queryable_map.lock().unwrap().insert(

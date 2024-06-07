@@ -14,7 +14,7 @@ use crate::UPClientZenoh;
 use async_trait::async_trait;
 use std::{string::ToString, time::Duration};
 use up_rust::{RpcClient, RpcClientResult, UAttributesError, UMessage, UMessageError, UUri};
-use zenoh::prelude::r#async::*;
+use zenoh::{prelude::*, query::QueryTarget, sample::ValueBuilderTrait};
 
 #[async_trait]
 impl RpcClient for UPClientZenoh {
@@ -48,22 +48,22 @@ impl RpcClient for UPClientZenoh {
 
         // Get the data from UPayload
         let value = if let Some(payload) = request.payload {
-            Value::new(payload.to_vec().into())
+            payload.to_vec()
         } else {
-            Value::new(vec![].into())
+            vec![]
         };
 
         // Send the query
         let mut getbuilder = self
             .session
             .get(&zenoh_key)
-            .with_value(value)
-            .with_attachment(attachment.build())
+            .value(value)
+            .attachment(attachment)
             .target(QueryTarget::BestMatching);
         if let Some(ttl) = request.attributes.ttl {
             getbuilder = getbuilder.timeout(Duration::from_millis(u64::from(ttl)));
         }
-        let Ok(replies) = getbuilder.res().await else {
+        let Ok(replies) = getbuilder.await else {
             let msg = "Error while sending Zenoh query".to_string();
             log::error!("{msg}");
             return Err(UMessageError::PayloadError(msg));
@@ -75,10 +75,10 @@ impl RpcClient for UPClientZenoh {
             log::error!("{msg}");
             return Err(UMessageError::PayloadError(msg));
         };
-        match reply.sample {
+        match reply.result() {
             Ok(sample) => Ok(UMessage {
                 attributes: Some(attributes).into(),
-                payload: Some(sample.payload.contiguous().to_vec().into()),
+                payload: Some(sample.payload().into::<Vec<u8>>().into()),
                 ..Default::default()
             }),
             Err(e) => {

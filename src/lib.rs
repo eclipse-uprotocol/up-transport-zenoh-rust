@@ -22,11 +22,8 @@ use std::{
 use tokio::runtime::Runtime;
 use up_rust::{ComparableListener, UAttributes, UCode, UListener, UPriority, UStatus, UUri};
 use zenoh::{
-    config::Config,
-    prelude::r#async::*,
-    queryable::{Query, Queryable},
-    sample::{Attachment, AttachmentBuilder},
-    subscriber::Subscriber,
+    bytes::ZBytes, config::Config, core::Priority, query::Query, queryable::Queryable,
+    subscriber::Subscriber, Session,
 };
 
 // CY_TODO: Whether to expose from up_rust or not
@@ -101,7 +98,7 @@ impl UPClientZenoh {
     /// ```
     pub async fn new(config: Config, authority_name: String) -> Result<UPClientZenoh, UStatus> {
         // Create Zenoh session
-        let Ok(session) = zenoh::open(config).res().await else {
+        let Ok(session) = zenoh::open(config).await else {
             let msg = "Unable to open Zenoh session".to_string();
             log::error!("{msg}");
             return Err(UStatus::fail_with_code(UCode::INTERNAL, msg));
@@ -173,24 +170,27 @@ impl UPClientZenoh {
         }
     }
 
-    fn uattributes_to_attachment(uattributes: &UAttributes) -> anyhow::Result<AttachmentBuilder> {
-        let mut attachment = AttachmentBuilder::new();
-        attachment.insert("", &UATTRIBUTE_VERSION.to_le_bytes());
-        attachment.insert("", &uattributes.write_to_bytes()?);
-        Ok(attachment)
+    fn uattributes_to_attachment(uattributes: &UAttributes) -> anyhow::Result<ZBytes> {
+        let attachments = [
+            UATTRIBUTE_VERSION.to_le_bytes().to_vec(),
+            uattributes.write_to_bytes()?,
+        ];
+        Ok(attachments.iter().collect::<ZBytes>())
     }
 
-    fn attachment_to_uattributes(attachment: &Attachment) -> anyhow::Result<UAttributes> {
-        let mut attachment_iter = attachment.iter();
-        if let Some((_, value)) = attachment_iter.next() {
-            let version = *value.as_slice().first().ok_or_else(|| {
+    fn attachment_to_uattributes(attachment: &ZBytes) -> anyhow::Result<UAttributes> {
+        let mut attachment_iter = attachment.iter::<Vec<u8>>();
+        if let Some(value) = attachment_iter.next() {
+            if let Some(version) = value.first() {
+                if *version != UATTRIBUTE_VERSION {
+                    let msg = format!(
+                        "UAttributes version is {version} (should be {UATTRIBUTE_VERSION})"
+                    );
+                    log::error!("{msg}");
+                    return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg).into());
+                }
+            } else {
                 let msg = format!("UAttributes version is empty (should be {UATTRIBUTE_VERSION})");
-                log::error!("{msg}");
-                UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
-            })?;
-            if version != UATTRIBUTE_VERSION {
-                let msg =
-                    format!("UAttributes version is {version} (should be {UATTRIBUTE_VERSION})");
                 log::error!("{msg}");
                 return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg).into());
             }
@@ -199,7 +199,7 @@ impl UPClientZenoh {
             log::error!("{msg}");
             return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg).into());
         }
-        let uattributes = if let Some((_, value)) = attachment_iter.next() {
+        let uattributes = if let Some(value) = attachment_iter.next() {
             UAttributes::parse_from_bytes(value.as_slice())?
         } else {
             let msg = "Unable to get the UAttributes".to_string();
