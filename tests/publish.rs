@@ -86,6 +86,7 @@ async fn test_publish_and_subscribe(publish_uuri: &UUri, listen_uuri: &UUri) {
 
 #[test_case(&test_lib::new_uuri("sender", 1, 1, 0x8000), &test_lib::new_uuri("receiver", 2, 1, 0), &test_lib::new_uuri("*", 0xFFFF, 0xFF, 0xFFFF), Some(&test_lib::new_uuri("receiver", 2, 1, 0)); "Any source UUri")]
 #[test_case(&test_lib::new_uuri("sender", 1, 1, 0x8000), &test_lib::new_uuri("receiver", 2, 1, 0), &test_lib::new_uuri("sender", 1, 1, 0x8000), Some(&test_lib::new_uuri("receiver", 2, 1, 0)); "Specific source UUri")]
+#[test_case(&test_lib::new_uuri("ustreamer_sender", 1, 1, 0x8000), &test_lib::new_uuri("ustreamer_receiver", 2, 1, 0), &test_lib::new_uuri("ustreamer_sender", 0xFFFF, 0xFF, 0xFFFF), Some(&test_lib::new_uuri("*", 0xFFFF, 0xFF, 0xFFFF)); "uStreamer case for notification")]
 #[tokio::test(flavor = "multi_thread")]
 async fn test_notification_and_subscribe(
     src_uuri: &UUri,

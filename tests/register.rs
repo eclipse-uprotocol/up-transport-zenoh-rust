@@ -33,6 +33,7 @@ impl UListener for FooListener {
 #[test_case(&test_lib::new_uuri("*", 0xFFFF, 0xFF, 0xFFFF), Some(&test_lib::new_uuri("dst", 2, 1, 0)); "Listen to Response")]
 #[test_case(&test_lib::new_uuri("src", 1, 1, 0x0001), Some(&test_lib::new_uuri("dst", 2, 1, 0)); "Listen to specific Response")]
 #[test_case(&test_lib::new_uuri("*", 0xFFFF, 0xFF, 0xFFFF), None; "Listen to all Publish")]
+#[test_case(&test_lib::new_uuri("src", 0xFFFF, 0xFF, 0xFFFF), Some(&test_lib::new_uuri("*", 0xFFFF, 0xFF, 0xFFFF)); "uStreamer case")]
 #[tokio::test(flavor = "multi_thread")]
 async fn test_register_and_unregister(source_filter: &UUri, sink_filter: Option<&UUri>) {
     test_lib::before_test();

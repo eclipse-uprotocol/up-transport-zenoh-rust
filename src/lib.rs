@@ -235,6 +235,7 @@ impl UPClientZenoh {
         source_uuri: &UUri,
         sink_uuri: Option<&UUri>,
     ) -> Result<MessageFlag, UStatus> {
+        let mut flag = MessageFlag::none();
         let rpc_range = 1..0x7FFF_u32;
         let nonrpc_range = 0x8000..0xFFFE_u32;
 
@@ -248,27 +249,33 @@ impl UPClientZenoh {
                 || (src_resource == 0xFFFF && dst_resource == 0)
                 || (src_resource == 0xFFFF && dst_resource == 0xFFFF)
             {
-                return Ok(MessageFlag::Notification);
-            } else if (src_resource == 0 && rpc_range.contains(&dst_resource))
+                flag |= MessageFlag::Notification;
+            }
+            if (src_resource == 0 && rpc_range.contains(&dst_resource))
                 || (src_resource == 0 && dst_resource == 0xFFFF)
                 || (src_resource == 0xFFFF && rpc_range.contains(&dst_resource))
                 || (src_resource == 0xFFFF && dst_resource == 0xFFFF)
             {
-                return Ok(MessageFlag::Request);
-            } else if (rpc_range.contains(&src_resource) && dst_resource == 0)
+                flag |= MessageFlag::Request;
+            }
+            if (rpc_range.contains(&src_resource) && dst_resource == 0)
                 || (rpc_range.contains(&src_resource) && dst_resource == 0xFFFF)
                 || (src_resource == 0xFFFF && dst_resource == 0)
                 || (src_resource == 0xFFFF && dst_resource == 0xFFFF)
             {
-                return Ok(MessageFlag::Response);
+                flag |= MessageFlag::Response;
             }
         } else if nonrpc_range.contains(&src_resource) || src_resource == 0xFFFF {
-            return Ok(MessageFlag::Publish);
+            flag |= MessageFlag::Publish;
         }
-        Err(UStatus::fail_with_code(
-            UCode::INTERNAL,
-            "Wrong combination of source UUri and sink UUri",
-        ))
+        if flag.is_none() {
+            Err(UStatus::fail_with_code(
+                UCode::INTERNAL,
+                "Wrong combination of source UUri and sink UUri",
+            ))
+        } else {
+            Ok(flag)
+        }
     }
 }
 
@@ -313,6 +320,34 @@ mod tests {
                 up_client_zenoh.to_zenoh_key_string(&src, None),
                 zenoh_key.to_string()
             );
+        }
+    }
+
+    #[test_case("//192.168.1.100/10AB/3/80CD", None, Ok(MessageFlag::Publish); "Publish Message")]
+    #[test_case("//192.168.1.100/10AB/3/80CD", Some("//192.168.1.101/20EF/4/0"), Ok(MessageFlag::Notification); "Notification Message")]
+    #[test_case("//192.168.1.100/10AB/3/0", Some("//192.168.1.101/20EF/4/B"), Ok(MessageFlag::Request); "Request Message")]
+    #[test_case("//192.168.1.101/20EF/4/B", Some("//192.168.1.100/10AB/3/0"), Ok(MessageFlag::Response); "Response Message")]
+    #[test_case("//*/FFFF/FF/FFFF", Some("//192.168.1.100/10AB/3/0"), Ok(MessageFlag::Notification | MessageFlag::Response); "Listen to Notification and Response Message")]
+    #[test_case("//*/FFFF/FF/FFFF", Some("//192.168.1.101/20EF/4/B"), Ok(MessageFlag::Request); "Listen to Request Message")]
+    #[test_case("//192.168.1.100/10AB/3/0", Some("//*/FFFF/FF/FFFF"), Ok(MessageFlag::Request); "Broadcast Request Message")]
+    #[test_case("//192.168.1.101/20EF/4/B", Some("//*/FFFF/FF/FFFF"), Ok(MessageFlag::Response); "Broadcast Response Message")]
+    #[test_case("//192.168.1.100/10AB/3/80CD", Some("//*/FFFF/FF/FFFF"), Ok(MessageFlag::Notification); "Broadcast Notification Message")]
+    #[test_case("//*/FFFF/FF/FFFF", Some("//[::1]/FFFF/FF/FFFF"), Ok(MessageFlag::Notification | MessageFlag::Request | MessageFlag::Response); "All messages to a device")]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_get_listener_message_type(
+        src_uri: &str,
+        sink_uri: Option<&str>,
+        result: Result<MessageFlag, UStatus>,
+    ) {
+        let src = UUri::from_str(src_uri).unwrap();
+        if let Some(uri) = sink_uri {
+            let dst = UUri::from_str(uri).unwrap();
+            assert_eq!(
+                UPClientZenoh::get_listener_message_type(&src, Some(&dst)),
+                result
+            );
+        } else {
+            assert_eq!(UPClientZenoh::get_listener_message_type(&src, None), result);
         }
     }
 }
