@@ -62,7 +62,7 @@ enum MessageFlag {
 type SubscriberMap = Arc<Mutex<HashMap<(String, ComparableListener), Subscriber<'static, ()>>>>;
 type QueryableMap = Arc<Mutex<HashMap<(String, ComparableListener), Queryable<'static, ()>>>>;
 type QueryMap = Arc<Mutex<HashMap<String, Query>>>;
-type RpcCallbackMap = Arc<Mutex<HashMap<String, Arc<dyn UListener>>>>;
+type RpcCallbackMap = Arc<Mutex<HashMap<OwnedKeyExpr, Arc<dyn UListener>>>>;
 pub struct UPClientZenoh {
     session: Arc<Session>,
     // Able to unregister Subscriber

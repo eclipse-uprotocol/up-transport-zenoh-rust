@@ -25,6 +25,7 @@ use up_rust::{
 };
 use up_transport_zenoh::UPClientZenoh;
 
+// RequestListener
 struct RequestListener {
     up_client: Arc<UPClientZenoh>,
     request_data: String,
@@ -72,6 +73,7 @@ impl UListener for RequestListener {
     }
 }
 
+// ResponseListener
 struct ResponseListener {
     response_data: Arc<Mutex<String>>,
 }

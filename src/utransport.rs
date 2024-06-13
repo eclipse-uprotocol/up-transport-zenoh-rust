@@ -113,17 +113,20 @@ impl UPClientZenoh {
         };
 
         // Retrieve the callback
-        let resp_callback = self
-            .rpc_callback_map
-            .lock()
-            .unwrap()
-            .get(zenoh_key)
-            .ok_or_else(|| {
-                let msg = "Unable to get callback".to_string();
-                log::error!("{msg}");
-                UStatus::fail_with_code(UCode::INTERNAL, msg)
-            })?
-            .clone();
+        let zenoh_key = keyexpr::new(zenoh_key).unwrap();
+        let mut resp_callback = None;
+        // Iterate all the saved callback and find the correct one.
+        for (saved_key, callback) in self.rpc_callback_map.lock().unwrap().iter() {
+            if zenoh_key.intersects(saved_key) {
+                resp_callback = Some(callback.clone());
+                break;
+            }
+        }
+        let Some(resp_callback) = resp_callback else {
+            let msg = "Unable to get callback".to_string();
+            log::error!("{msg}");
+            return Err(UStatus::fail_with_code(UCode::INTERNAL, msg));
+        };
         let zenoh_callback = move |reply: Reply| {
             match reply.sample {
                 Ok(sample) => {
@@ -347,6 +350,7 @@ impl UPClientZenoh {
 
     fn register_response_listener(&self, zenoh_key: &str, listener: Arc<dyn UListener>) {
         // Store the response callback (Will be used in send_request)
+        let zenoh_key = keyexpr::new(zenoh_key).unwrap();
         self.rpc_callback_map
             .lock()
             .unwrap()
@@ -538,11 +542,12 @@ impl UTransport for UPClientZenoh {
             if let Some(sink_filter) = sink_filter {
                 // Get Zenoh key
                 let zenoh_key = self.to_zenoh_key_string(sink_filter, Some(source_filter));
+                let zenoh_key = keyexpr::new(&zenoh_key).unwrap();
                 if self
                     .rpc_callback_map
                     .lock()
                     .unwrap()
-                    .remove(&zenoh_key)
+                    .remove(zenoh_key)
                     .is_none()
                 {
                     let msg = "RPC response callback doesn't exist".to_string();
