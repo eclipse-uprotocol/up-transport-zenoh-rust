@@ -11,8 +11,8 @@
  * SPDX-License-Identifier: Apache-2.0
  ********************************************************************************/
 use std::sync::Once;
-use up_client_zenoh::UPClientZenoh;
 use up_rust::{UStatus, UUri};
+use up_transport_zenoh::UPClientZenoh;
 use zenoh::config::Config;
 
 static INIT: Once = Once::new();

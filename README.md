@@ -1,6 +1,6 @@
-# up-client-zenoh-rust
+# up-transport-zenoh-rust
 
-Rust UPClient implementation for the Zenoh transport
+uProtocol transport implementation for Zenoh in Rust
 
 ## Build
 
@@ -17,7 +17,7 @@ cargo tarpaulin -o lcov -o html --output-dir target/tarpaulin
 
 ## Examples
 
-The examples of using up-client-zenoh-rust can be found in [up-zenoh-example-rust](https://github.com/eclipse-uprotocol/up-zenoh-example-rust).
+The examples of using up-transport-zenoh-rust can be found in [up-zenoh-example-rust](https://github.com/eclipse-uprotocol/up-zenoh-example-rust).
 
 ## Note
 
