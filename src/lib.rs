@@ -21,8 +21,9 @@ use std::{
 };
 use tokio::runtime::Runtime;
 use up_rust::{ComparableListener, UAttributes, UCode, UListener, UPriority, UStatus, UUri};
+// Re-export Zenoh config
+pub use zenoh::config::Config;
 use zenoh::{
-    config::Config,
     prelude::r#async::*,
     queryable::{Query, Queryable},
     sample::{Attachment, AttachmentBuilder},
@@ -92,8 +93,7 @@ impl UPClientZenoh {
     /// ```
     /// #[tokio::main]
     /// # async fn main() {
-    /// use up_client_zenoh::UPClientZenoh;
-    /// use zenoh::config::Config;
+    /// use up_transport_zenoh::{Config, UPClientZenoh};
     /// let upclient = UPClientZenoh::new(Config::default(), String::from("MyAuthName"))
     ///     .await
     ///     .unwrap();

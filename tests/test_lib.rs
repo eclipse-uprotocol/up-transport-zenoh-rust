@@ -12,8 +12,7 @@
  ********************************************************************************/
 use std::sync::Once;
 use up_rust::{UStatus, UUri};
-use up_transport_zenoh::UPClientZenoh;
-use zenoh::config::Config;
+use up_transport_zenoh::{Config, UPClientZenoh};
 
 static INIT: Once = Once::new();
 
