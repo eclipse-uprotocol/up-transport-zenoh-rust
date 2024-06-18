@@ -48,7 +48,7 @@ prost-types = "0.12"
 protobuf = { version = "3.3" }
 rand = "0.8.5"
 tokio = { version = "1.35.1", default-features = false }
-up-rust = { git = "https://github.com/eclipse-uprotocol/up-rust", rev = "d736fdf35ff4728effa7f36b720f0fc1605d5ba0" }
+up-rust = { git = "https://github.com/eclipse-uprotocol/up-rust", rev = "3a50104421a801d52e1d9c68979db54c013ce43d" }
 zenoh = { version = "0.11.0-rc.3", features = ["unstable"]}
 
 [dev-dependencies]
