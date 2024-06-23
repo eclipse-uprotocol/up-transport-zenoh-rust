@@ -26,6 +26,7 @@ pub use zenoh::config::Config;
 use zenoh::{
     prelude::r#async::*,
     queryable::{Query, Queryable},
+    runtime::Runtime as ZRuntime,
     sample::{Attachment, AttachmentBuilder},
     subscriber::Subscriber,
 };
@@ -78,7 +79,7 @@ pub struct UPClientZenoh {
 }
 
 impl UPClientZenoh {
-    /// Create `UPClientZenoh` by applying the Zenoh configuration, `UAuthority`, and `UEntity`.
+    /// Create `UPClientZenoh` by applying the Zenoh configuration, `UAuthority`.
     ///
     /// # Arguments
     ///
@@ -102,6 +103,35 @@ impl UPClientZenoh {
     pub async fn new(config: Config, authority_name: String) -> Result<UPClientZenoh, UStatus> {
         // Create Zenoh session
         let Ok(session) = zenoh::open(config).res().await else {
+            let msg = "Unable to open Zenoh session".to_string();
+            log::error!("{msg}");
+            return Err(UStatus::fail_with_code(UCode::INTERNAL, msg));
+        };
+        // Return UPClientZenoh
+        Ok(UPClientZenoh {
+            session: Arc::new(session),
+            subscriber_map: Arc::new(Mutex::new(HashMap::new())),
+            queryable_map: Arc::new(Mutex::new(HashMap::new())),
+            query_map: Arc::new(Mutex::new(HashMap::new())),
+            rpc_callback_map: Arc::new(Mutex::new(HashMap::new())),
+            authority_name,
+        })
+    }
+
+    /// Create `UPClientZenoh` by applying the Zenoh Runtime and `UAuthority`. This can be used by uStreamer.
+    ///
+    /// # Arguments
+    ///
+    /// * `runtime` - Zenoh Runtime.
+    /// * `authority_name` - The authority name. We need it to generate Zenoh key since authority might be omitted in `UUri`.
+    ///
+    /// # Errors
+    /// Will return `Err` if unable to create `UPClientZenoh`
+    pub async fn new_with_runtime(
+        runtime: ZRuntime,
+        authority_name: String,
+    ) -> Result<UPClientZenoh, UStatus> {
+        let Ok(session) = zenoh::init(runtime).res().await else {
             let msg = "Unable to open Zenoh session".to_string();
             log::error!("{msg}");
             return Err(UStatus::fail_with_code(UCode::INTERNAL, msg));
