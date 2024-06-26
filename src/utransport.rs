@@ -13,10 +13,14 @@
 use crate::{MessageFlag, UPClientZenoh, CB_RUNTIME};
 use async_trait::async_trait;
 use lazy_static::lazy_static;
-use std::sync::Mutex;
-use std::{sync::Arc, time::Duration};
-use tokio::runtime::Runtime;
-use tokio::{runtime::Handle, task};
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
+use tokio::{
+    runtime::{Handle, Runtime},
+    task,
+};
 use up_rust::{
     ComparableListener, UAttributes, UAttributesValidators, UCode, UListener, UMessage,
     UMessageType, UStatus, UTransport, UUri,
