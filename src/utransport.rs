@@ -12,7 +12,10 @@
  ********************************************************************************/
 use crate::{MessageFlag, UPClientZenoh, CB_RUNTIME};
 use async_trait::async_trait;
+use lazy_static::lazy_static;
+use std::sync::Mutex;
 use std::{sync::Arc, time::Duration};
+use tokio::runtime::Runtime;
 use tokio::{runtime::Handle, task};
 use up_rust::{
     ComparableListener, UAttributes, UAttributesValidators, UCode, UListener, UMessage,
@@ -24,20 +27,42 @@ use zenoh::{
     queryable::Query,
 };
 
+lazy_static! {
+    static ref TOKIO_RUNTIME: Mutex<Runtime> = Mutex::new(Runtime::new().unwrap());
+}
+
 #[inline]
 fn invoke_block_callback(listener: &Arc<dyn UListener>, resp_msg: Result<UMessage, &str>) {
     match resp_msg {
-        Ok(umsg) => {
-            task::block_in_place(|| {
-                Handle::current().block_on(listener.on_receive(umsg));
-            });
-        }
+        Ok(umsg) => match Handle::try_current() {
+            Ok(handle) => {
+                task::block_in_place(|| {
+                    handle.block_on(listener.on_receive(umsg));
+                });
+            }
+            Err(_) => {
+                TOKIO_RUNTIME
+                    .lock()
+                    .unwrap()
+                    .block_on(listener.on_receive(umsg));
+            }
+        },
         Err(err_msg) => {
             log::error!("{err_msg}");
-            task::block_in_place(|| {
-                Handle::current()
-                    .block_on(listener.on_error(UStatus::fail_with_code(UCode::INTERNAL, err_msg)));
-            });
+            match Handle::try_current() {
+                Ok(handle) => {
+                    task::block_in_place(|| {
+                        handle.block_on(
+                            listener.on_error(UStatus::fail_with_code(UCode::INTERNAL, err_msg)),
+                        );
+                    });
+                }
+                Err(_) => {
+                    TOKIO_RUNTIME.lock().unwrap().block_on(
+                        listener.on_error(UStatus::fail_with_code(UCode::INTERNAL, err_msg)),
+                    );
+                }
+            }
         }
     }
 }
