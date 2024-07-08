@@ -13,6 +13,7 @@
 use crate::UPClientZenoh;
 use async_trait::async_trait;
 use std::{string::ToString, time::Duration};
+use tracing::error;
 use up_rust::{RpcClient, RpcClientResult, UAttributesError, UMessage, UMessageError, UUri};
 use zenoh::prelude::r#async::*;
 
@@ -23,7 +24,7 @@ impl RpcClient for UPClientZenoh {
         // Get Zenoh key
         let source = *request.attributes.source.0.clone().ok_or_else(|| {
             let msg = "attributes.source should not be empty".to_string();
-            log::error!("{msg}");
+            error!("{msg}");
             UMessageError::PayloadError(msg)
         })?;
         let zenoh_key = if let Some(sink) = request.attributes.sink.0.clone() {
@@ -35,12 +36,12 @@ impl RpcClient for UPClientZenoh {
         // Create UAttributes and put into Zenoh user attachment
         let attributes = *request.attributes.0.clone().ok_or_else(|| {
             let msg = "Invalid UAttributes".to_string();
-            log::error!("{msg}");
+            error!("{msg}");
             UMessageError::AttributesValidationError(UAttributesError::ParsingError(msg))
         })?;
         let Ok(attachment) = UPClientZenoh::uattributes_to_attachment(&attributes) else {
             let msg = "Unable to transform UAttributes to user attachment in Zenoh".to_string();
-            log::error!("{msg}");
+            error!("{msg}");
             return Err(UMessageError::AttributesValidationError(
                 UAttributesError::ParsingError(msg),
             ));
@@ -65,14 +66,14 @@ impl RpcClient for UPClientZenoh {
         }
         let Ok(replies) = getbuilder.res().await else {
             let msg = "Error while sending Zenoh query".to_string();
-            log::error!("{msg}");
+            error!("{msg}");
             return Err(UMessageError::PayloadError(msg));
         };
 
         // Receive the reply
         let Ok(reply) = replies.recv_async().await else {
             let msg = "Error while receiving Zenoh reply".to_string();
-            log::error!("{msg}");
+            error!("{msg}");
             return Err(UMessageError::PayloadError(msg));
         };
         match reply.sample {
@@ -83,7 +84,7 @@ impl RpcClient for UPClientZenoh {
             }),
             Err(e) => {
                 let msg = format!("Error while parsing Zenoh reply: {e:?}");
-                log::error!("{msg}");
+                error!("{msg}");
                 Err(UMessageError::PayloadError(msg))
             }
         }
