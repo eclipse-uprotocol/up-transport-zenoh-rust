@@ -22,7 +22,7 @@ use std::{
 use tokio::runtime::Runtime;
 use up_rust::{ComparableListener, UAttributes, UCode, UListener, UPriority, UStatus, UUri};
 // Re-export Zenoh config
-pub use zenoh::config::Config;
+pub use zenoh::config as ZenohConfig;
 use zenoh::{
     prelude::r#async::*,
     queryable::{Query, Queryable},
@@ -94,13 +94,16 @@ impl UPClientZenoh {
     /// ```
     /// #[tokio::main]
     /// # async fn main() {
-    /// use up_transport_zenoh::{Config, UPClientZenoh};
-    /// let upclient = UPClientZenoh::new(Config::default(), String::from("MyAuthName"))
+    /// use up_transport_zenoh::{UPClientZenoh, ZenohConfig};
+    /// let upclient = UPClientZenoh::new(ZenohConfig::Config::default(), String::from("MyAuthName"))
     ///     .await
     ///     .unwrap();
     /// # }
     /// ```
-    pub async fn new(config: Config, authority_name: String) -> Result<UPClientZenoh, UStatus> {
+    pub async fn new(
+        config: ZenohConfig::Config,
+        authority_name: String,
+    ) -> Result<UPClientZenoh, UStatus> {
         // Create Zenoh session
         let Ok(session) = zenoh::open(config).res().await else {
             let msg = "Unable to open Zenoh session".to_string();
@@ -321,7 +324,7 @@ mod tests {
     #[test_case("vehicle1".to_string(), true; "succeeds with both valid authority and entity")]
     #[tokio::test(flavor = "multi_thread")]
     async fn test_new_up_client_zenoh(authority: String, expected_result: bool) {
-        let up_client_zenoh = UPClientZenoh::new(Config::default(), authority).await;
+        let up_client_zenoh = UPClientZenoh::new(ZenohConfig::Config::default(), authority).await;
         assert_eq!(up_client_zenoh.is_ok(), expected_result);
     }
 
@@ -335,9 +338,12 @@ mod tests {
     #[test_case("//*/FFFF/FF/FFFF", Some("//[::1]/FFFF/FF/FFFF"), "up/*/*/*/*/[::1]/*/*/*"; "Receive all messages to a device")]
     #[tokio::test(flavor = "multi_thread")]
     async fn test_to_zenoh_key_string(src_uri: &str, sink_uri: Option<&str>, zenoh_key: &str) {
-        let up_client_zenoh = UPClientZenoh::new(Config::default(), String::from("192.168.1.100"))
-            .await
-            .unwrap();
+        let up_client_zenoh = UPClientZenoh::new(
+            ZenohConfig::Config::default(),
+            String::from("192.168.1.100"),
+        )
+        .await
+        .unwrap();
         let src = UUri::from_str(src_uri).unwrap();
         if let Some(sink) = sink_uri {
             let sink = UUri::from_str(sink).unwrap();
