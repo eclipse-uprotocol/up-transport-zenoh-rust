@@ -17,7 +17,7 @@ use up_transport_zenoh::{Config, UPClientZenoh};
 static INIT: Once = Once::new();
 
 pub fn before_test() {
-    INIT.call_once(env_logger::init);
+    INIT.call_once(UPClientZenoh::try_init_log_from_env);
 }
 
 /// # Errors

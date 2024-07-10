@@ -40,14 +40,14 @@ async-trait = "0.1"
 bitmask-enum = "2.2.4"
 chrono = "0.4.31"
 crossbeam-channel = "0.5.12"
-env_logger = "0.10.0"
 lazy_static = "1.4.0"
-log = "0.4.17"
 prost = "0.12"
 prost-types = "0.12"
 protobuf = { version = "3.3" }
 rand = "0.8.5"
 tokio = { version = "1.35.1", default-features = false }
+tracing = "0.1.40"
+tracing-subscriber = "0.3.18"
 up-rust = { git = "https://github.com/eclipse-uprotocol/up-rust", rev = "3a50104421a801d52e1d9c68979db54c013ce43d" }
 zenoh = { version = "0.11.0-rc.3", features = ["unstable"]}
 

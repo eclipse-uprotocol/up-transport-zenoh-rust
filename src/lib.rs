@@ -20,6 +20,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use tokio::runtime::Runtime;
+use tracing::error;
 use up_rust::{ComparableListener, UAttributes, UCode, UListener, UPriority, UStatus, UUri};
 // Re-export Zenoh config
 pub use zenoh::config::Config;
@@ -104,7 +105,7 @@ impl UPClientZenoh {
         // Create Zenoh session
         let Ok(session) = zenoh::open(config).res().await else {
             let msg = "Unable to open Zenoh session".to_string();
-            log::error!("{msg}");
+            error!("{msg}");
             return Err(UStatus::fail_with_code(UCode::INTERNAL, msg));
         };
         // Return UPClientZenoh
@@ -133,7 +134,7 @@ impl UPClientZenoh {
     ) -> Result<UPClientZenoh, UStatus> {
         let Ok(session) = zenoh::init(runtime).res().await else {
             let msg = "Unable to open Zenoh session".to_string();
-            log::error!("{msg}");
+            error!("{msg}");
             return Err(UStatus::fail_with_code(UCode::INTERNAL, msg));
         };
         // Return UPClientZenoh
@@ -145,6 +146,21 @@ impl UPClientZenoh {
             rpc_callback_map: Arc::new(Mutex::new(HashMap::new())),
             authority_name,
         })
+    }
+
+    /// The function to enable tracing subscriber from the environment variables `RUST_LOG`.
+    pub fn try_init_log_from_env() {
+        if let Ok(env_filter) = tracing_subscriber::EnvFilter::try_from_default_env() {
+            let subscriber = tracing_subscriber::fmt()
+                .with_env_filter(env_filter)
+                .with_thread_ids(true)
+                .with_thread_names(true)
+                .with_level(true)
+                .with_target(true);
+
+            let subscriber = subscriber.finish();
+            let _ = tracing::subscriber::set_global_default(subscriber);
+        }
     }
 
     fn uri_to_zenoh_key(&self, uri: &UUri) -> String {
@@ -215,25 +231,25 @@ impl UPClientZenoh {
         if let Some((_, value)) = attachment_iter.next() {
             let version = *value.as_slice().first().ok_or_else(|| {
                 let msg = format!("UAttributes version is empty (should be {UATTRIBUTE_VERSION})");
-                log::error!("{msg}");
+                error!("{msg}");
                 UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
             })?;
             if version != UATTRIBUTE_VERSION {
                 let msg =
                     format!("UAttributes version is {version} (should be {UATTRIBUTE_VERSION})");
-                log::error!("{msg}");
+                error!("{msg}");
                 return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg).into());
             }
         } else {
             let msg = "Unable to get the UAttributes version".to_string();
-            log::error!("{msg}");
+            error!("{msg}");
             return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg).into());
         }
         let uattributes = if let Some((_, value)) = attachment_iter.next() {
             UAttributes::parse_from_bytes(value.as_slice())?
         } else {
             let msg = "Unable to get the UAttributes".to_string();
-            log::error!("{msg}");
+            error!("{msg}");
             return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg).into());
         };
         Ok(uattributes)
