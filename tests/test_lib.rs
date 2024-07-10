@@ -12,7 +12,7 @@
  ********************************************************************************/
 use std::sync::Once;
 use up_rust::{UStatus, UUri};
-use up_transport_zenoh::{UPClientZenoh, ZenohConfig};
+use up_transport_zenoh::{zenoh_config, UPClientZenoh};
 
 static INIT: Once = Once::new();
 
@@ -23,7 +23,7 @@ pub fn before_test() {
 /// # Errors
 /// Will return `Err` if unable to create `UPClientZenoh`
 pub async fn create_up_client_zenoh(uauthority: &str) -> Result<UPClientZenoh, UStatus> {
-    UPClientZenoh::new(ZenohConfig::Config::default(), uauthority.to_string()).await
+    UPClientZenoh::new(zenoh_config::Config::default(), uauthority.to_string()).await
 }
 
 #[allow(clippy::must_use_candidate)]

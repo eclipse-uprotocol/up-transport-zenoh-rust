@@ -22,7 +22,7 @@ use std::{
 use tokio::runtime::Runtime;
 use up_rust::{ComparableListener, UAttributes, UCode, UListener, UPriority, UStatus, UUri};
 // Re-export Zenoh config
-pub use zenoh::config as ZenohConfig;
+pub use zenoh::config as zenoh_config;
 use zenoh::{
     prelude::r#async::*,
     queryable::{Query, Queryable},
@@ -94,14 +94,14 @@ impl UPClientZenoh {
     /// ```
     /// #[tokio::main]
     /// # async fn main() {
-    /// use up_transport_zenoh::{UPClientZenoh, ZenohConfig};
-    /// let upclient = UPClientZenoh::new(ZenohConfig::Config::default(), String::from("MyAuthName"))
+    /// use up_transport_zenoh::{zenoh_config, UPClientZenoh};
+    /// let upclient = UPClientZenoh::new(zenoh_config::Config::default(), String::from("MyAuthName"))
     ///     .await
     ///     .unwrap();
     /// # }
     /// ```
     pub async fn new(
-        config: ZenohConfig::Config,
+        config: zenoh_config::Config,
         authority_name: String,
     ) -> Result<UPClientZenoh, UStatus> {
         // Create Zenoh session
@@ -324,7 +324,7 @@ mod tests {
     #[test_case("vehicle1".to_string(), true; "succeeds with both valid authority and entity")]
     #[tokio::test(flavor = "multi_thread")]
     async fn test_new_up_client_zenoh(authority: String, expected_result: bool) {
-        let up_client_zenoh = UPClientZenoh::new(ZenohConfig::Config::default(), authority).await;
+        let up_client_zenoh = UPClientZenoh::new(zenoh_config::Config::default(), authority).await;
         assert_eq!(up_client_zenoh.is_ok(), expected_result);
     }
 
@@ -339,7 +339,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_to_zenoh_key_string(src_uri: &str, sink_uri: Option<&str>, zenoh_key: &str) {
         let up_client_zenoh = UPClientZenoh::new(
-            ZenohConfig::Config::default(),
+            zenoh_config::Config::default(),
             String::from("192.168.1.100"),
         )
         .await
