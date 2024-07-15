@@ -13,7 +13,7 @@
 mod common;
 
 use std::str::FromStr;
-use up_rust::{RpcClient, UMessageBuilder, UPayloadFormat, UUri};
+use up_rust::{UMessageBuilder, UPayloadFormat, UUri};
 use up_transport_zenoh::UPClientZenoh;
 
 #[tokio::main]
@@ -22,7 +22,7 @@ async fn main() {
     UPClientZenoh::try_init_log_from_env();
 
     println!("uProtocol RPC client example");
-    let rpc_client = UPClientZenoh::new(common::get_zenoh_config(), String::from("rpc_client"))
+    let _rpc_client = UPClientZenoh::new(common::get_zenoh_config(), String::from("rpc_client"))
         .await
         .unwrap();
 
@@ -32,16 +32,16 @@ async fn main() {
 
     // create uPayload
     let data = String::from("GetCurrentTime");
-    let umsg = UMessageBuilder::request(sink_uuri.clone(), src_uuri.clone(), 1000)
+    let _umsg = UMessageBuilder::request(sink_uuri.clone(), src_uuri.clone(), 1000)
         .build_with_payload(data, UPayloadFormat::UPAYLOAD_FORMAT_TEXT)
         .unwrap();
 
-    // invoke RPC method
-    println!("Send request from {src_uuri} to {sink_uuri}");
-    let result = rpc_client.invoke_method(sink_uuri, umsg).await;
+    //// invoke RPC method
+    //println!("Send request from {src_uuri} to {sink_uuri}");
+    //let result = rpc_client.invoke_method(sink_uuri, umsg).await;
 
-    // process the result
-    let payload = result.unwrap().payload.unwrap();
-    let value = payload.into_iter().map(|c| c as char).collect::<String>();
-    println!("Receive {value}");
+    //// process the result
+    //let payload = result.unwrap().payload.unwrap();
+    //let value = payload.into_iter().map(|c| c as char).collect::<String>();
+    //println!("Receive {value}");
 }

@@ -20,9 +20,7 @@ use tokio::{
     task,
     time::{sleep, Duration},
 };
-use up_rust::{
-    RpcClient, UListener, UMessage, UMessageBuilder, UPayloadFormat, UStatus, UTransport, UUri,
-};
+use up_rust::{UListener, UMessage, UMessageBuilder, UPayloadFormat, UTransport, UUri};
 use up_transport_zenoh::UPClientZenoh;
 
 // RequestListener
@@ -68,9 +66,6 @@ impl UListener for RequestListener {
                 .unwrap();
         });
     }
-    async fn on_error(&self, err: UStatus) {
-        panic!("Internal Error: {err:?}");
-    }
 }
 
 // ResponseListener
@@ -98,9 +93,6 @@ impl UListener for ResponseListener {
             .map(|c| c as char)
             .collect::<String>();
         *self.response_data.lock().unwrap() = value;
-    }
-    async fn on_error(&self, err: UStatus) {
-        panic!("Internal Error: {err:?}");
     }
 }
 
@@ -136,21 +128,21 @@ async fn test_rpc_server_client(
     sleep(Duration::from_millis(1000)).await;
 
     // Send Request with invoke_method
-    {
-        let result = upclient_client
-            .invoke_method(
-                (*sink_uuri).clone(),
-                UMessageBuilder::request((*sink_uuri).clone(), (*src_uuri).clone(), 1000)
-                    .build_with_payload(request_data.clone(), UPayloadFormat::UPAYLOAD_FORMAT_TEXT)
-                    .unwrap(),
-            )
-            .await;
+    //{
+    //    let result = upclient_client
+    //        .invoke_method(
+    //            (*sink_uuri).clone(),
+    //            UMessageBuilder::request((*sink_uuri).clone(), (*src_uuri).clone(), 1000)
+    //                .build_with_payload(request_data.clone(), UPayloadFormat::UPAYLOAD_FORMAT_TEXT)
+    //                .unwrap(),
+    //        )
+    //        .await;
 
-        // Process the result
-        let payload = result.unwrap().payload.unwrap();
-        let value = payload.into_iter().map(|c| c as char).collect::<String>();
-        assert_eq!(response_data.clone(), value);
-    }
+    //    // Process the result
+    //    let payload = result.unwrap().payload.unwrap();
+    //    let value = payload.into_iter().map(|c| c as char).collect::<String>();
+    //    assert_eq!(response_data.clone(), value);
+    //}
 
     // Send Request with send
     {

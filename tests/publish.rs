@@ -16,7 +16,7 @@ use async_trait::async_trait;
 use std::sync::{Arc, Mutex};
 use test_case::test_case;
 use tokio::time::{sleep, Duration};
-use up_rust::{UListener, UMessage, UMessageBuilder, UPayloadFormat, UStatus, UTransport, UUri};
+use up_rust::{UListener, UMessage, UMessageBuilder, UPayloadFormat, UTransport, UUri};
 
 struct PublishNotificationListener {
     recv_data: Arc<Mutex<String>>,
@@ -37,9 +37,6 @@ impl UListener for PublishNotificationListener {
         let data = msg.payload.unwrap();
         let value = data.into_iter().map(|c| c as char).collect::<String>();
         *self.recv_data.lock().unwrap() = value;
-    }
-    async fn on_error(&self, err: UStatus) {
-        panic!("Internal Error: {err:?}");
     }
 }
 
