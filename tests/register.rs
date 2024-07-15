@@ -16,13 +16,12 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use test_case::test_case;
-use up_rust::{UListener, UMessage, UStatus, UTransport, UUri};
+use up_rust::{UListener, UMessage, UTransport, UUri};
 
 struct FooListener;
 #[async_trait]
 impl UListener for FooListener {
     async fn on_receive(&self, _msg: UMessage) {}
-    async fn on_error(&self, _err: UStatus) {}
 }
 
 #[test_case(&test_lib::new_uuri("src", 1, 1, 0x8000), None; "Listen to Publish")]

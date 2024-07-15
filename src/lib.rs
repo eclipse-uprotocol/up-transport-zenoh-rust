@@ -10,7 +10,6 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  ********************************************************************************/
-pub mod rpc;
 pub mod utransport;
 
 use bitmask_enum::bitmask;

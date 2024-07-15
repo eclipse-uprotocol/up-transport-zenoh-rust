@@ -23,7 +23,7 @@ use tokio::{
     time::{sleep, Duration},
 };
 use up_rust::{
-    UListener, UMessage, UMessageBuilder, UMessageType, UPayloadFormat, UStatus, UTransport, UUri,
+    UListener, UMessage, UMessageBuilder, UMessageType, UPayloadFormat, UTransport, UUri,
 };
 use up_transport_zenoh::UPClientZenoh;
 
@@ -90,9 +90,6 @@ impl UListener for UStreamerListener {
             }
         };
     }
-    async fn on_error(&self, err: UStatus) {
-        panic!("Internal Error: {err:?}");
-    }
 }
 
 // ResponseListener
@@ -120,9 +117,6 @@ impl UListener for ResponseListener {
             .map(|c| c as char)
             .collect::<String>();
         *self.response_data.lock().unwrap() = value;
-    }
-    async fn on_error(&self, err: UStatus) {
-        panic!("Internal Error: {err:?}");
     }
 }
 
@@ -155,9 +149,6 @@ impl UListener for RequestListener {
                 .block_on(self.up_client.send(umessage))
                 .unwrap();
         });
-    }
-    async fn on_error(&self, err: UStatus) {
-        panic!("Internal Error: {err:?}");
     }
 }
 

@@ -16,7 +16,7 @@ use async_trait::async_trait;
 use std::sync::{Arc, Mutex};
 use test_case::test_case;
 use tokio::time::{sleep, Duration};
-use up_rust::{UListener, UMessage, UMessageBuilder, UPayloadFormat, UStatus, UTransport, UUri};
+use up_rust::{UListener, UMessage, UMessageBuilder, UPayloadFormat, UTransport, UUri};
 
 struct DelayListener {
     recv_data: Arc<Mutex<String>>,
@@ -41,9 +41,6 @@ impl UListener for DelayListener {
             sleep(Duration::from_millis(3000)).await;
         }
         *self.recv_data.lock().unwrap() = value;
-    }
-    async fn on_error(&self, err: UStatus) {
-        panic!("Internal Error: {err:?}");
     }
 }
 

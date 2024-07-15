@@ -48,7 +48,7 @@ rand = "0.8.5"
 tokio = { version = "1.35.1", default-features = false }
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
-up-rust = { git = "https://github.com/eclipse-uprotocol/up-rust", rev = "3a50104421a801d52e1d9c68979db54c013ce43d" }
+up-rust = { git = "https://github.com/eclipse-uprotocol/up-rust", rev = "a74c829d3e54ce09c7b85ee721be7e8ac703aac9" }
 zenoh = { version = "0.11.0-rc.3", features = ["unstable"]}
 
 [dev-dependencies]

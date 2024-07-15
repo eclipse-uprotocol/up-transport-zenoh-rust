@@ -14,13 +14,21 @@ use crate::UPClientZenoh;
 use async_trait::async_trait;
 use std::{string::ToString, time::Duration};
 use tracing::error;
-use up_rust::{RpcClient, RpcClientResult, UAttributesError, UMessage, UMessageError, UUri};
+use up_rust::{
+    communication::{CallOptions, RpcClient, ServiceInvocationError, UPayload},
+    UAttributesError, UMessage, UMessageError, UUri,
+};
 use zenoh::prelude::r#async::*;
 
 #[async_trait]
 impl RpcClient for UPClientZenoh {
-    // CY_TODO: Should remove method in the future
-    async fn invoke_method(&self, _method: UUri, request: UMessage) -> RpcClientResult {
+    async fn invoke_method(
+        &self,
+        method: UUri,
+        call_options: CallOptions,
+        payload: Option<UPayload>,
+    ) -> Result<Option<UPayload>, ServiceInvocationError> {
+        //async fn invoke_method(&self, _method: UUri, request: UMessage) -> RpcClientResult {
         // Get Zenoh key
         let source = *request.attributes.source.0.clone().ok_or_else(|| {
             let msg = "attributes.source should not be empty".to_string();

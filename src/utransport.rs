@@ -37,60 +37,28 @@ lazy_static! {
 }
 
 #[inline]
-fn invoke_block_callback(listener: &Arc<dyn UListener>, resp_msg: Result<UMessage, &str>) {
-    match resp_msg {
-        Ok(umsg) => match Handle::try_current() {
-            Ok(handle) => {
-                task::block_in_place(|| {
-                    handle.block_on(listener.on_receive(umsg));
-                });
-            }
-            Err(_) => {
-                TOKIO_RUNTIME
-                    .lock()
-                    .unwrap()
-                    .block_on(listener.on_receive(umsg));
-            }
-        },
-        Err(err_msg) => {
-            error!("{err_msg}");
-            match Handle::try_current() {
-                Ok(handle) => {
-                    task::block_in_place(|| {
-                        handle.block_on(
-                            listener.on_error(UStatus::fail_with_code(UCode::INTERNAL, err_msg)),
-                        );
-                    });
-                }
-                Err(_) => {
-                    TOKIO_RUNTIME.lock().unwrap().block_on(
-                        listener.on_error(UStatus::fail_with_code(UCode::INTERNAL, err_msg)),
-                    );
-                }
-            }
+fn invoke_block_callback(listener: &Arc<dyn UListener>, resp_msg: UMessage) {
+    match Handle::try_current() {
+        Ok(handle) => {
+            task::block_in_place(|| {
+                handle.block_on(listener.on_receive(resp_msg));
+            });
         }
-    }
+        Err(_) => {
+            TOKIO_RUNTIME
+                .lock()
+                .unwrap()
+                .block_on(listener.on_receive(resp_msg));
+        }
+    };
 }
 
 #[inline]
-fn spawn_nonblock_callback(listener: &Arc<dyn UListener>, listener_msg: Result<UMessage, &str>) {
+fn spawn_nonblock_callback(listener: &Arc<dyn UListener>, listener_msg: UMessage) {
     let listener = listener.clone();
-    match listener_msg {
-        Ok(umsg) => {
-            CB_RUNTIME.spawn(async move {
-                listener.on_receive(umsg).await;
-            });
-        }
-        Err(err_msg) => {
-            error!("{err_msg}");
-            let err_msg = err_msg.to_string();
-            CB_RUNTIME.spawn(async move {
-                listener
-                    .on_error(UStatus::fail_with_code(UCode::INTERNAL, err_msg))
-                    .await;
-            });
-        }
-    }
+    CB_RUNTIME.spawn(async move {
+        listener.on_receive(listener_msg).await;
+    });
 }
 
 impl UPClientZenoh {
@@ -162,36 +130,28 @@ impl UPClientZenoh {
                 Ok(sample) => {
                     // Get UAttribute from the attachment
                     let Some(attachment) = sample.attachment() else {
-                        invoke_block_callback(&resp_callback, Err("Unable to get the attachment"));
+                        warn!("Unable to get the attachment");
                         return;
                     };
                     let u_attribute = match UPClientZenoh::attachment_to_uattributes(attachment) {
                         Ok(uattr) => uattr,
                         Err(e) => {
-                            invoke_block_callback(
-                                &resp_callback,
-                                Err(&format!(
-                                    "Transform attachment to UAttributes failed: {e:?}"
-                                )),
-                            );
+                            warn!("Unable to transform attachment to UAttributes: {e:?}");
                             return;
                         }
                     };
                     // Create UMessage
                     invoke_block_callback(
                         &resp_callback,
-                        Ok(UMessage {
+                        UMessage {
                             attributes: Some(u_attribute).into(),
                             payload: Some(sample.payload.contiguous().to_vec().into()),
                             ..Default::default()
-                        }),
+                        },
                     );
                 }
                 Err(e) => {
-                    invoke_block_callback(
-                        &resp_callback,
-                        Err(&format!("Error while parsing Zenoh reply: {e:?}")),
-                    );
+                    warn!("Unable to parse Zenoh reply: {e:?}");
                 }
             }
         };
@@ -271,18 +231,13 @@ impl UPClientZenoh {
         let callback = move |sample: Sample| {
             // Get the UAttribute from Zenoh user attachment
             let Some(attachment) = sample.attachment() else {
-                spawn_nonblock_callback(&listener_cloned, Err("Unable to get attachment"));
+                warn!("Unable to get attachment");
                 return;
             };
             let u_attribute = match UPClientZenoh::attachment_to_uattributes(attachment) {
                 Ok(uattributes) => uattributes,
                 Err(e) => {
-                    spawn_nonblock_callback(
-                        &listener_cloned,
-                        Err(&format!(
-                            "Unable to transform attachment to UAttributes: {e:?}"
-                        )),
-                    );
+                    warn!("Unable to transform attachement to UAttributes: {e:?}");
                     return;
                 }
             };
@@ -292,7 +247,7 @@ impl UPClientZenoh {
                 payload: Some(sample.payload.contiguous().to_vec().into()),
                 ..Default::default()
             };
-            spawn_nonblock_callback(&listener_cloned, Ok(msg));
+            spawn_nonblock_callback(&listener_cloned, msg);
         };
 
         // Create Zenoh subscriber
@@ -327,18 +282,13 @@ impl UPClientZenoh {
         let callback = move |query: Query| {
             // Create UAttribute from Zenoh user attachment
             let Some(attachment) = query.attachment() else {
-                spawn_nonblock_callback(&listener_cloned, Err("Unable to get attachment"));
+                warn!("Unable to get attachment");
                 return;
             };
             let u_attribute = match UPClientZenoh::attachment_to_uattributes(attachment) {
                 Ok(uattributes) => uattributes,
                 Err(e) => {
-                    spawn_nonblock_callback(
-                        &listener_cloned,
-                        Err(&format!(
-                            "Unable to transform user attachment to UAttributes: {e:?}"
-                        )),
-                    );
+                    warn!("Unable to transform user attachment to UAttributes: {e:?}");
                     return;
                 }
             };
@@ -354,7 +304,7 @@ impl UPClientZenoh {
                 .lock()
                 .unwrap()
                 .insert(u_attribute.id.to_string(), query);
-            spawn_nonblock_callback(&listener_cloned, Ok(msg));
+            spawn_nonblock_callback(&listener_cloned, msg);
         };
 
         // Create Zenoh queryable

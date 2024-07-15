@@ -20,7 +20,7 @@ use tokio::{
     task,
     time::{sleep, Duration},
 };
-use up_rust::{UListener, UMessage, UMessageBuilder, UPayloadFormat, UStatus, UTransport, UUri};
+use up_rust::{UListener, UMessage, UMessageBuilder, UPayloadFormat, UTransport, UUri};
 use up_transport_zenoh::UPClientZenoh;
 
 struct RpcListener {
@@ -63,9 +63,6 @@ impl UListener for RpcListener {
                 .block_on(self.up_client.send(umessage))
                 .unwrap();
         });
-    }
-    async fn on_error(&self, err: UStatus) {
-        panic!("Internal Error: {err:?}");
     }
 }
 

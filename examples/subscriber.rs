@@ -15,7 +15,7 @@ mod common;
 use async_trait::async_trait;
 use std::{str::FromStr, sync::Arc};
 use tokio::time::{sleep, Duration};
-use up_rust::{UListener, UMessage, UStatus, UTransport, UUri};
+use up_rust::{UListener, UMessage, UTransport, UUri};
 use up_transport_zenoh::UPClientZenoh;
 
 struct SubscriberListener;
@@ -26,9 +26,6 @@ impl UListener for SubscriberListener {
         let value = payload.into_iter().map(|c| c as char).collect::<String>();
         let uri = msg.attributes.unwrap().source.unwrap().to_string();
         println!("Receiving {value} from {uri}");
-    }
-    async fn on_error(&self, err: UStatus) {
-        panic!("Internal Error: {err:?}");
     }
 }
 
