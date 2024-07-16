@@ -12,9 +12,37 @@
  ********************************************************************************/
 mod common;
 
-use std::str::FromStr;
-use up_rust::{UMessageBuilder, UPayloadFormat, UUri};
+use async_trait::async_trait;
+use std::{
+    str::FromStr,
+    sync::{Arc, Mutex},
+};
+use tokio::time::{sleep, Duration};
+use up_rust::{UListener, UMessage, UMessageBuilder, UPayloadFormat, UTransport, UUri};
 use up_transport_zenoh::UPClientZenoh;
+
+// ResponseListener
+struct ResponseListener {
+    response: Mutex<Option<String>>,
+}
+impl ResponseListener {
+    fn new() -> Self {
+        ResponseListener {
+            response: Mutex::new(None),
+        }
+    }
+}
+#[async_trait]
+impl UListener for ResponseListener {
+    async fn on_receive(&self, msg: UMessage) {
+        let payload = msg.payload.unwrap();
+        let value = payload.into_iter().map(|c| c as char).collect::<String>();
+        let uri = msg.attributes.unwrap().source.unwrap().to_string();
+        let mut resp = self.response.lock().unwrap();
+        *resp = Some(value.clone());
+        println!("Receiving response {value} from {uri}");
+    }
+}
 
 #[tokio::main]
 async fn main() {
@@ -22,7 +50,7 @@ async fn main() {
     UPClientZenoh::try_init_log_from_env();
 
     println!("uProtocol RPC client example");
-    let _rpc_client = UPClientZenoh::new(common::get_zenoh_config(), String::from("rpc_client"))
+    let rpc_client = UPClientZenoh::new(common::get_zenoh_config(), String::from("rpc_client"))
         .await
         .unwrap();
 
@@ -30,18 +58,22 @@ async fn main() {
     let src_uuri = UUri::from_str("//rpc_client/1/1/0").unwrap();
     let sink_uuri = UUri::from_str("//rpc_server/1/1/1").unwrap();
 
-    // create uPayload
-    let data = String::from("GetCurrentTime");
-    let _umsg = UMessageBuilder::request(sink_uuri.clone(), src_uuri.clone(), 1000)
-        .build_with_payload(data, UPayloadFormat::UPAYLOAD_FORMAT_TEXT)
+    // register response callback
+    let resp_listener = Arc::new(ResponseListener::new());
+    rpc_client
+        .register_listener(&sink_uuri, Some(&src_uuri), resp_listener.clone())
+        .await
         .unwrap();
 
-    //// invoke RPC method
-    //println!("Send request from {src_uuri} to {sink_uuri}");
-    //let result = rpc_client.invoke_method(sink_uuri, umsg).await;
+    // create uPayload and send request
+    let data = String::from("GetCurrentTime");
+    let umsg = UMessageBuilder::request(sink_uuri.clone(), src_uuri.clone(), 1000)
+        .build_with_payload(data, UPayloadFormat::UPAYLOAD_FORMAT_TEXT)
+        .unwrap();
+    println!("Send request from {src_uuri} to {sink_uuri}");
+    rpc_client.send(umsg).await.unwrap();
 
-    //// process the result
-    //let payload = result.unwrap().payload.unwrap();
-    //let value = payload.into_iter().map(|c| c as char).collect::<String>();
-    //println!("Receive {value}");
+    while resp_listener.response.lock().unwrap().is_none() {
+        sleep(Duration::from_millis(100)).await;
+    }
 }
