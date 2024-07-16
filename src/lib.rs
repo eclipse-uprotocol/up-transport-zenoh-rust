@@ -10,7 +10,10 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  ********************************************************************************/
+pub mod rpc;
 pub mod utransport;
+
+pub use rpc::ZenohRpcClient;
 
 use bitmask_enum::bitmask;
 use protobuf::Message;
@@ -20,10 +23,7 @@ use std::{
 };
 use tokio::runtime::Runtime;
 use tracing::error;
-use up_rust::{
-    uri::{WILDCARD_ENTITY_ID, WILDCARD_ENTITY_VERSION, WILDCARD_RESOURCE_ID},
-    ComparableListener, UAttributes, UCode, UListener, UPriority, UStatus, UUri,
-};
+use up_rust::{ComparableListener, UAttributes, UCode, UListener, UPriority, UStatus, UUri};
 // Re-export Zenoh config
 pub use zenoh::config as zenoh_config;
 use zenoh::{
@@ -167,19 +167,19 @@ impl UPClientZenoh {
             &uri.authority_name
         };
         // ue_id
-        let ue_id = if uri.ue_id == WILDCARD_ENTITY_ID {
+        let ue_id = if uri.has_wildcard_entity_id() {
             "*".to_string()
         } else {
             format!("{:X}", uri.ue_id)
         };
         // ue_version_major
-        let ue_version_major = if uri.ue_version_major == WILDCARD_ENTITY_VERSION {
+        let ue_version_major = if uri.has_wildcard_version() {
             "*".to_string()
         } else {
             format!("{:X}", uri.ue_version_major)
         };
         // resource_id
-        let resource_id = if uri.resource_id == WILDCARD_RESOURCE_ID {
+        let resource_id = if uri.has_wildcard_resource_id() {
             "*".to_string()
         } else {
             format!("{:X}", uri.resource_id)

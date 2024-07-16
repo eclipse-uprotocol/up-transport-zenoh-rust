@@ -12,88 +12,128 @@
  ********************************************************************************/
 use crate::UPClientZenoh;
 use async_trait::async_trait;
-use std::{string::ToString, time::Duration};
+use std::{string::ToString, sync::Arc, time::Duration};
 use tracing::error;
 use up_rust::{
     communication::{CallOptions, RpcClient, ServiceInvocationError, UPayload},
-    UAttributesError, UMessage, UMessageError, UUri,
+    LocalUriProvider, UAttributes, UCode, UMessageType, UPayloadFormat, UPriority, UStatus, UUri,
+    UUID,
 };
 use zenoh::prelude::r#async::*;
 
+pub struct ZenohRpcClient {
+    transport: Arc<UPClientZenoh>,
+    uri_provider: Arc<dyn LocalUriProvider>,
+}
+impl ZenohRpcClient {
+    /// Creates a new RPC client for the Zenoh transport.
+    ///
+    /// # Arguments
+    ///
+    /// * `transport` - The Zenoh uProtocol Transport Layer.
+    /// * `uri_provider` - The helper for creating URIs that represent local resources.
+    pub fn new(transport: Arc<UPClientZenoh>, uri_provider: Arc<dyn LocalUriProvider>) -> Self {
+        ZenohRpcClient {
+            transport,
+            uri_provider,
+        }
+    }
+}
+
 #[async_trait]
-impl RpcClient for UPClientZenoh {
+impl RpcClient for ZenohRpcClient {
     async fn invoke_method(
         &self,
         method: UUri,
         call_options: CallOptions,
         payload: Option<UPayload>,
     ) -> Result<Option<UPayload>, ServiceInvocationError> {
-        //async fn invoke_method(&self, _method: UUri, request: UMessage) -> RpcClientResult {
-        // Get Zenoh key
-        let source = *request.attributes.source.0.clone().ok_or_else(|| {
-            let msg = "attributes.source should not be empty".to_string();
-            error!("{msg}");
-            UMessageError::PayloadError(msg)
-        })?;
-        let zenoh_key = if let Some(sink) = request.attributes.sink.0.clone() {
-            self.to_zenoh_key_string(&source, Some(&sink))
-        } else {
-            self.to_zenoh_key_string(&source, None)
+        // Get data and format from UPayload
+        let mut payload_data = None;
+        let mut payload_format = UPayloadFormat::UPAYLOAD_FORMAT_UNSPECIFIED;
+        if let Some(payload) = payload {
+            payload_format = payload.payload_format();
+            payload_data = Some(payload.payload());
+        }
+
+        // Get source UUri
+        let source_uri = self.uri_provider.get_source_uri();
+
+        let attributes = UAttributes {
+            type_: UMessageType::UMESSAGE_TYPE_REQUEST.into(),
+            id: Some(call_options.message_id().unwrap_or_else(UUID::build)).into(),
+            priority: call_options
+                .priority()
+                .unwrap_or(UPriority::UPRIORITY_UNSPECIFIED)
+                .into(),
+            source: Some(source_uri.clone()).into(),
+            sink: Some(method.clone()).into(),
+            ttl: Some(call_options.ttl()),
+            token: call_options.token(),
+            payload_format: payload_format.into(),
+            ..Default::default()
         };
 
-        // Create UAttributes and put into Zenoh user attachment
-        let attributes = *request.attributes.0.clone().ok_or_else(|| {
-            let msg = "Invalid UAttributes".to_string();
-            error!("{msg}");
-            UMessageError::AttributesValidationError(UAttributesError::ParsingError(msg))
-        })?;
+        // Get Zenoh key
+        let zenoh_key = self
+            .transport
+            .to_zenoh_key_string(&source_uri, Some(&method));
+
+        // Put UAttributes into Zenoh user attachment
         let Ok(attachment) = UPClientZenoh::uattributes_to_attachment(&attributes) else {
             let msg = "Unable to transform UAttributes to user attachment in Zenoh".to_string();
             error!("{msg}");
-            return Err(UMessageError::AttributesValidationError(
-                UAttributesError::ParsingError(msg),
-            ));
-        };
-
-        // Get the data from UPayload
-        let value = if let Some(payload) = request.payload {
-            Value::new(payload.to_vec().into())
-        } else {
-            Value::new(vec![].into())
+            return Err(ServiceInvocationError::Internal(msg));
         };
 
         // Send the query
-        let mut getbuilder = self
-            .session
-            .get(&zenoh_key)
-            .with_value(value)
-            .with_attachment(attachment.build())
-            .target(QueryTarget::BestMatching);
-        if let Some(ttl) = request.attributes.ttl {
-            getbuilder = getbuilder.timeout(Duration::from_millis(u64::from(ttl)));
+        let mut getbuilder = self.transport.session.get(&zenoh_key);
+        getbuilder = match payload_data {
+            Some(data) => getbuilder.with_value(data.as_ref()),
+            None => getbuilder,
         }
+        .with_attachment(attachment.build())
+        .target(QueryTarget::BestMatching)
+        .timeout(Duration::from_millis(u64::from(call_options.ttl())));
         let Ok(replies) = getbuilder.res().await else {
             let msg = "Error while sending Zenoh query".to_string();
             error!("{msg}");
-            return Err(UMessageError::PayloadError(msg));
+            return Err(ServiceInvocationError::RpcError(UStatus {
+                code: UCode::INTERNAL.into(),
+                message: Some(msg),
+                ..Default::default()
+            }));
         };
 
         // Receive the reply
         let Ok(reply) = replies.recv_async().await else {
             let msg = "Error while receiving Zenoh reply".to_string();
             error!("{msg}");
-            return Err(UMessageError::PayloadError(msg));
+            return Err(ServiceInvocationError::RpcError(UStatus {
+                code: UCode::INTERNAL.into(),
+                message: Some(msg),
+                ..Default::default()
+            }));
         };
         match reply.sample {
-            Ok(sample) => Ok(UMessage {
-                attributes: Some(attributes).into(),
-                payload: Some(sample.payload.contiguous().to_vec().into()),
-                ..Default::default()
-            }),
+            Ok(sample) => {
+                let payload_format = sample
+                    .attachment()
+                    .and_then(|a| UPTransportZenoh::attachment_to_uattributes(a).ok())
+                    .map(|attr| attr.payload_format.enum_value_or_default());
+                Ok(Some(UPayload::new(
+                    sample.payload.contiguous().to_vec().into(),
+                    payload_format.unwrap_or_default(),
+                )))
+            }
             Err(e) => {
                 let msg = format!("Error while parsing Zenoh reply: {e:?}");
                 error!("{msg}");
-                Err(UMessageError::PayloadError(msg))
+                return Err(ServiceInvocationError::RpcError(UStatus {
+                    code: UCode::INTERNAL.into(),
+                    message: Some(msg),
+                    ..Default::default()
+                }));
             }
         }
     }

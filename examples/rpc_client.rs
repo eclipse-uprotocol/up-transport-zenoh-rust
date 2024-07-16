@@ -70,7 +70,7 @@ async fn main() {
     let umsg = UMessageBuilder::request(sink_uuri.clone(), src_uuri.clone(), 1000)
         .build_with_payload(data, UPayloadFormat::UPAYLOAD_FORMAT_TEXT)
         .unwrap();
-    println!("Send request from {src_uuri} to {sink_uuri}");
+    println!("Sending request from {src_uuri} to {sink_uuri}");
     rpc_client.send(umsg).await.unwrap();
 
     while resp_listener.response.lock().unwrap().is_none() {
