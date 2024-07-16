@@ -20,8 +20,12 @@ use tokio::{
     task,
     time::{sleep, Duration},
 };
-use up_rust::{UListener, UMessage, UMessageBuilder, UPayloadFormat, UTransport, UUri};
-use up_transport_zenoh::UPClientZenoh;
+use up_rust::{
+    communication::{CallOptions, RpcClient, UPayload},
+    LocalUriProvider, UListener, UMessage, UMessageBuilder, UPayloadFormat, UPriority, UTransport,
+    UUri, UUID,
+};
+use up_transport_zenoh::{UPClientZenoh, ZenohRpcClient};
 
 // RequestListener
 struct RequestListener {
@@ -96,6 +100,26 @@ impl UListener for ResponseListener {
     }
 }
 
+// MyUriProvider
+pub struct MyUriProvider {
+    uuri: UUri,
+}
+impl LocalUriProvider for MyUriProvider {
+    fn get_authority(&self) -> String {
+        self.uuri.authority_name.clone()
+    }
+
+    fn get_resource_uri(&self, resource_id: u16) -> UUri {
+        let mut uuri = self.uuri.clone();
+        uuri.resource_id = u32::from(resource_id);
+        uuri
+    }
+
+    fn get_source_uri(&self) -> UUri {
+        self.uuri.clone()
+    }
+}
+
 #[test_case(&test_lib::new_uuri("requester", 1, 1, 0), &test_lib::new_uuri("responder", 2, 1, 1), &test_lib::new_uuri("*", 0xFFFF, 0xFF, 0xFFFF), Some(&test_lib::new_uuri("responder", 2, 1, 1)); "Any source UUri")]
 #[test_case(&test_lib::new_uuri("requester", 1, 1, 0), &test_lib::new_uuri("responder", 2, 1, 1), &test_lib::new_uuri("requester", 1, 1, 0), Some(&test_lib::new_uuri("responder", 2, 1, 1)); "Specific source UUri")]
 #[test_case(&test_lib::new_uuri("ustreamer_requester", 1, 1, 0), &test_lib::new_uuri("ustreamer_responder", 2, 1, 1), &test_lib::new_uuri("ustreamer_requester", 0xFFFF, 0xFF, 0xFFFF), Some(&test_lib::new_uuri("*", 0xFFFF, 0xFF, 0xFFFF)); "uStreamer case for RPC")]
@@ -109,7 +133,7 @@ async fn test_rpc_server_client(
     test_lib::before_test();
 
     // Initialization
-    let upclient_client = test_lib::create_up_client_zenoh("requester").await.unwrap();
+    let upclient_client = Arc::new(test_lib::create_up_client_zenoh("requester").await.unwrap());
     let upclient_server = Arc::new(test_lib::create_up_client_zenoh("responder").await.unwrap());
     let request_data = String::from("This is the request data");
     let response_data = String::from("This is the response data");
@@ -127,24 +151,38 @@ async fn test_rpc_server_client(
     // Need some time for queryable to run
     sleep(Duration::from_millis(1000)).await;
 
-    // Send Request with invoke_method
-    //{
-    //    let result = upclient_client
-    //        .invoke_method(
-    //            (*sink_uuri).clone(),
-    //            UMessageBuilder::request((*sink_uuri).clone(), (*src_uuri).clone(), 1000)
-    //                .build_with_payload(request_data.clone(), UPayloadFormat::UPAYLOAD_FORMAT_TEXT)
-    //                .unwrap(),
-    //        )
-    //        .await;
+    // Send Request with ZenohRpcClient (L2 API)
+    {
+        let uri_provider = Arc::new(MyUriProvider {
+            uuri: (*src_uuri).clone(),
+        });
+        let rpc_client = Arc::new(ZenohRpcClient::new(
+            upclient_client.clone(),
+            uri_provider.clone(),
+        ));
 
-    //    // Process the result
-    //    let payload = result.unwrap().payload.unwrap();
-    //    let value = payload.into_iter().map(|c| c as char).collect::<String>();
-    //    assert_eq!(response_data.clone(), value);
-    //}
+        let payload = UPayload::new(
+            request_data.clone().into(),
+            UPayloadFormat::UPAYLOAD_FORMAT_TEXT,
+        );
+        let call_options = CallOptions::for_rpc_request(
+            5_000,
+            Some(UUID::build()),
+            Some("my_token".to_string()),
+            Some(UPriority::UPRIORITY_CS6),
+        );
+        let result = rpc_client
+            .invoke_method((*sink_uuri).clone(), call_options, Some(payload))
+            .await
+            .unwrap();
 
-    // Send Request with send
+        // Process the result
+        let payload = result.unwrap().payload();
+        let value = payload.into_iter().map(|c| c as char).collect::<String>();
+        assert_eq!(response_data.clone(), value);
+    }
+
+    // Send Request with Transport Layer (L1 API)
     {
         // Register Response callback
         let response_listener = Arc::new(ResponseListener::new());

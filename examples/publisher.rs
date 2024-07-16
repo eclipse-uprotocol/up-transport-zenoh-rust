@@ -36,7 +36,7 @@ async fn main() {
         let umessage = UMessageBuilder::publish(uuri.clone())
             .build_with_payload(data.clone(), UPayloadFormat::UPAYLOAD_FORMAT_TEXT)
             .unwrap();
-        println!("Sending {data} to {uuri}...");
+        println!("Publishing {data} from {uuri}...");
         publisher.send(umessage).await.unwrap();
         sleep(Duration::from_millis(1000)).await;
         cnt += 1;
