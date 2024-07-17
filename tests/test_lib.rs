@@ -23,7 +23,7 @@ pub fn before_test() {
 /// # Errors
 /// Will return `Err` if unable to create `UPClientZenoh`
 pub async fn create_up_client_zenoh(uauthority: &str) -> Result<UPClientZenoh, UStatus> {
-    UPClientZenoh::new(zenoh_config::Config::default(), uauthority.to_string()).await
+    UPClientZenoh::new(zenoh_config::Config::default(), uauthority).await
 }
 
 #[allow(clippy::must_use_candidate)]

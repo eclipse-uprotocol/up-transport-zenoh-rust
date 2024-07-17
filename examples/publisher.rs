@@ -23,7 +23,7 @@ async fn main() {
     UPClientZenoh::try_init_log_from_env();
 
     println!("uProtocol publisher example");
-    let publisher = UPClientZenoh::new(common::get_zenoh_config(), String::from("publisher"))
+    let publisher = UPClientZenoh::new(common::get_zenoh_config(), "publisher")
         .await
         .unwrap();
 

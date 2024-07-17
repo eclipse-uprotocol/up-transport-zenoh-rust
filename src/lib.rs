@@ -89,14 +89,14 @@ impl UPClientZenoh {
     /// #[tokio::main]
     /// # async fn main() {
     /// use up_transport_zenoh::{zenoh_config, UPClientZenoh};
-    /// let upclient = UPClientZenoh::new(zenoh_config::Config::default(), String::from("MyAuthName"))
+    /// let upclient = UPClientZenoh::new(zenoh_config::Config::default(), "MyAuthName")
     ///     .await
     ///     .unwrap();
     /// # }
     /// ```
     pub async fn new(
         config: zenoh_config::Config,
-        authority_name: String,
+        authority_name: impl Into<String>,
     ) -> Result<UPClientZenoh, UStatus> {
         // Create Zenoh session
         let Ok(session) = zenoh::open(config).res().await else {
@@ -111,7 +111,7 @@ impl UPClientZenoh {
             queryable_map: Arc::new(Mutex::new(HashMap::new())),
             query_map: Arc::new(Mutex::new(HashMap::new())),
             rpc_callback_map: Arc::new(Mutex::new(HashMap::new())),
-            authority_name,
+            authority_name: authority_name.into(),
         })
     }
 
@@ -324,12 +324,9 @@ mod tests {
     #[test_case("//*/FFFF/FF/FFFF", Some("//[::1]/FFFF/FF/FFFF"), "up/*/*/*/*/[::1]/*/*/*"; "Receive all messages to a device")]
     #[tokio::test(flavor = "multi_thread")]
     async fn test_to_zenoh_key_string(src_uri: &str, sink_uri: Option<&str>, zenoh_key: &str) {
-        let up_client_zenoh = UPClientZenoh::new(
-            zenoh_config::Config::default(),
-            String::from("192.168.1.100"),
-        )
-        .await
-        .unwrap();
+        let up_client_zenoh = UPClientZenoh::new(zenoh_config::Config::default(), "192.168.1.100")
+            .await
+            .unwrap();
         let src = UUri::from_str(src_uri).unwrap();
         if let Some(sink) = sink_uri {
             let sink = UUri::from_str(sink).unwrap();
