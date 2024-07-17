@@ -27,7 +27,7 @@ impl UListener for FooListener {
 #[test_case(&test_lib::new_uuri("src", 1, 1, 0x8000), None; "Listen to Publish")]
 #[test_case(&test_lib::new_uuri("*", 0xFFFF, 0xFF, 0xFFFF), Some(&test_lib::new_uuri("dst", 2, 1, 0)); "Listen to Notification")]
 #[test_case(&test_lib::new_uuri("src", 1, 1, 0x8000), Some(&test_lib::new_uuri("dst", 2, 1, 0)); "Listen to specific Notification")]
-#[test_case(&test_lib::new_uuri("*", 0xFFFF, 0xFF, 0xFFFF), Some(&test_lib::new_uuri("dst", 2, 1, 0x0001)); "Listen to Request")]
+#[test_case(&test_lib::new_uuri("*", 0xFFFF, 0xFF, 0), Some(&test_lib::new_uuri("dst", 2, 1, 0x0001)); "Listen to Request")]
 #[test_case(&test_lib::new_uuri("src", 1, 1, 0), Some(&test_lib::new_uuri("dst", 2, 1, 0x0001)); "Listen to specific Request")]
 #[test_case(&test_lib::new_uuri("*", 0xFFFF, 0xFF, 0xFFFF), Some(&test_lib::new_uuri("dst", 2, 1, 0)); "Listen to Response")]
 #[test_case(&test_lib::new_uuri("src", 1, 1, 0x0001), Some(&test_lib::new_uuri("dst", 2, 1, 0)); "Listen to specific Response")]

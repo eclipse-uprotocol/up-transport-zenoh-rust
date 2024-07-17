@@ -120,7 +120,7 @@ impl LocalUriProvider for MyUriProvider {
     }
 }
 
-#[test_case(&test_lib::new_uuri("requester", 1, 1, 0), &test_lib::new_uuri("responder", 2, 1, 1), &test_lib::new_uuri("*", 0xFFFF, 0xFF, 0xFFFF), Some(&test_lib::new_uuri("responder", 2, 1, 1)); "Any source UUri")]
+#[test_case(&test_lib::new_uuri("requester", 1, 1, 0), &test_lib::new_uuri("responder", 2, 1, 1), &test_lib::new_uuri("*", 0xFFFF, 0xFF, 0), Some(&test_lib::new_uuri("responder", 2, 1, 1)); "Any source UUri")]
 #[test_case(&test_lib::new_uuri("requester", 1, 1, 0), &test_lib::new_uuri("responder", 2, 1, 1), &test_lib::new_uuri("requester", 1, 1, 0), Some(&test_lib::new_uuri("responder", 2, 1, 1)); "Specific source UUri")]
 #[test_case(&test_lib::new_uuri("ustreamer_requester", 1, 1, 0), &test_lib::new_uuri("ustreamer_responder", 2, 1, 1), &test_lib::new_uuri("ustreamer_requester", 0xFFFF, 0xFF, 0xFFFF), Some(&test_lib::new_uuri("*", 0xFFFF, 0xFF, 0xFFFF)); "uStreamer case for RPC")]
 #[tokio::test(flavor = "multi_thread")]
