@@ -251,27 +251,8 @@ impl UPClientZenoh {
         Ok(uattributes)
     }
 
-    /*        The table for mapping resource ID to message type
-     *
-     *  |   src rid   | sink rid | Publish | Notification | Request | Response |
-     *  |-------------|----------|---------|--------------|---------|----------|
-     *  | [8000-FFFF) |   None   |    V    |              |         |          |
-     *  | [8000-FFFF) |     0    |         |      V       |         |          |
-     *  |      0      | (0-8000) |         |              |    V    |          |
-     *  |   (0-8000)  |     0    |         |              |         |    V     |
-     *  |     FFFF    |     0    |         |      V       |         |    V     |
-     *  |     FFFF    | (0-8000) |         |              |    V    |          |
-     *  |      0      |   FFFF   |         |              |    V    |          |
-     *  |   (0-8000)  |   FFFF   |         |              |         |    V     |
-     *  | [8000-FFFF) |   FFFF   |         |      V       |         |          |
-     *  |     FFFF    |   FFFF   |         |      V       |    V    |    V     |
-     *
-     *  Some organization:
-     *  - Publish: {[8000-FFFF), None}
-     *  - Notification: {[8000-FFFF), 0}, {[8000-FFFF), FFFF]}, {FFFF, 0}, {FFFF, FFFF}
-     *  - Request: {0, (0-8000)}, {0, FFFF}, {FFFF, (0-8000)}, {FFFF, FFFF}
-     *  - Response: {(0-8000), 0}, {(0-8000), FFFF}, (FFFF, 0), {FFFF, FFFF}
-     */
+    // You can take a look at the table in up-spec for more detail
+    // https://github.com/eclipse-uprotocol/up-spec/blob/ca8172a8cf17d70e4f095e6c0d57fe2ebc68c58d/up-l1/README.adoc#23-registerlistener
     #[allow(clippy::nonminimal_bool)] // Don't simplify the boolean expression for better understanding
     fn get_listener_message_type(
         source_uuri: &UUri,
@@ -287,21 +268,17 @@ impl UPClientZenoh {
             let dst_resource = dst_uuri.resource_id;
 
             if (nonrpc_range.contains(&src_resource) && dst_resource == 0)
-                || (nonrpc_range.contains(&src_resource) && dst_resource == 0xFFFF)
                 || (src_resource == 0xFFFF && dst_resource == 0)
                 || (src_resource == 0xFFFF && dst_resource == 0xFFFF)
             {
                 flag |= MessageFlag::Notification;
             }
             if (src_resource == 0 && rpc_range.contains(&dst_resource))
-                || (src_resource == 0 && dst_resource == 0xFFFF)
-                || (src_resource == 0xFFFF && rpc_range.contains(&dst_resource))
                 || (src_resource == 0xFFFF && dst_resource == 0xFFFF)
             {
                 flag |= MessageFlag::Request;
             }
             if (rpc_range.contains(&src_resource) && dst_resource == 0)
-                || (rpc_range.contains(&src_resource) && dst_resource == 0xFFFF)
                 || (src_resource == 0xFFFF && dst_resource == 0)
                 || (src_resource == 0xFFFF && dst_resource == 0xFFFF)
             {
@@ -373,10 +350,10 @@ mod tests {
     #[test_case("//192.168.1.100/10AB/3/0", Some("//192.168.1.101/20EF/4/B"), Ok(MessageFlag::Request); "Request Message")]
     #[test_case("//192.168.1.101/20EF/4/B", Some("//192.168.1.100/10AB/3/0"), Ok(MessageFlag::Response); "Response Message")]
     #[test_case("//*/FFFF/FF/FFFF", Some("//192.168.1.100/10AB/3/0"), Ok(MessageFlag::Notification | MessageFlag::Response); "Listen to Notification and Response Message")]
-    #[test_case("//*/FFFF/FF/FFFF", Some("//192.168.1.101/20EF/4/B"), Ok(MessageFlag::Request); "Listen to Request Message")]
-    #[test_case("//192.168.1.100/10AB/3/0", Some("//*/FFFF/FF/FFFF"), Ok(MessageFlag::Request); "Broadcast Request Message")]
-    #[test_case("//192.168.1.101/20EF/4/B", Some("//*/FFFF/FF/FFFF"), Ok(MessageFlag::Response); "Broadcast Response Message")]
-    #[test_case("//192.168.1.100/10AB/3/80CD", Some("//*/FFFF/FF/FFFF"), Ok(MessageFlag::Notification); "Broadcast Notification Message")]
+    #[test_case("//*/FFFF/FF/FFFF", Some("//192.168.1.101/20EF/4/B"), Err(UStatus::fail_with_code(UCode::INTERNAL, "Wrong combination of source UUri and sink UUri")); "Impossible scenario 1")]
+    #[test_case("//192.168.1.100/10AB/3/0", Some("//*/FFFF/FF/FFFF"), Err(UStatus::fail_with_code(UCode::INTERNAL, "Wrong combination of source UUri and sink UUri")); "Impossible scenario 2")]
+    #[test_case("//192.168.1.101/20EF/4/B", Some("//*/FFFF/FF/FFFF"), Err(UStatus::fail_with_code(UCode::INTERNAL, "Wrong combination of source UUri and sink UUri")); "Impossible scenario 3")]
+    #[test_case("//192.168.1.100/10AB/3/80CD", Some("//*/FFFF/FF/FFFF"), Err(UStatus::fail_with_code(UCode::INTERNAL, "Wrong combination of source UUri and sink UUri")); "Impossible scenario 4")]
     #[test_case("//*/FFFF/FF/FFFF", Some("//[::1]/FFFF/FF/FFFF"), Ok(MessageFlag::Notification | MessageFlag::Request | MessageFlag::Response); "All messages to a device")]
     #[tokio::test(flavor = "multi_thread")]
     async fn test_get_listener_message_type(
