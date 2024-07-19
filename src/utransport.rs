@@ -12,6 +12,7 @@
  ********************************************************************************/
 use crate::{MessageFlag, UPTransportZenoh, CB_RUNTIME};
 use async_trait::async_trait;
+use bytes::Bytes;
 use lazy_static::lazy_static;
 use std::{
     sync::{Arc, Mutex},
@@ -27,9 +28,10 @@ use up_rust::{
     UMessageType, UStatus, UTransport, UUri,
 };
 use zenoh::{
-    prelude::{r#async::*, Sample},
-    query::Reply,
-    queryable::Query,
+    key_expr::keyexpr,
+    prelude::*,
+    query::{Query, QueryTarget, Reply},
+    sample::Sample,
 };
 
 lazy_static! {
@@ -65,7 +67,7 @@ impl UPTransportZenoh {
     async fn send_publish_notification(
         &self,
         zenoh_key: &str,
-        payload: &[u8],
+        payload: Bytes,
         attributes: UAttributes,
     ) -> Result<(), UStatus> {
         // Transform UAttributes to user attachment in Zenoh
@@ -87,11 +89,10 @@ impl UPTransportZenoh {
         // Send data
         let putbuilder = self
             .session
-            .put(zenoh_key, payload)
+            .put(zenoh_key, payload.as_ref())
             .priority(priority)
-            .with_attachment(attachment.build());
+            .attachment(attachment);
         putbuilder
-            .res()
             .await
             .map_err(|_| UStatus::fail_with_code(UCode::INTERNAL, "Unable to send with Zenoh"))?;
 
@@ -101,7 +102,7 @@ impl UPTransportZenoh {
     async fn send_request(
         &self,
         zenoh_key: &str,
-        payload: &[u8],
+        payload: Bytes,
         attributes: UAttributes,
     ) -> Result<(), UStatus> {
         // Transform UAttributes to user attachment in Zenoh
@@ -127,7 +128,7 @@ impl UPTransportZenoh {
             return Err(UStatus::fail_with_code(UCode::INTERNAL, msg));
         };
         let zenoh_callback = move |reply: Reply| {
-            match reply.sample {
+            match reply.result() {
                 Ok(sample) => {
                     // Get UAttribute from the attachment
                     let Some(attachment) = sample.attachment() else {
@@ -147,7 +148,7 @@ impl UPTransportZenoh {
                         &resp_callback,
                         UMessage {
                             attributes: Some(u_attribute).into(),
-                            payload: Some(sample.payload.contiguous().to_vec().into()),
+                            payload: Some(sample.payload().into::<Vec<u8>>().into()),
                             ..Default::default()
                         },
                     );
@@ -159,18 +160,17 @@ impl UPTransportZenoh {
         };
 
         // Send query
-        let value = Value::new(payload.to_vec().into());
         let getbuilder = self
             .session
             .get(zenoh_key)
-            .with_value(value)
-            .with_attachment(attachment.build())
+            .payload(payload.as_ref())
+            .attachment(attachment)
             .target(QueryTarget::BestMatching)
             .timeout(Duration::from_millis(u64::from(
                 attributes.ttl.unwrap_or(1000),
             )))
             .callback(zenoh_callback);
-        getbuilder.res().await.map_err(|e| {
+        getbuilder.await.map_err(|e| {
             let msg = format!("Unable to send get with Zenoh: {e:?}");
             error!("{msg}");
             UStatus::fail_with_code(UCode::INTERNAL, msg)
@@ -179,7 +179,7 @@ impl UPTransportZenoh {
         Ok(())
     }
 
-    async fn send_response(&self, payload: &[u8], attributes: UAttributes) -> Result<(), UStatus> {
+    async fn send_response(&self, payload: Bytes, attributes: UAttributes) -> Result<(), UStatus> {
         // Transform UAttributes to user attachment in Zenoh
         let Ok(attachment) = UPTransportZenoh::uattributes_to_attachment(&attributes) else {
             let msg = "Unable to transform UAttributes to attachment".to_string();
@@ -202,17 +202,9 @@ impl UPTransportZenoh {
             .clone();
 
         // Send back the query
-        let value = Value::new(payload.to_vec().into());
-        let reply = Ok(Sample::new(query.key_expr().clone(), value));
         query
-            .reply(reply)
-            .with_attachment(attachment.build())
-            .map_err(|_| {
-                let msg = "Unable to add attachment";
-                error!("{msg}");
-                UStatus::fail_with_code(UCode::INTERNAL, msg)
-            })?
-            .res()
+            .reply(query.key_expr().clone(), payload.as_ref())
+            .attachment(attachment)
             .await
             .map_err(|e| {
                 let msg = format!("Unable to reply with Zenoh: {e:?}");
@@ -246,7 +238,7 @@ impl UPTransportZenoh {
             // Create UMessage
             let msg = UMessage {
                 attributes: Some(u_attribute).into(),
-                payload: Some(sample.payload.contiguous().to_vec().into()),
+                payload: Some(sample.payload().into::<Vec<u8>>().into()),
                 ..Default::default()
             };
             spawn_nonblock_callback(&listener_cloned, msg);
@@ -257,7 +249,6 @@ impl UPTransportZenoh {
             .session
             .declare_subscriber(zenoh_key)
             .callback_mut(callback)
-            .res()
             .await
         {
             self.subscriber_map.lock().unwrap().insert(
@@ -297,9 +288,7 @@ impl UPTransportZenoh {
             // Create UMessage and store the query into HashMap (Will be used in send_response)
             let msg = UMessage {
                 attributes: Some(u_attribute.clone()).into(),
-                payload: query
-                    .value()
-                    .map(|value| value.payload.contiguous().to_vec().into()),
+                payload: query.payload().map(|value| value.into::<Vec<u8>>().into()),
                 ..Default::default()
             };
             query_map
@@ -314,7 +303,6 @@ impl UPTransportZenoh {
             .session
             .declare_queryable(zenoh_key)
             .callback_mut(callback)
-            .res()
             .await
         {
             self.queryable_map.lock().unwrap().insert(
@@ -362,11 +350,7 @@ impl UTransport for UPTransportZenoh {
         };
 
         // Get payload
-        let payload = if let Some(payload) = message.payload {
-            payload.to_vec()
-        } else {
-            vec![]
-        };
+        let payload = message.payload.map_or(Bytes::new(), |upayload| upayload);
 
         // Check the type of UAttributes (Publish / Notification / Request / Response)
         match attributes
@@ -384,7 +368,7 @@ impl UTransport for UPTransportZenoh {
                         UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
                     })?;
                 // Send Publish
-                self.send_publish_notification(&zenoh_key, &payload, attributes)
+                self.send_publish_notification(&zenoh_key, payload, attributes)
                     .await
             }
             UMessageType::UMESSAGE_TYPE_NOTIFICATION => {
@@ -397,7 +381,7 @@ impl UTransport for UPTransportZenoh {
                         UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
                     })?;
                 // Send Publish
-                self.send_publish_notification(&zenoh_key, &payload, attributes)
+                self.send_publish_notification(&zenoh_key, payload, attributes)
                     .await
             }
             UMessageType::UMESSAGE_TYPE_REQUEST => {
@@ -410,7 +394,7 @@ impl UTransport for UPTransportZenoh {
                         UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
                     })?;
                 // Send Request
-                self.send_request(&zenoh_key, &payload, attributes).await
+                self.send_request(&zenoh_key, payload, attributes).await
             }
             UMessageType::UMESSAGE_TYPE_RESPONSE => {
                 UAttributesValidators::Response
@@ -422,7 +406,7 @@ impl UTransport for UPTransportZenoh {
                         UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
                     })?;
                 // Send Response
-                self.send_response(&payload, attributes).await
+                self.send_response(payload, attributes).await
             }
             UMessageType::UMESSAGE_TYPE_UNSPECIFIED => {
                 let msg = "Wrong Message type in UAttributes".to_string();
