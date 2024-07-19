@@ -21,14 +21,14 @@ use tokio::{
     time::{sleep, Duration},
 };
 use up_rust::{UListener, UMessage, UMessageBuilder, UPayloadFormat, UTransport, UUri};
-use up_transport_zenoh::UPClientZenoh;
+use up_transport_zenoh::UPTransportZenoh;
 
 struct RpcListener {
-    up_client: Arc<UPClientZenoh>,
+    up_transport: Arc<UPTransportZenoh>,
 }
 impl RpcListener {
-    fn new(up_client: Arc<UPClientZenoh>) -> Self {
-        RpcListener { up_client }
+    fn new(up_transport: Arc<UPTransportZenoh>) -> Self {
+        RpcListener { up_transport }
     }
 }
 #[async_trait]
@@ -60,7 +60,7 @@ impl UListener for RpcListener {
             .unwrap();
         task::block_in_place(|| {
             Handle::current()
-                .block_on(self.up_client.send(umessage))
+                .block_on(self.up_transport.send(umessage))
                 .unwrap();
         });
     }
@@ -69,11 +69,11 @@ impl UListener for RpcListener {
 #[tokio::main]
 async fn main() {
     // initiate logging
-    UPClientZenoh::try_init_log_from_env();
+    UPTransportZenoh::try_init_log_from_env();
 
     println!("uProtocol RPC server example");
     let rpc_server = Arc::new(
-        UPClientZenoh::new(common::get_zenoh_config(), "rpc_server")
+        UPTransportZenoh::new(common::get_zenoh_config(), "rpc_server")
             .await
             .unwrap(),
     );

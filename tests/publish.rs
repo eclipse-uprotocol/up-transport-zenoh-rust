@@ -48,14 +48,16 @@ async fn test_publish_and_subscribe(publish_uuri: &UUri, listen_uuri: &UUri) {
 
     // Initialization
     let target_data = String::from("Hello World!");
-    let upclient_send = test_lib::create_up_client_zenoh("publisher").await.unwrap();
-    let upclient_recv = test_lib::create_up_client_zenoh("subscriber")
+    let uptransport_send = test_lib::create_up_transport_zenoh("publisher")
+        .await
+        .unwrap();
+    let uptransport_recv = test_lib::create_up_transport_zenoh("subscriber")
         .await
         .unwrap();
 
     // Register the listener
     let pub_listener = Arc::new(PublishNotificationListener::new());
-    upclient_recv
+    uptransport_recv
         .register_listener(listen_uuri, None, pub_listener.clone())
         .await
         .unwrap();
@@ -66,7 +68,7 @@ async fn test_publish_and_subscribe(publish_uuri: &UUri, listen_uuri: &UUri) {
     let umessage = UMessageBuilder::publish((*publish_uuri).clone())
         .build_with_payload(target_data.clone(), UPayloadFormat::UPAYLOAD_FORMAT_TEXT)
         .unwrap();
-    upclient_send.send(umessage).await.unwrap();
+    uptransport_send.send(umessage).await.unwrap();
 
     // Waiting for the subscriber to receive data
     sleep(Duration::from_millis(1000)).await;
@@ -75,7 +77,7 @@ async fn test_publish_and_subscribe(publish_uuri: &UUri, listen_uuri: &UUri) {
     assert_eq!(pub_listener.get_recv_data(), target_data);
 
     // Cleanup
-    upclient_recv
+    uptransport_recv
         .unregister_listener(&listen_uuri.clone(), None, pub_listener)
         .await
         .unwrap();
@@ -95,12 +97,14 @@ async fn test_notification_and_subscribe(
 
     // Initialization
     let target_data = String::from("Hello World!");
-    let upclient_sender = test_lib::create_up_client_zenoh("sender").await.unwrap();
-    let upclient_receiver = test_lib::create_up_client_zenoh("receiver").await.unwrap();
+    let uptransport_sender = test_lib::create_up_transport_zenoh("sender").await.unwrap();
+    let uptransport_receiver = test_lib::create_up_transport_zenoh("receiver")
+        .await
+        .unwrap();
 
     // Register the listener
     let notification_listener = Arc::new(PublishNotificationListener::new());
-    upclient_receiver
+    uptransport_receiver
         .register_listener(src_filter, sink_filter, notification_listener.clone())
         .await
         .unwrap();
@@ -111,7 +115,7 @@ async fn test_notification_and_subscribe(
     let umessage = UMessageBuilder::notification((*src_uuri).clone(), (*sink_uuri).clone())
         .build_with_payload(target_data.clone(), UPayloadFormat::UPAYLOAD_FORMAT_TEXT)
         .unwrap();
-    upclient_sender.send(umessage).await.unwrap();
+    uptransport_sender.send(umessage).await.unwrap();
 
     // Waiting for the subscriber to receive data
     sleep(Duration::from_millis(1000)).await;
@@ -120,7 +124,7 @@ async fn test_notification_and_subscribe(
     assert_eq!(notification_listener.get_recv_data(), target_data);
 
     // Cleanup
-    upclient_receiver
+    uptransport_receiver
         .unregister_listener(src_filter, sink_filter, notification_listener)
         .await
         .unwrap();
