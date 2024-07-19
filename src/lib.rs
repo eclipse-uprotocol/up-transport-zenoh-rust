@@ -77,7 +77,7 @@ impl UPTransportZenoh {
     ///
     /// # Arguments
     ///
-    /// * `config` - Zenoh configuration. You can refer to [here](https://github.com/eclipse-zenoh/zenoh/blob/0.11.0-rc.3/DEFAULT_CONFIG.json5) for more configuration details.
+    /// * `config` - Zenoh configuration. You can refer to [here](https://github.com/eclipse-zenoh/zenoh/blob/0.11.0/DEFAULT_CONFIG.json5) for more configuration details.
     /// * `authority_name` - The authority name. We need it to generate Zenoh key since authority might be omitted in `UUri`.
     ///
     /// # Errors
