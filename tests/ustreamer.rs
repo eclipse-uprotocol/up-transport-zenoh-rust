@@ -25,11 +25,11 @@ use tokio::{
 use up_rust::{
     UListener, UMessage, UMessageBuilder, UMessageType, UPayloadFormat, UTransport, UUri,
 };
-use up_transport_zenoh::UPClientZenoh;
+use up_transport_zenoh::UPTransportZenoh;
 
 // UStreamerListener
 struct UStreamerListener {
-    up_streamer: Arc<UPClientZenoh>,
+    up_streamer: Arc<UPTransportZenoh>,
     // Notification data ustreamer received
     recv_notification_data: Arc<Mutex<String>>,
     // RPC Response data ustreamer received
@@ -38,7 +38,7 @@ struct UStreamerListener {
     predefined_resp_data: String,
 }
 impl UStreamerListener {
-    fn new(up_streamer: Arc<UPClientZenoh>) -> Self {
+    fn new(up_streamer: Arc<UPTransportZenoh>) -> Self {
         UStreamerListener {
             up_streamer,
             recv_notification_data: Arc::new(Mutex::new(String::new())),
@@ -122,13 +122,13 @@ impl UListener for ResponseListener {
 
 // RequestListener
 struct RequestListener {
-    up_client: Arc<UPClientZenoh>,
+    up_transport: Arc<UPTransportZenoh>,
     predefined_resp_data: String,
 }
 impl RequestListener {
-    fn new(up_client: Arc<UPClientZenoh>) -> Self {
+    fn new(up_transport: Arc<UPTransportZenoh>) -> Self {
         RequestListener {
-            up_client,
+            up_transport,
             predefined_resp_data: String::from("Response from client"),
         }
     }
@@ -146,7 +146,7 @@ impl UListener for RequestListener {
             .unwrap();
         task::block_in_place(|| {
             Handle::current()
-                .block_on(self.up_client.send(umessage))
+                .block_on(self.up_transport.send(umessage))
                 .unwrap();
         });
     }
@@ -157,8 +157,16 @@ async fn test_ustreamer() {
     test_lib::before_test();
 
     // Initialization
-    let uclient = Arc::new(test_lib::create_up_client_zenoh("uclient").await.unwrap());
-    let ustreamer = Arc::new(test_lib::create_up_client_zenoh("ustreamer").await.unwrap());
+    let uclient = Arc::new(
+        test_lib::create_up_transport_zenoh("uclient")
+            .await
+            .unwrap(),
+    );
+    let ustreamer = Arc::new(
+        test_lib::create_up_transport_zenoh("ustreamer")
+            .await
+            .unwrap(),
+    );
     let client_auth = "uclient";
     let streamer_auth = "ustreamer";
 

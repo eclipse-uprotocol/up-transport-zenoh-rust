@@ -25,18 +25,22 @@ use up_rust::{
     LocalUriProvider, UListener, UMessage, UMessageBuilder, UPayloadFormat, UPriority, UTransport,
     UUri, UUID,
 };
-use up_transport_zenoh::{UPClientZenoh, ZenohRpcClient};
+use up_transport_zenoh::{UPTransportZenoh, ZenohRpcClient};
 
 // RequestListener
 struct RequestListener {
-    up_client: Arc<UPClientZenoh>,
+    up_transport: Arc<UPTransportZenoh>,
     request_data: String,
     response_data: String,
 }
 impl RequestListener {
-    fn new(up_client: Arc<UPClientZenoh>, request_data: String, response_data: String) -> Self {
+    fn new(
+        up_transport: Arc<UPTransportZenoh>,
+        request_data: String,
+        response_data: String,
+    ) -> Self {
         RequestListener {
-            up_client,
+            up_transport,
             request_data,
             response_data,
         }
@@ -66,7 +70,7 @@ impl UListener for RequestListener {
             .unwrap();
         task::block_in_place(|| {
             Handle::current()
-                .block_on(self.up_client.send(umessage))
+                .block_on(self.up_transport.send(umessage))
                 .unwrap();
         });
     }
@@ -133,18 +137,26 @@ async fn test_rpc_server_client(
     test_lib::before_test();
 
     // Initialization
-    let upclient_client = Arc::new(test_lib::create_up_client_zenoh("requester").await.unwrap());
-    let upclient_server = Arc::new(test_lib::create_up_client_zenoh("responder").await.unwrap());
+    let uptransport_client = Arc::new(
+        test_lib::create_up_transport_zenoh("requester")
+            .await
+            .unwrap(),
+    );
+    let uptransport_server = Arc::new(
+        test_lib::create_up_transport_zenoh("responder")
+            .await
+            .unwrap(),
+    );
     let request_data = String::from("This is the request data");
     let response_data = String::from("This is the response data");
 
     // Setup RpcServer callback
     let request_listener = Arc::new(RequestListener::new(
-        upclient_server.clone(),
+        uptransport_server.clone(),
         request_data.clone(),
         response_data.clone(),
     ));
-    upclient_server
+    uptransport_server
         .register_listener(src_filter, sink_filter, request_listener.clone())
         .await
         .unwrap();
@@ -157,7 +169,7 @@ async fn test_rpc_server_client(
             uuri: (*src_uuri).clone(),
         });
         let rpc_client = Arc::new(ZenohRpcClient::new(
-            upclient_client.clone(),
+            uptransport_client.clone(),
             uri_provider.clone(),
         ));
 
@@ -186,7 +198,7 @@ async fn test_rpc_server_client(
     {
         // Register Response callback
         let response_listener = Arc::new(ResponseListener::new());
-        upclient_client
+        uptransport_client
             .register_listener(sink_uuri, Some(src_uuri), response_listener.clone())
             .await
             .unwrap();
@@ -195,7 +207,7 @@ async fn test_rpc_server_client(
         let umessage = UMessageBuilder::request((*sink_uuri).clone(), (*src_uuri).clone(), 1000)
             .build_with_payload(request_data.clone(), UPayloadFormat::UPAYLOAD_FORMAT_TEXT)
             .unwrap();
-        upclient_client.send(umessage).await.unwrap();
+        uptransport_client.send(umessage).await.unwrap();
 
         // Waiting for the callback to process data
         sleep(Duration::from_millis(2000)).await;
@@ -204,14 +216,14 @@ async fn test_rpc_server_client(
         assert_eq!(response_listener.get_response_data(), response_data);
 
         // Cleanup
-        upclient_client
+        uptransport_client
             .unregister_listener(sink_uuri, Some(src_uuri), response_listener.clone())
             .await
             .unwrap();
     }
 
     // Cleanup
-    upclient_server
+    uptransport_server
         .unregister_listener(src_filter, sink_filter, request_listener.clone())
         .await
         .unwrap();

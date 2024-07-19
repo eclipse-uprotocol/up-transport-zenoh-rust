@@ -17,7 +17,7 @@ use up_rust::{
     communication::{CallOptions, RpcClient, UPayload},
     LocalUriProvider, UPayloadFormat, UPriority, UUri, UUID,
 };
-use up_transport_zenoh::{UPClientZenoh, ZenohRpcClient};
+use up_transport_zenoh::{UPTransportZenoh, ZenohRpcClient};
 
 pub struct MyUriProvider {
     uuri: UUri,
@@ -41,11 +41,11 @@ impl LocalUriProvider for MyUriProvider {
 #[tokio::main]
 async fn main() {
     // initiate logging
-    UPClientZenoh::try_init_log_from_env();
+    UPTransportZenoh::try_init_log_from_env();
 
     println!("uProtocol RPC client example");
     let zenoh_transport = Arc::new(
-        UPClientZenoh::new(common::get_zenoh_config(), "rpc_client")
+        UPTransportZenoh::new(common::get_zenoh_config(), "rpc_client")
             .await
             .unwrap(),
     );

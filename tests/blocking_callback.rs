@@ -51,16 +51,16 @@ async fn test_blocking_user_callback(pub_uuri: &UUri) {
     test_lib::before_test();
 
     // Initialization
-    let upclient_send = test_lib::create_up_client_zenoh("nonblock_pub")
+    let uptransport_send = test_lib::create_up_transport_zenoh("nonblock_pub")
         .await
         .unwrap();
-    let upclient_recv = test_lib::create_up_client_zenoh("nonblock_sub")
+    let uptransport_recv = test_lib::create_up_transport_zenoh("nonblock_sub")
         .await
         .unwrap();
 
     // Register the listener
     let pub_listener = Arc::new(DelayListener::new());
-    upclient_recv
+    uptransport_recv
         .register_listener(pub_uuri, None, pub_listener.clone())
         .await
         .unwrap();
@@ -74,8 +74,8 @@ async fn test_blocking_user_callback(pub_uuri: &UUri) {
     let umsg1 = UMessageBuilder::publish(pub_uuri.clone())
         .build_with_payload("Pub 1", UPayloadFormat::UPAYLOAD_FORMAT_TEXT)
         .unwrap();
-    upclient_send.send(umsg0).await.unwrap();
-    upclient_send.send(umsg1).await.unwrap();
+    uptransport_send.send(umsg0).await.unwrap();
+    uptransport_send.send(umsg1).await.unwrap();
 
     // Receive the data in reverse order due to the delay time
     // Waiting for the subscriber to receive 2nd data
@@ -86,7 +86,7 @@ async fn test_blocking_user_callback(pub_uuri: &UUri) {
     assert_eq!(pub_listener.get_recv_data(), "Pub 0".to_string());
 
     // Cleanup
-    upclient_recv
+    uptransport_recv
         .unregister_listener(pub_uuri, None, pub_listener)
         .await
         .unwrap();

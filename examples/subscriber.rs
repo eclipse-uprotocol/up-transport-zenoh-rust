@@ -16,7 +16,7 @@ use async_trait::async_trait;
 use std::{str::FromStr, sync::Arc};
 use tokio::time::{sleep, Duration};
 use up_rust::{UListener, UMessage, UTransport, UUri};
-use up_transport_zenoh::UPClientZenoh;
+use up_transport_zenoh::UPTransportZenoh;
 
 struct SubscriberListener;
 #[async_trait]
@@ -32,10 +32,10 @@ impl UListener for SubscriberListener {
 #[tokio::main]
 async fn main() {
     // initiate logging
-    UPClientZenoh::try_init_log_from_env();
+    UPTransportZenoh::try_init_log_from_env();
 
     println!("uProtocol subscriber example");
-    let subscriber = UPClientZenoh::new(common::get_zenoh_config(), "subscriber")
+    let subscriber = UPTransportZenoh::new(common::get_zenoh_config(), "subscriber")
         .await
         .unwrap();
 

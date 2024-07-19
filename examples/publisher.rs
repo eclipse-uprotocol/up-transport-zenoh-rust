@@ -15,15 +15,15 @@ mod common;
 use std::str::FromStr;
 use tokio::time::{sleep, Duration};
 use up_rust::{UMessageBuilder, UPayloadFormat, UTransport, UUri};
-use up_transport_zenoh::UPClientZenoh;
+use up_transport_zenoh::UPTransportZenoh;
 
 #[tokio::main]
 async fn main() {
     // initiate logging
-    UPClientZenoh::try_init_log_from_env();
+    UPTransportZenoh::try_init_log_from_env();
 
     println!("uProtocol publisher example");
-    let publisher = UPClientZenoh::new(common::get_zenoh_config(), "publisher")
+    let publisher = UPTransportZenoh::new(common::get_zenoh_config(), "publisher")
         .await
         .unwrap();
 
