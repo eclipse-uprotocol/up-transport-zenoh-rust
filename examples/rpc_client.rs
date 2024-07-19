@@ -19,7 +19,7 @@ use std::{
 };
 use tokio::time::{sleep, Duration};
 use up_rust::{UListener, UMessage, UMessageBuilder, UPayloadFormat, UTransport, UUri};
-use up_transport_zenoh::UPClientZenoh;
+use up_transport_zenoh::UPTransportZenoh;
 
 // ResponseListener
 struct ResponseListener {
@@ -47,10 +47,10 @@ impl UListener for ResponseListener {
 #[tokio::main]
 async fn main() {
     // initiate logging
-    UPClientZenoh::try_init_log_from_env();
+    UPTransportZenoh::try_init_log_from_env();
 
     println!("uProtocol RPC client example");
-    let rpc_client = UPClientZenoh::new(common::get_zenoh_config(), "rpc_client")
+    let rpc_client = UPTransportZenoh::new(common::get_zenoh_config(), "rpc_client")
         .await
         .unwrap();
 

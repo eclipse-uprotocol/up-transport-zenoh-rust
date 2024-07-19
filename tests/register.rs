@@ -38,23 +38,25 @@ async fn test_register_and_unregister(source_filter: &UUri, sink_filter: Option<
     test_lib::before_test();
 
     // Initialization
-    let upclient = test_lib::create_up_client_zenoh("myvehicle").await.unwrap();
+    let uptransport = test_lib::create_up_transport_zenoh("myvehicle")
+        .await
+        .unwrap();
     let foo_listener = Arc::new(FooListener);
 
     // Register the listener
-    upclient
+    uptransport
         .register_listener(source_filter, sink_filter, foo_listener.clone())
         .await
         .unwrap();
 
     // Able to ungister
-    upclient
+    uptransport
         .unregister_listener(source_filter, sink_filter, foo_listener.clone())
         .await
         .unwrap();
 
     // Unable to ungister
-    let result = upclient
+    let result = uptransport
         .unregister_listener(source_filter, sink_filter, foo_listener.clone())
         .await;
     assert!(result.is_err());

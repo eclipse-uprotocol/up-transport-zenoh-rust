@@ -10,7 +10,7 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  ********************************************************************************/
-use crate::{MessageFlag, UPClientZenoh, CB_RUNTIME};
+use crate::{MessageFlag, UPTransportZenoh, CB_RUNTIME};
 use async_trait::async_trait;
 use lazy_static::lazy_static;
 use std::{
@@ -61,7 +61,7 @@ fn spawn_nonblock_callback(listener: &Arc<dyn UListener>, listener_msg: UMessage
     });
 }
 
-impl UPClientZenoh {
+impl UPTransportZenoh {
     async fn send_publish_notification(
         &self,
         zenoh_key: &str,
@@ -69,19 +69,20 @@ impl UPClientZenoh {
         attributes: UAttributes,
     ) -> Result<(), UStatus> {
         // Transform UAttributes to user attachment in Zenoh
-        let Ok(attachment) = UPClientZenoh::uattributes_to_attachment(&attributes) else {
+        let Ok(attachment) = UPTransportZenoh::uattributes_to_attachment(&attributes) else {
             let msg = "Unable to transform UAttributes to attachment".to_string();
             error!("{msg}");
             return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg));
         };
 
         // Map the priority to Zenoh
-        let priority =
-            UPClientZenoh::map_zenoh_priority(attributes.priority.enum_value().map_err(|_| {
+        let priority = UPTransportZenoh::map_zenoh_priority(
+            attributes.priority.enum_value().map_err(|_| {
                 let msg = "Unable to map to Zenoh priority".to_string();
                 error!("{msg}");
                 UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
-            })?);
+            })?,
+        );
 
         // Send data
         let putbuilder = self
@@ -104,7 +105,7 @@ impl UPClientZenoh {
         attributes: UAttributes,
     ) -> Result<(), UStatus> {
         // Transform UAttributes to user attachment in Zenoh
-        let Ok(attachment) = UPClientZenoh::uattributes_to_attachment(&attributes) else {
+        let Ok(attachment) = UPTransportZenoh::uattributes_to_attachment(&attributes) else {
             let msg = "Unable to transform UAttributes to attachment".to_string();
             error!("{msg}");
             return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg));
@@ -133,7 +134,8 @@ impl UPClientZenoh {
                         warn!("Unable to get the attachment");
                         return;
                     };
-                    let u_attribute = match UPClientZenoh::attachment_to_uattributes(attachment) {
+                    let u_attribute = match UPTransportZenoh::attachment_to_uattributes(attachment)
+                    {
                         Ok(uattr) => uattr,
                         Err(e) => {
                             warn!("Unable to transform attachment to UAttributes: {e:?}");
@@ -179,7 +181,7 @@ impl UPClientZenoh {
 
     async fn send_response(&self, payload: &[u8], attributes: UAttributes) -> Result<(), UStatus> {
         // Transform UAttributes to user attachment in Zenoh
-        let Ok(attachment) = UPClientZenoh::uattributes_to_attachment(&attributes) else {
+        let Ok(attachment) = UPTransportZenoh::uattributes_to_attachment(&attributes) else {
             let msg = "Unable to transform UAttributes to attachment".to_string();
             error!("{msg}");
             return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg));
@@ -234,7 +236,7 @@ impl UPClientZenoh {
                 warn!("Unable to get attachment");
                 return;
             };
-            let u_attribute = match UPClientZenoh::attachment_to_uattributes(attachment) {
+            let u_attribute = match UPTransportZenoh::attachment_to_uattributes(attachment) {
                 Ok(uattributes) => uattributes,
                 Err(e) => {
                     warn!("Unable to transform attachement to UAttributes: {e:?}");
@@ -285,7 +287,7 @@ impl UPClientZenoh {
                 warn!("Unable to get attachment");
                 return;
             };
-            let u_attribute = match UPClientZenoh::attachment_to_uattributes(attachment) {
+            let u_attribute = match UPTransportZenoh::attachment_to_uattributes(attachment) {
                 Ok(uattributes) => uattributes,
                 Err(e) => {
                     warn!("Unable to transform user attachment to UAttributes: {e:?}");
@@ -339,7 +341,7 @@ impl UPClientZenoh {
 }
 
 #[async_trait]
-impl UTransport for UPClientZenoh {
+impl UTransport for UPTransportZenoh {
     async fn send(&self, message: UMessage) -> Result<(), UStatus> {
         let attributes = *message.attributes.0.ok_or_else(|| {
             let msg = "Invalid UAttributes".to_string();
@@ -446,7 +448,7 @@ impl UTransport for UPClientZenoh {
         sink_filter: Option<&UUri>,
         listener: Arc<dyn UListener>,
     ) -> Result<(), UStatus> {
-        let flag = UPClientZenoh::get_listener_message_type(source_filter, sink_filter)?;
+        let flag = UPTransportZenoh::get_listener_message_type(source_filter, sink_filter)?;
         // Publish & Notification
         if flag.contains(MessageFlag::Publish) || flag.contains(MessageFlag::Notification) {
             // Get Zenoh key
@@ -484,7 +486,7 @@ impl UTransport for UPClientZenoh {
         sink_filter: Option<&UUri>,
         listener: Arc<dyn UListener>,
     ) -> Result<(), UStatus> {
-        let flag = UPClientZenoh::get_listener_message_type(source_filter, sink_filter)?;
+        let flag = UPTransportZenoh::get_listener_message_type(source_filter, sink_filter)?;
         // Publish & Notification
         if flag.contains(MessageFlag::Publish) || flag.contains(MessageFlag::Notification) {
             // Get Zenoh key

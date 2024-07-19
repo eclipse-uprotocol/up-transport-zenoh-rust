@@ -10,7 +10,7 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  ********************************************************************************/
-use crate::UPClientZenoh;
+use crate::UPTransportZenoh;
 use async_trait::async_trait;
 use std::{string::ToString, sync::Arc, time::Duration};
 use tracing::error;
@@ -22,7 +22,7 @@ use up_rust::{
 use zenoh::prelude::r#async::*;
 
 pub struct ZenohRpcClient {
-    transport: Arc<UPClientZenoh>,
+    transport: Arc<UPTransportZenoh>,
     uri_provider: Arc<dyn LocalUriProvider>,
 }
 impl ZenohRpcClient {
@@ -32,7 +32,7 @@ impl ZenohRpcClient {
     ///
     /// * `transport` - The Zenoh uProtocol Transport Layer.
     /// * `uri_provider` - The helper for creating URIs that represent local resources.
-    pub fn new(transport: Arc<UPClientZenoh>, uri_provider: Arc<dyn LocalUriProvider>) -> Self {
+    pub fn new(transport: Arc<UPTransportZenoh>, uri_provider: Arc<dyn LocalUriProvider>) -> Self {
         ZenohRpcClient {
             transport,
             uri_provider,
@@ -80,7 +80,7 @@ impl RpcClient for ZenohRpcClient {
             .to_zenoh_key_string(&source_uri, Some(&method));
 
         // Put UAttributes into Zenoh user attachment
-        let Ok(attachment) = UPClientZenoh::uattributes_to_attachment(&attributes) else {
+        let Ok(attachment) = UPTransportZenoh::uattributes_to_attachment(&attributes) else {
             let msg = "Unable to transform UAttributes to user attachment in Zenoh".to_string();
             error!("{msg}");
             return Err(ServiceInvocationError::Internal(msg));

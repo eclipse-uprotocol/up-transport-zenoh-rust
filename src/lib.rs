@@ -58,7 +58,7 @@ type SubscriberMap = Arc<Mutex<HashMap<(String, ComparableListener), Subscriber<
 type QueryableMap = Arc<Mutex<HashMap<(String, ComparableListener), Queryable<'static, ()>>>>;
 type QueryMap = Arc<Mutex<HashMap<String, Query>>>;
 type RpcCallbackMap = Arc<Mutex<HashMap<OwnedKeyExpr, Arc<dyn UListener>>>>;
-pub struct UPClientZenoh {
+pub struct UPTransportZenoh {
     session: Arc<Session>,
     // Able to unregister Subscriber
     subscriber_map: SubscriberMap,
@@ -72,8 +72,8 @@ pub struct UPClientZenoh {
     authority_name: String,
 }
 
-impl UPClientZenoh {
-    /// Create `UPClientZenoh` by applying the Zenoh configuration, `UAuthority`.
+impl UPTransportZenoh {
+    /// Create `UPTransportZenoh` by applying the Zenoh configuration, `UAuthority`.
     ///
     /// # Arguments
     ///
@@ -81,15 +81,15 @@ impl UPClientZenoh {
     /// * `authority_name` - The authority name. We need it to generate Zenoh key since authority might be omitted in `UUri`.
     ///
     /// # Errors
-    /// Will return `Err` if unable to create `UPClientZenoh`
+    /// Will return `Err` if unable to create `UPTransportZenoh`
     ///
     /// # Examples
     ///
     /// ```
     /// #[tokio::main]
     /// # async fn main() {
-    /// use up_transport_zenoh::{zenoh_config, UPClientZenoh};
-    /// let upclient = UPClientZenoh::new(zenoh_config::Config::default(), "MyAuthName")
+    /// use up_transport_zenoh::{zenoh_config, UPTransportZenoh};
+    /// let uptransport = UPTransportZenoh::new(zenoh_config::Config::default(), "MyAuthName")
     ///     .await
     ///     .unwrap();
     /// # }
@@ -97,15 +97,15 @@ impl UPClientZenoh {
     pub async fn new(
         config: zenoh_config::Config,
         authority_name: impl Into<String>,
-    ) -> Result<UPClientZenoh, UStatus> {
+    ) -> Result<UPTransportZenoh, UStatus> {
         // Create Zenoh session
         let Ok(session) = zenoh::open(config).res().await else {
             let msg = "Unable to open Zenoh session".to_string();
             error!("{msg}");
             return Err(UStatus::fail_with_code(UCode::INTERNAL, msg));
         };
-        // Return UPClientZenoh
-        Ok(UPClientZenoh {
+        // Return UPTransportZenoh
+        Ok(UPTransportZenoh {
             session: Arc::new(session),
             subscriber_map: Arc::new(Mutex::new(HashMap::new())),
             queryable_map: Arc::new(Mutex::new(HashMap::new())),
@@ -115,7 +115,7 @@ impl UPClientZenoh {
         })
     }
 
-    /// Create `UPClientZenoh` by applying the Zenoh Runtime and `UAuthority`. This can be used by uStreamer.
+    /// Create `UPTransportZenoh` by applying the Zenoh Runtime and `UAuthority`. This can be used by uStreamer.
     ///
     /// # Arguments
     ///
@@ -123,18 +123,18 @@ impl UPClientZenoh {
     /// * `authority_name` - The authority name. We need it to generate Zenoh key since authority might be omitted in `UUri`.
     ///
     /// # Errors
-    /// Will return `Err` if unable to create `UPClientZenoh`
+    /// Will return `Err` if unable to create `UPTransportZenoh`
     pub async fn new_with_runtime(
         runtime: ZRuntime,
         authority_name: String,
-    ) -> Result<UPClientZenoh, UStatus> {
+    ) -> Result<UPTransportZenoh, UStatus> {
         let Ok(session) = zenoh::init(runtime).res().await else {
             let msg = "Unable to open Zenoh session".to_string();
             error!("{msg}");
             return Err(UStatus::fail_with_code(UCode::INTERNAL, msg));
         };
-        // Return UPClientZenoh
-        Ok(UPClientZenoh {
+        // Return UPTransportZenoh
+        Ok(UPTransportZenoh {
             session: Arc::new(session),
             subscriber_map: Arc::new(Mutex::new(HashMap::new())),
             queryable_map: Arc::new(Mutex::new(HashMap::new())),
@@ -309,9 +309,10 @@ mod tests {
     // CY_TODO: Test invalid authority
     #[test_case("vehicle1".to_string(), true; "succeeds with both valid authority and entity")]
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_new_up_client_zenoh(authority: String, expected_result: bool) {
-        let up_client_zenoh = UPClientZenoh::new(zenoh_config::Config::default(), authority).await;
-        assert_eq!(up_client_zenoh.is_ok(), expected_result);
+    async fn test_new_up_transport_zenoh(authority: String, expected_result: bool) {
+        let up_transport_zenoh =
+            UPTransportZenoh::new(zenoh_config::Config::default(), authority).await;
+        assert_eq!(up_transport_zenoh.is_ok(), expected_result);
     }
 
     // Mapping with the examples in Zenoh spec
@@ -324,19 +325,20 @@ mod tests {
     #[test_case("//*/FFFF/FF/FFFF", Some("//[::1]/FFFF/FF/FFFF"), "up/*/*/*/*/[::1]/*/*/*"; "Receive all messages to a device")]
     #[tokio::test(flavor = "multi_thread")]
     async fn test_to_zenoh_key_string(src_uri: &str, sink_uri: Option<&str>, zenoh_key: &str) {
-        let up_client_zenoh = UPClientZenoh::new(zenoh_config::Config::default(), "192.168.1.100")
-            .await
-            .unwrap();
+        let up_transport_zenoh =
+            UPTransportZenoh::new(zenoh_config::Config::default(), "192.168.1.100")
+                .await
+                .unwrap();
         let src = UUri::from_str(src_uri).unwrap();
         if let Some(sink) = sink_uri {
             let sink = UUri::from_str(sink).unwrap();
             assert_eq!(
-                up_client_zenoh.to_zenoh_key_string(&src, Some(&sink)),
+                up_transport_zenoh.to_zenoh_key_string(&src, Some(&sink)),
                 zenoh_key.to_string()
             );
         } else {
             assert_eq!(
-                up_client_zenoh.to_zenoh_key_string(&src, None),
+                up_transport_zenoh.to_zenoh_key_string(&src, None),
                 zenoh_key.to_string()
             );
         }
@@ -362,11 +364,14 @@ mod tests {
         if let Some(uri) = sink_uri {
             let dst = UUri::from_str(uri).unwrap();
             assert_eq!(
-                UPClientZenoh::get_listener_message_type(&src, Some(&dst)),
+                UPTransportZenoh::get_listener_message_type(&src, Some(&dst)),
                 result
             );
         } else {
-            assert_eq!(UPClientZenoh::get_listener_message_type(&src, None), result);
+            assert_eq!(
+                UPTransportZenoh::get_listener_message_type(&src, None),
+                result
+            );
         }
     }
 }
