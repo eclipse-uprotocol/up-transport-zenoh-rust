@@ -371,27 +371,28 @@ mod tests {
     #[test_case("//192.168.1.100/10AB/3/0", Some("//192.168.1.101/20EF/4/B"), Ok(MessageFlag::Request); "Request Message")]
     #[test_case("//192.168.1.101/20EF/4/B", Some("//192.168.1.100/10AB/3/0"), Ok(MessageFlag::Response); "Response Message")]
     #[test_case("//*/FFFF/FF/FFFF", Some("//192.168.1.100/10AB/3/0"), Ok(MessageFlag::Notification | MessageFlag::Response); "Listen to Notification and Response Message")]
-    #[test_case("//*/FFFF/FF/FFFF", Some("//192.168.1.101/20EF/4/B"), Err(UStatus::fail_with_code(UCode::INTERNAL, "Wrong combination of source UUri and sink UUri")); "Impossible scenario 1")]
-    #[test_case("//192.168.1.100/10AB/3/0", Some("//*/FFFF/FF/FFFF"), Err(UStatus::fail_with_code(UCode::INTERNAL, "Wrong combination of source UUri and sink UUri")); "Impossible scenario 2")]
-    #[test_case("//192.168.1.101/20EF/4/B", Some("//*/FFFF/FF/FFFF"), Err(UStatus::fail_with_code(UCode::INTERNAL, "Wrong combination of source UUri and sink UUri")); "Impossible scenario 3")]
-    #[test_case("//192.168.1.100/10AB/3/80CD", Some("//*/FFFF/FF/FFFF"), Err(UStatus::fail_with_code(UCode::INTERNAL, "Wrong combination of source UUri and sink UUri")); "Impossible scenario 4")]
+    #[test_case("//*/FFFF/FF/FFFF", Some("//192.168.1.101/20EF/4/B"), Err(UCode::INTERNAL); "Impossible scenario 1")]
+    #[test_case("//192.168.1.100/10AB/3/0", Some("//*/FFFF/FF/FFFF"), Err(UCode::INTERNAL); "Impossible scenario 2")]
+    #[test_case("//192.168.1.101/20EF/4/B", Some("//*/FFFF/FF/FFFF"), Err(UCode::INTERNAL); "Impossible scenario 3")]
+    #[test_case("//192.168.1.100/10AB/3/80CD", Some("//*/FFFF/FF/FFFF"), Err(UCode::INTERNAL); "Impossible scenario 4")]
     #[test_case("//*/FFFF/FF/FFFF", Some("//[::1]/FFFF/FF/FFFF"), Ok(MessageFlag::Notification | MessageFlag::Request | MessageFlag::Response); "All messages to a device")]
     #[tokio::test(flavor = "multi_thread")]
     async fn test_get_listener_message_type(
         src_uri: &str,
         sink_uri: Option<&str>,
-        result: Result<MessageFlag, UStatus>,
+        result: Result<MessageFlag, UCode>,
     ) {
         let src = UUri::from_str(src_uri).unwrap();
         if let Some(uri) = sink_uri {
             let dst = UUri::from_str(uri).unwrap();
             assert_eq!(
-                UPTransportZenoh::get_listener_message_type(&src, Some(&dst)),
+                UPTransportZenoh::get_listener_message_type(&src, Some(&dst))
+                    .map_err(|e| e.get_code()),
                 result
             );
         } else {
             assert_eq!(
-                UPTransportZenoh::get_listener_message_type(&src, None),
+                UPTransportZenoh::get_listener_message_type(&src, None).map_err(|e| e.get_code()),
                 result
             );
         }
