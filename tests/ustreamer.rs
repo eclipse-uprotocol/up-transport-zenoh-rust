@@ -23,7 +23,8 @@ use tokio::{
     time::{sleep, Duration},
 };
 use up_rust::{
-    UListener, UMessage, UMessageBuilder, UMessageType, UPayloadFormat, UTransport, UUri,
+    LocalUriProvider, UListener, UMessage, UMessageBuilder, UMessageType, UPayloadFormat,
+    UTransport, UUri,
 };
 use up_transport_zenoh::UPTransportZenoh;
 
@@ -158,20 +159,18 @@ async fn test_ustreamer() {
 
     // Initialization
     let uclient = Arc::new(
-        test_lib::create_up_transport_zenoh("uclient")
+        test_lib::create_up_transport_zenoh("//uclient/1/1/0")
             .await
             .unwrap(),
     );
     let ustreamer = Arc::new(
-        test_lib::create_up_transport_zenoh("ustreamer")
+        test_lib::create_up_transport_zenoh("//ustreamer/2/1/0")
             .await
             .unwrap(),
     );
-    let client_auth = "uclient";
-    let streamer_auth = "ustreamer";
 
     // Setup uStreamer listener
-    let src_filter = UUri::from_str(&format!("//{client_auth}/FFFF/FF/FFFF")).unwrap();
+    let src_filter = UUri::from_str("//uclient/FFFF/FF/FFFF").unwrap();
     let sink_filter = UUri::from_str("//*/FFFF/FF/FFFF").unwrap();
     let ustreamer_listener = Arc::new(UStreamerListener::new(ustreamer.clone()));
     ustreamer
@@ -184,8 +183,8 @@ async fn test_ustreamer() {
     // Send Notification (uclient => uStreamer)
     {
         let target_data = String::from("Notification");
-        let src_uuri = test_lib::new_uuri(client_auth, 1, 1, 0x8000);
-        let sink_uuri = test_lib::new_uuri(streamer_auth, 2, 1, 0);
+        let src_uuri = uclient.get_resource_uri(0x8000);
+        let sink_uuri = ustreamer.get_source_uri();
         let umessage = UMessageBuilder::notification(src_uuri, sink_uuri)
             .build_with_payload(target_data.clone(), UPayloadFormat::UPAYLOAD_FORMAT_TEXT)
             .unwrap();
@@ -200,8 +199,8 @@ async fn test_ustreamer() {
 
     // Send Request (uclient => uStreamer)
     {
-        let src_uuri = test_lib::new_uuri(client_auth, 1, 1, 0);
-        let sink_uuri = test_lib::new_uuri(streamer_auth, 2, 1, 1);
+        let src_uuri = uclient.get_source_uri();
+        let sink_uuri = ustreamer.get_resource_uri(1);
 
         // Register Response callback
         let response_listener = Arc::new(ResponseListener::new());
@@ -238,8 +237,8 @@ async fn test_ustreamer() {
     // Send Response (uclient => uStreamer)
     // In other words, Send Request (uStreamer => uclient)
     {
-        let src_uuri = test_lib::new_uuri(streamer_auth, 1, 1, 0);
-        let sink_uuri = test_lib::new_uuri(client_auth, 2, 1, 1);
+        let src_uuri = ustreamer.get_source_uri();
+        let sink_uuri = uclient.get_resource_uri(1);
 
         // Register RPC callback
         let rpc_listener = Arc::new(RequestListener::new(uclient.clone()));

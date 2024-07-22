@@ -19,25 +19,6 @@ use up_rust::{
 };
 use up_transport_zenoh::{UPTransportZenoh, ZenohRpcClient};
 
-pub struct MyUriProvider {
-    uuri: UUri,
-}
-impl LocalUriProvider for MyUriProvider {
-    fn get_authority(&self) -> String {
-        self.uuri.authority_name.clone()
-    }
-
-    fn get_resource_uri(&self, resource_id: u16) -> UUri {
-        let mut uuri = self.uuri.clone();
-        uuri.resource_id = u32::from(resource_id);
-        uuri
-    }
-
-    fn get_source_uri(&self) -> UUri {
-        self.uuri.clone()
-    }
-}
-
 #[tokio::main]
 async fn main() {
     // initiate logging
@@ -45,14 +26,14 @@ async fn main() {
 
     println!("uProtocol RPC client example");
     let zenoh_transport = Arc::new(
-        UPTransportZenoh::new(common::get_zenoh_config(), "rpc_client")
+        UPTransportZenoh::new(common::get_zenoh_config(), "//rpc_client/1/1/0")
             .await
             .unwrap(),
     );
-    let uri_provider = Arc::new(MyUriProvider {
-        uuri: UUri::from_str("//rpc_client/1/1/0").unwrap(),
-    });
-    let rpc_client = Arc::new(ZenohRpcClient::new(zenoh_transport, uri_provider.clone()));
+    let rpc_client = Arc::new(ZenohRpcClient::new(
+        zenoh_transport.clone(),
+        zenoh_transport.clone(),
+    ));
 
     let sink_uuri = UUri::from_str("//rpc_server/1/1/1").unwrap();
 
@@ -67,7 +48,7 @@ async fn main() {
     );
     println!(
         "Sending request from {} to {}",
-        uri_provider.get_source_uri(),
+        zenoh_transport.get_source_uri(),
         sink_uuri
     );
     let result = rpc_client

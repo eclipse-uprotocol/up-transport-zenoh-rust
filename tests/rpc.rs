@@ -13,7 +13,10 @@
 pub mod test_lib;
 
 use async_trait::async_trait;
-use std::sync::{Arc, Mutex};
+use std::{
+    str::FromStr,
+    sync::{Arc, Mutex},
+};
 use test_case::test_case;
 use tokio::{
     runtime::Handle,
@@ -104,51 +107,32 @@ impl UListener for ResponseListener {
     }
 }
 
-// MyUriProvider
-pub struct MyUriProvider {
-    uuri: UUri,
-}
-impl LocalUriProvider for MyUriProvider {
-    fn get_authority(&self) -> String {
-        self.uuri.authority_name.clone()
-    }
-
-    fn get_resource_uri(&self, resource_id: u16) -> UUri {
-        let mut uuri = self.uuri.clone();
-        uuri.resource_id = u32::from(resource_id);
-        uuri
-    }
-
-    fn get_source_uri(&self) -> UUri {
-        self.uuri.clone()
-    }
-}
-
-#[test_case(&test_lib::new_uuri("requester", 1, 1, 0), &test_lib::new_uuri("responder", 2, 1, 1), &test_lib::new_uuri("*", 0xFFFF, 0xFF, 0), Some(&test_lib::new_uuri("responder", 2, 1, 1)); "Any source UUri")]
-#[test_case(&test_lib::new_uuri("requester", 1, 1, 0), &test_lib::new_uuri("responder", 2, 1, 1), &test_lib::new_uuri("requester", 1, 1, 0), Some(&test_lib::new_uuri("responder", 2, 1, 1)); "Specific source UUri")]
-#[test_case(&test_lib::new_uuri("ustreamer_requester", 1, 1, 0), &test_lib::new_uuri("ustreamer_responder", 2, 1, 1), &test_lib::new_uuri("ustreamer_requester", 0xFFFF, 0xFF, 0xFFFF), Some(&test_lib::new_uuri("*", 0xFFFF, 0xFF, 0xFFFF)); "uStreamer case for RPC")]
+#[test_case("//requester/1/1/0", "//responder/2/1/0", 0x1, "//*/FFFF/FF/0", Some("//responder/2/1/1"); "Any source UUri")]
+#[test_case("//requester/1/1/0", "//responder/2/1/0", 0x1, "//requester/1/1/0", Some("//responder/2/1/1"); "Specific source UUri")]
+#[test_case("//ustreamer_requester/1/1/0", "//ustreamer_responder/2/1/0", 0x1, "//ustreamer_requester/FFFF/FF/FFFF", Some("//*/FFFF/FF/FFFF"); "uStreamer case for RPC")]
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rpc_server_client(
-    src_uuri: &UUri,
-    sink_uuri: &UUri,
-    src_filter: &UUri,
-    sink_filter: Option<&UUri>,
+    src_uuri: &str,
+    sink_uuri: &str,
+    resource_id: u16,
+    src_filter: &str,
+    sink_filter: Option<&str>,
 ) {
     test_lib::before_test();
 
     // Initialization
-    let uptransport_client = Arc::new(
-        test_lib::create_up_transport_zenoh("requester")
-            .await
-            .unwrap(),
-    );
+    let uptransport_client = Arc::new(test_lib::create_up_transport_zenoh(src_uuri).await.unwrap());
     let uptransport_server = Arc::new(
-        test_lib::create_up_transport_zenoh("responder")
+        test_lib::create_up_transport_zenoh(sink_uuri)
             .await
             .unwrap(),
     );
     let request_data = String::from("This is the request data");
     let response_data = String::from("This is the response data");
+    let src_uuri = UUri::from_str(src_uuri).unwrap();
+    let sink_uuri = uptransport_server.get_resource_uri(resource_id);
+    let src_filter = UUri::from_str(src_filter).unwrap();
+    let sink_filter = sink_filter.map(|s| UUri::from_str(s).unwrap());
 
     // Setup RpcServer callback
     let request_listener = Arc::new(RequestListener::new(
@@ -157,7 +141,7 @@ async fn test_rpc_server_client(
         response_data.clone(),
     ));
     uptransport_server
-        .register_listener(src_filter, sink_filter, request_listener.clone())
+        .register_listener(&src_filter, sink_filter.as_ref(), request_listener.clone())
         .await
         .unwrap();
     // Need some time for queryable to run
@@ -165,12 +149,9 @@ async fn test_rpc_server_client(
 
     // Send Request with ZenohRpcClient (L2 API)
     {
-        let uri_provider = Arc::new(MyUriProvider {
-            uuri: (*src_uuri).clone(),
-        });
         let rpc_client = Arc::new(ZenohRpcClient::new(
             uptransport_client.clone(),
-            uri_provider.clone(),
+            uptransport_client.clone(),
         ));
 
         let payload = UPayload::new(
@@ -184,7 +165,7 @@ async fn test_rpc_server_client(
             Some(UPriority::UPRIORITY_CS6),
         );
         let result = rpc_client
-            .invoke_method((*sink_uuri).clone(), call_options, Some(payload))
+            .invoke_method(sink_uuri.clone(), call_options, Some(payload))
             .await
             .unwrap();
 
@@ -199,12 +180,12 @@ async fn test_rpc_server_client(
         // Register Response callback
         let response_listener = Arc::new(ResponseListener::new());
         uptransport_client
-            .register_listener(sink_uuri, Some(src_uuri), response_listener.clone())
+            .register_listener(&sink_uuri, Some(&src_uuri), response_listener.clone())
             .await
             .unwrap();
 
         // Send request
-        let umessage = UMessageBuilder::request((*sink_uuri).clone(), (*src_uuri).clone(), 1000)
+        let umessage = UMessageBuilder::request(sink_uuri.clone(), src_uuri.clone(), 1000)
             .build_with_payload(request_data.clone(), UPayloadFormat::UPAYLOAD_FORMAT_TEXT)
             .unwrap();
         uptransport_client.send(umessage).await.unwrap();
@@ -217,14 +198,14 @@ async fn test_rpc_server_client(
 
         // Cleanup
         uptransport_client
-            .unregister_listener(sink_uuri, Some(src_uuri), response_listener.clone())
+            .unregister_listener(&sink_uuri, Some(&src_uuri), response_listener.clone())
             .await
             .unwrap();
     }
 
     // Cleanup
     uptransport_server
-        .unregister_listener(src_filter, sink_filter, request_listener.clone())
+        .unregister_listener(&src_filter, sink_filter.as_ref(), request_listener.clone())
         .await
         .unwrap();
 }

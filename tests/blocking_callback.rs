@@ -14,9 +14,8 @@ pub mod test_lib;
 
 use async_trait::async_trait;
 use std::sync::{Arc, Mutex};
-use test_case::test_case;
 use tokio::time::{sleep, Duration};
-use up_rust::{UListener, UMessage, UMessageBuilder, UPayloadFormat, UTransport, UUri};
+use up_rust::{LocalUriProvider, UListener, UMessage, UMessageBuilder, UPayloadFormat, UTransport};
 
 struct DelayListener {
     recv_data: Arc<Mutex<String>>,
@@ -45,23 +44,23 @@ impl UListener for DelayListener {
 }
 
 // The test is used to check whether blocking user callback will affect receiving messages
-#[test_case(&test_lib::new_uuri("nonblock_pub", 1, 1, 0x8000); "Normal UUri")]
 #[tokio::test(flavor = "multi_thread")]
-async fn test_blocking_user_callback(pub_uuri: &UUri) {
+async fn test_blocking_user_callback() {
     test_lib::before_test();
 
     // Initialization
-    let uptransport_send = test_lib::create_up_transport_zenoh("nonblock_pub")
+    let uptransport_send = test_lib::create_up_transport_zenoh("//nonblock_pub/1/1/0")
         .await
         .unwrap();
-    let uptransport_recv = test_lib::create_up_transport_zenoh("nonblock_sub")
+    let uptransport_recv = test_lib::create_up_transport_zenoh("//nonblock_sub/2/1/0")
         .await
         .unwrap();
+    let pub_uuri = uptransport_send.get_resource_uri(0x8000);
 
     // Register the listener
     let pub_listener = Arc::new(DelayListener::new());
     uptransport_recv
-        .register_listener(pub_uuri, None, pub_listener.clone())
+        .register_listener(&pub_uuri, None, pub_listener.clone())
         .await
         .unwrap();
     // Waiting for listener to take effect
@@ -87,7 +86,7 @@ async fn test_blocking_user_callback(pub_uuri: &UUri) {
 
     // Cleanup
     uptransport_recv
-        .unregister_listener(pub_uuri, None, pub_listener)
+        .unregister_listener(&pub_uuri, None, pub_listener)
         .await
         .unwrap();
 }

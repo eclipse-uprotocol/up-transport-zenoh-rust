@@ -18,7 +18,9 @@ use std::{
     sync::{Arc, Mutex},
 };
 use tokio::time::{sleep, Duration};
-use up_rust::{UListener, UMessage, UMessageBuilder, UPayloadFormat, UTransport, UUri};
+use up_rust::{
+    LocalUriProvider, UListener, UMessage, UMessageBuilder, UPayloadFormat, UTransport, UUri,
+};
 use up_transport_zenoh::UPTransportZenoh;
 
 // ResponseListener
@@ -50,12 +52,12 @@ async fn main() {
     UPTransportZenoh::try_init_log_from_env();
 
     println!("uProtocol RPC client example");
-    let rpc_client = UPTransportZenoh::new(common::get_zenoh_config(), "rpc_client")
+    let rpc_client = UPTransportZenoh::new(common::get_zenoh_config(), "//rpc_client/1/1/0")
         .await
         .unwrap();
 
     // create uuri
-    let src_uuri = UUri::from_str("//rpc_client/1/1/0").unwrap();
+    let src_uuri = rpc_client.get_source_uri();
     let sink_uuri = UUri::from_str("//rpc_server/1/1/1").unwrap();
 
     // register response callback

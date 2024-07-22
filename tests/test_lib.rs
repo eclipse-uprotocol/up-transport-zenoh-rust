@@ -11,7 +11,7 @@
  * SPDX-License-Identifier: Apache-2.0
  ********************************************************************************/
 use std::sync::Once;
-use up_rust::{UStatus, UUri};
+use up_rust::UStatus;
 use up_transport_zenoh::{zenoh_config, UPTransportZenoh};
 
 static INIT: Once = Once::new();
@@ -22,17 +22,6 @@ pub fn before_test() {
 
 /// # Errors
 /// Will return `Err` if unable to create `UPTransportZenoh`
-pub async fn create_up_transport_zenoh(uauthority: &str) -> Result<UPTransportZenoh, UStatus> {
-    UPTransportZenoh::new(zenoh_config::Config::default(), uauthority).await
-}
-
-#[allow(clippy::must_use_candidate)]
-pub fn new_uuri(authority: &str, ue_id: u32, ue_version_major: u8, resource_id: u16) -> UUri {
-    UUri {
-        authority_name: authority.to_string(),
-        ue_id,
-        ue_version_major: ue_version_major.into(),
-        resource_id: resource_id.into(),
-        ..Default::default()
-    }
+pub async fn create_up_transport_zenoh(uri: &str) -> Result<UPTransportZenoh, UStatus> {
+    UPTransportZenoh::new(zenoh_config::Config::default(), uri).await
 }

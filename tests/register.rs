@@ -12,9 +12,8 @@
  ********************************************************************************/
 pub mod test_lib;
 
-use std::sync::Arc;
-
 use async_trait::async_trait;
+use std::{str::FromStr, sync::Arc};
 use test_case::test_case;
 use up_rust::{UListener, UMessage, UTransport, UUri};
 
@@ -24,40 +23,42 @@ impl UListener for FooListener {
     async fn on_receive(&self, _msg: UMessage) {}
 }
 
-#[test_case(&test_lib::new_uuri("src", 1, 1, 0x8000), None; "Listen to Publish")]
-#[test_case(&test_lib::new_uuri("*", 0xFFFF, 0xFF, 0xFFFF), Some(&test_lib::new_uuri("dst", 2, 1, 0)); "Listen to Notification")]
-#[test_case(&test_lib::new_uuri("src", 1, 1, 0x8000), Some(&test_lib::new_uuri("dst", 2, 1, 0)); "Listen to specific Notification")]
-#[test_case(&test_lib::new_uuri("*", 0xFFFF, 0xFF, 0), Some(&test_lib::new_uuri("dst", 2, 1, 0x0001)); "Listen to Request")]
-#[test_case(&test_lib::new_uuri("src", 1, 1, 0), Some(&test_lib::new_uuri("dst", 2, 1, 0x0001)); "Listen to specific Request")]
-#[test_case(&test_lib::new_uuri("*", 0xFFFF, 0xFF, 0xFFFF), Some(&test_lib::new_uuri("dst", 2, 1, 0)); "Listen to Response")]
-#[test_case(&test_lib::new_uuri("src", 1, 1, 0x0001), Some(&test_lib::new_uuri("dst", 2, 1, 0)); "Listen to specific Response")]
-#[test_case(&test_lib::new_uuri("*", 0xFFFF, 0xFF, 0xFFFF), None; "Listen to all Publish")]
-#[test_case(&test_lib::new_uuri("src", 0xFFFF, 0xFF, 0xFFFF), Some(&test_lib::new_uuri("*", 0xFFFF, 0xFF, 0xFFFF)); "uStreamer case")]
+#[test_case("//src/1/1/8000", None; "Listen to Publish")]
+#[test_case("//*/FFFF/FF/FFFF", Some("//dst/2/1/0"); "Listen to Notification")]
+#[test_case("//src/1/1/8000", Some("//dst/2/1/0"); "Listen to specific Notification")]
+#[test_case("//*/FFFF/FF/0", Some("//dst/2/1/1"); "Listen to Request")]
+#[test_case("//src/1/1/0", Some("//dst/2/1/1"); "Listen to specific Request")]
+#[test_case("//*/FFFF/FF/FFFF", Some("//dst/2/1/0"); "Listen to Response")]
+#[test_case("//src/1/1/1", Some("//dst/2/1/0"); "Listen to specific Response")]
+#[test_case("//*/FFFF/FF/FFFF", None; "Listen to all Publish")]
+#[test_case("//src/FFFF/FF/FFFF", Some("//*/FFFF/FF/FFFF"); "uStreamer case")]
 #[tokio::test(flavor = "multi_thread")]
-async fn test_register_and_unregister(source_filter: &UUri, sink_filter: Option<&UUri>) {
+async fn test_register_and_unregister(source_filter: &str, sink_filter: Option<&str>) {
     test_lib::before_test();
 
     // Initialization
-    let uptransport = test_lib::create_up_transport_zenoh("myvehicle")
+    let uptransport = test_lib::create_up_transport_zenoh("//dst/2/1/0")
         .await
         .unwrap();
     let foo_listener = Arc::new(FooListener);
+    let source_filter = UUri::from_str(source_filter).unwrap();
+    let sink_filter = sink_filter.map(|f| UUri::from_str(f).unwrap());
 
     // Register the listener
     uptransport
-        .register_listener(source_filter, sink_filter, foo_listener.clone())
+        .register_listener(&source_filter, sink_filter.as_ref(), foo_listener.clone())
         .await
         .unwrap();
 
-    // Able to ungister
+    // Able to unregister
     uptransport
-        .unregister_listener(source_filter, sink_filter, foo_listener.clone())
+        .unregister_listener(&source_filter, sink_filter.as_ref(), foo_listener.clone())
         .await
         .unwrap();
 
-    // Unable to ungister
+    // Unable to unregister
     let result = uptransport
-        .unregister_listener(source_filter, sink_filter, foo_listener.clone())
+        .unregister_listener(&source_filter, sink_filter.as_ref(), foo_listener.clone())
         .await;
     assert!(result.is_err());
 }
