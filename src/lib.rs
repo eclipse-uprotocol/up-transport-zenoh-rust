@@ -11,6 +11,7 @@
  * SPDX-License-Identifier: Apache-2.0
  ********************************************************************************/
 pub mod rpc;
+pub mod uri_provider;
 pub mod utransport;
 
 pub use rpc::ZenohRpcClient;
@@ -19,11 +20,14 @@ use bitmask_enum::bitmask;
 use protobuf::Message;
 use std::{
     collections::HashMap,
+    str::FromStr,
     sync::{Arc, Mutex},
 };
 use tokio::runtime::Runtime;
 use tracing::error;
-use up_rust::{ComparableListener, UAttributes, UCode, UListener, UPriority, UStatus, UUri};
+use up_rust::{
+    ComparableListener, LocalUriProvider, UAttributes, UCode, UListener, UPriority, UStatus, UUri,
+};
 // Re-export Zenoh config
 pub use zenoh::config as zenoh_config;
 use zenoh::{
@@ -68,17 +72,17 @@ pub struct UPTransportZenoh {
     query_map: QueryMap,
     // Save the callback for RPC response
     rpc_callback_map: RpcCallbackMap,
-    // My authority
-    authority_name: String,
+    // URI
+    uri: UUri,
 }
 
 impl UPTransportZenoh {
-    /// Create `UPTransportZenoh` by applying the Zenoh configuration, `UAuthority`.
+    /// Create `UPTransportZenoh` by applying the Zenoh configuration, local `UUri`.
     ///
     /// # Arguments
     ///
     /// * `config` - Zenoh configuration. You can refer to [here](https://github.com/eclipse-zenoh/zenoh/blob/0.11.0/DEFAULT_CONFIG.json5) for more configuration details.
-    /// * `authority_name` - The authority name. We need it to generate Zenoh key since authority might be omitted in `UUri`.
+    /// * `uri` - Local `UUri`. Note that the Authority of the `UUri` MUST be non-empty and the resource ID should be non-zero.
     ///
     /// # Errors
     /// Will return `Err` if unable to create `UPTransportZenoh`
@@ -89,14 +93,15 @@ impl UPTransportZenoh {
     /// #[tokio::main]
     /// # async fn main() {
     /// use up_transport_zenoh::{zenoh_config, UPTransportZenoh};
-    /// let uptransport = UPTransportZenoh::new(zenoh_config::Config::default(), "MyAuthName")
-    ///     .await
-    ///     .unwrap();
+    /// let uptransport =
+    ///     UPTransportZenoh::new(zenoh_config::Config::default(), "//MyAuthName/ABCD/1/0")
+    ///         .await
+    ///         .unwrap();
     /// # }
     /// ```
     pub async fn new(
         config: zenoh_config::Config,
-        authority_name: impl Into<String>,
+        uri: impl Into<String>,
     ) -> Result<UPTransportZenoh, UStatus> {
         // Create Zenoh session
         let Ok(session) = zenoh::open(config).res().await else {
@@ -104,35 +109,52 @@ impl UPTransportZenoh {
             error!("{msg}");
             return Err(UStatus::fail_with_code(UCode::INTERNAL, msg));
         };
-        // Return UPTransportZenoh
-        Ok(UPTransportZenoh {
-            session: Arc::new(session),
-            subscriber_map: Arc::new(Mutex::new(HashMap::new())),
-            queryable_map: Arc::new(Mutex::new(HashMap::new())),
-            query_map: Arc::new(Mutex::new(HashMap::new())),
-            rpc_callback_map: Arc::new(Mutex::new(HashMap::new())),
-            authority_name: authority_name.into(),
-        })
+        UPTransportZenoh::init_with_session(session, uri)
     }
 
-    /// Create `UPTransportZenoh` by applying the Zenoh Runtime and `UAuthority`. This can be used by uStreamer.
+    /// Create `UPTransportZenoh` by applying the Zenoh Runtime and local `UUri`. This can be used by uStreamer.
     ///
     /// # Arguments
     ///
     /// * `runtime` - Zenoh Runtime.
-    /// * `authority_name` - The authority name. We need it to generate Zenoh key since authority might be omitted in `UUri`.
+    /// * `uri` - Local `UUri`. Note that the Authority of the `UUri` MUST be non-empty and the resource ID should be non-zero.
     ///
     /// # Errors
     /// Will return `Err` if unable to create `UPTransportZenoh`
     pub async fn new_with_runtime(
         runtime: ZRuntime,
-        authority_name: String,
+        uri: impl Into<String>,
     ) -> Result<UPTransportZenoh, UStatus> {
         let Ok(session) = zenoh::init(runtime).res().await else {
             let msg = "Unable to open Zenoh session".to_string();
             error!("{msg}");
             return Err(UStatus::fail_with_code(UCode::INTERNAL, msg));
         };
+        UPTransportZenoh::init_with_session(session, uri)
+    }
+
+    fn init_with_session(
+        session: Session,
+        uri: impl Into<String>,
+    ) -> Result<UPTransportZenoh, UStatus> {
+        // From String to UUri
+        let uri = UUri::from_str(&uri.into()).map_err(|_| {
+            let msg = "Unable to transform the uri to UUri".to_string();
+            error!("{msg}");
+            UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
+        })?;
+        // Need to make sure the authority is always non-empty
+        if uri.has_empty_authority() {
+            let msg = "Empty authority is not allowed".to_string();
+            error!("{msg}");
+            return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg));
+        }
+        // Make sure the resource ID is always 0
+        if uri.resource_id != 0 {
+            let msg = "Resource ID should always be 0".to_string();
+            error!("{msg}");
+            return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg));
+        }
         // Return UPTransportZenoh
         Ok(UPTransportZenoh {
             session: Arc::new(session),
@@ -140,7 +162,7 @@ impl UPTransportZenoh {
             queryable_map: Arc::new(Mutex::new(HashMap::new())),
             query_map: Arc::new(Mutex::new(HashMap::new())),
             rpc_callback_map: Arc::new(Mutex::new(HashMap::new())),
-            authority_name,
+            uri,
         })
     }
 
@@ -162,7 +184,7 @@ impl UPTransportZenoh {
     fn uri_to_zenoh_key(&self, uri: &UUri) -> String {
         // authority_name
         let authority = if uri.authority_name.is_empty() {
-            &self.authority_name
+            &self.get_authority()
         } else {
             &uri.authority_name
         };
@@ -300,18 +322,18 @@ impl UPTransportZenoh {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
     use super::*;
+    use std::str::FromStr;
     use test_case::test_case;
     use up_rust::UUri;
 
-    // CY_TODO: Test invalid authority
-    #[test_case("vehicle1".to_string(), true; "succeeds with both valid authority and entity")]
+    #[test_case("//vehicle1/AABB/7/0", true; "succeeds with valid UUri")]
+    #[test_case("This is not UUri", false; "fails with invalid UUri")]
+    #[test_case("/AABB/7/0", false; "fails with empty UAuthority")]
+    #[test_case("//vehicle1/AABB/7/1", false; "fails with non-zero resource ID")]
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_new_up_transport_zenoh(authority: String, expected_result: bool) {
-        let up_transport_zenoh =
-            UPTransportZenoh::new(zenoh_config::Config::default(), authority).await;
+    async fn test_new_up_transport_zenoh(uri: &str, expected_result: bool) {
+        let up_transport_zenoh = UPTransportZenoh::new(zenoh_config::Config::default(), uri).await;
         assert_eq!(up_transport_zenoh.is_ok(), expected_result);
     }
 
@@ -326,7 +348,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_to_zenoh_key_string(src_uri: &str, sink_uri: Option<&str>, zenoh_key: &str) {
         let up_transport_zenoh =
-            UPTransportZenoh::new(zenoh_config::Config::default(), "192.168.1.100")
+            UPTransportZenoh::new(zenoh_config::Config::default(), "//192.168.1.100/10AB/3/0")
                 .await
                 .unwrap();
         let src = UUri::from_str(src_uri).unwrap();

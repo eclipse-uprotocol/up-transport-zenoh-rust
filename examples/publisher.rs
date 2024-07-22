@@ -12,9 +12,8 @@
  ********************************************************************************/
 mod common;
 
-use std::str::FromStr;
 use tokio::time::{sleep, Duration};
-use up_rust::{UMessageBuilder, UPayloadFormat, UTransport, UUri};
+use up_rust::{LocalUriProvider, UMessageBuilder, UPayloadFormat, UTransport};
 use up_transport_zenoh::UPTransportZenoh;
 
 #[tokio::main]
@@ -23,12 +22,12 @@ async fn main() {
     UPTransportZenoh::try_init_log_from_env();
 
     println!("uProtocol publisher example");
-    let publisher = UPTransportZenoh::new(common::get_zenoh_config(), "publisher")
+    let publisher = UPTransportZenoh::new(common::get_zenoh_config(), "//publisher/1/1/0")
         .await
         .unwrap();
 
     // create uuri
-    let uuri = UUri::from_str("//publisher/1/1/8001").unwrap();
+    let uuri = publisher.get_resource_uri(0x8001);
 
     let mut cnt: u64 = 0;
     loop {
