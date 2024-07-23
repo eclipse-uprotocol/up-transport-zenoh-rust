@@ -149,10 +149,7 @@ async fn test_rpc_server_client(
 
     // Send Request with ZenohRpcClient (L2 API)
     {
-        let rpc_client = Arc::new(ZenohRpcClient::new(
-            uptransport_client.clone(),
-            uptransport_client.clone(),
-        ));
+        let rpc_client = Arc::new(ZenohRpcClient::new(uptransport_client.clone()));
 
         let payload = UPayload::new(
             request_data.clone().into(),
