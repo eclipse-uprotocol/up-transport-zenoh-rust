@@ -30,10 +30,7 @@ async fn main() {
             .await
             .unwrap(),
     );
-    let rpc_client = Arc::new(ZenohRpcClient::new(
-        zenoh_transport.clone(),
-        zenoh_transport.clone(),
-    ));
+    let rpc_client = Arc::new(ZenohRpcClient::new(zenoh_transport.clone()));
 
     let sink_uuri = UUri::from_str("//rpc_server/1/1/1").unwrap();
 

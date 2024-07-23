@@ -23,7 +23,6 @@ use zenoh::prelude::r#async::*;
 
 pub struct ZenohRpcClient {
     transport: Arc<UPTransportZenoh>,
-    uri_provider: Arc<dyn LocalUriProvider>,
 }
 impl ZenohRpcClient {
     /// Creates a new RPC client for the Zenoh transport.
@@ -31,12 +30,8 @@ impl ZenohRpcClient {
     /// # Arguments
     ///
     /// * `transport` - The Zenoh uProtocol Transport Layer.
-    /// * `uri_provider` - The helper for creating URIs that represent local resources.
-    pub fn new(transport: Arc<UPTransportZenoh>, uri_provider: Arc<dyn LocalUriProvider>) -> Self {
-        ZenohRpcClient {
-            transport,
-            uri_provider,
-        }
+    pub fn new(transport: Arc<UPTransportZenoh>) -> Self {
+        ZenohRpcClient { transport }
     }
 }
 
@@ -57,14 +52,14 @@ impl RpcClient for ZenohRpcClient {
         }
 
         // Get source UUri
-        let source_uri = self.uri_provider.get_source_uri();
+        let source_uri = self.transport.get_source_uri();
 
         let attributes = UAttributes {
             type_: UMessageType::UMESSAGE_TYPE_REQUEST.into(),
             id: Some(call_options.message_id().unwrap_or_else(UUID::build)).into(),
             priority: call_options
                 .priority()
-                .unwrap_or(UPriority::UPRIORITY_UNSPECIFIED)
+                .unwrap_or(UPriority::UPRIORITY_CS4)
                 .into(),
             source: Some(source_uri.clone()).into(),
             sink: Some(method.clone()).into(),
