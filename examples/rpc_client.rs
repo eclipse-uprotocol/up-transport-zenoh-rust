@@ -13,11 +13,8 @@
 mod common;
 
 use async_trait::async_trait;
-use std::{
-    str::FromStr,
-    sync::{Arc, Mutex},
-};
-use tokio::time::{sleep, Duration};
+use std::{str::FromStr, sync::Arc};
+use tokio::sync::Notify;
 use up_rust::{
     LocalUriProvider, UListener, UMessage, UMessageBuilder, UPayloadFormat, UTransport, UUri,
 };
@@ -25,13 +22,11 @@ use up_transport_zenoh::UPTransportZenoh;
 
 // ResponseListener
 struct ResponseListener {
-    response: Mutex<Option<String>>,
+    notify: Arc<Notify>,
 }
 impl ResponseListener {
-    fn new() -> Self {
-        ResponseListener {
-            response: Mutex::new(None),
-        }
+    fn new(notify: Arc<Notify>) -> Self {
+        Self { notify }
     }
 }
 #[async_trait]
@@ -40,9 +35,8 @@ impl UListener for ResponseListener {
         let payload = msg.payload.unwrap();
         let value = payload.into_iter().map(|c| c as char).collect::<String>();
         let uri = msg.attributes.unwrap().source.unwrap().to_string();
-        let mut resp = self.response.lock().unwrap();
-        *resp = Some(value.clone());
         println!("Receiving response {value} from {uri}");
+        self.notify.notify_one();
     }
 }
 
@@ -61,7 +55,8 @@ async fn main() {
     let sink_uuri = UUri::from_str("//rpc_server/1/1/1").unwrap();
 
     // register response callback
-    let resp_listener = Arc::new(ResponseListener::new());
+    let notify = Arc::new(Notify::new());
+    let resp_listener = Arc::new(ResponseListener::new(notify.clone()));
     rpc_client
         .register_listener(&sink_uuri, Some(&src_uuri), resp_listener.clone())
         .await
@@ -75,7 +70,5 @@ async fn main() {
     println!("Sending request from {src_uuri} to {sink_uuri}");
     rpc_client.send(umsg).await.unwrap();
 
-    while resp_listener.response.lock().unwrap().is_none() {
-        sleep(Duration::from_millis(100)).await;
-    }
+    notify.notified().await;
 }
