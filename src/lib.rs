@@ -184,9 +184,9 @@ impl UPTransportZenoh {
     fn uri_to_zenoh_key(&self, uri: &UUri) -> String {
         // authority_name
         let authority = if uri.authority_name.is_empty() {
-            &self.get_authority()
+            self.get_authority()
         } else {
-            &uri.authority_name
+            uri.authority_name.clone()
         };
         // ue_id
         let ue_id = if uri.has_wildcard_entity_id() {
