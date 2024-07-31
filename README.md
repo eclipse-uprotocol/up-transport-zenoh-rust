@@ -24,6 +24,10 @@ The examples of up-transport-zenoh-rust can be found under examples folder.
 cargo run --example publisher
 # Subscriber
 cargo run --example subscriber
+# Notifier
+cargo run --example notifier
+# Notification Receiver
+cargo run --example notification_receiver
 # RPC Server
 cargo run --example rpc_server
 # RPC Client
