@@ -12,14 +12,14 @@
  ********************************************************************************/
 pub mod test_lib;
 
-use std::{str::FromStr, sync::Arc};
+use std::sync::Arc;
 use tokio::time::{sleep, Duration};
 use up_rust::{
     communication::{
         CallOptions, InMemoryRpcServer, RequestHandler, RpcClient, RpcServer,
         ServiceInvocationError, UPayload,
     },
-    LocalUriProvider, UPayloadFormat, UUri,
+    LocalUriProvider, UPayloadFormat,
 };
 use up_transport_zenoh::ZenohRpcClient;
 
@@ -39,7 +39,7 @@ impl ExampleHandler {
 }
 #[async_trait::async_trait]
 impl RequestHandler for ExampleHandler {
-    async fn invoke_method(
+    async fn handle_request(
         &self,
         _resource_id: u16,
         request_payload: Option<UPayload>,
@@ -81,13 +81,8 @@ async fn test_l2_rpc() {
         request_data.clone(),
         response_data.clone(),
     ));
-    // CY_TODO: Verify the what kind of resource_id we can listen to
     rpc_server
-        .register_endpoint(
-            Some(&UUri::from_str("//*/FFFF/FF/0").unwrap()),
-            METHOD_RESOURCE_ID,
-            example_handler.clone(),
-        )
+        .register_endpoint(None, METHOD_RESOURCE_ID, example_handler.clone())
         .await
         .unwrap();
     // Need some time for queryable to run
