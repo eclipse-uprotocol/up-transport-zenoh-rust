@@ -35,7 +35,7 @@ impl UListener for ResponseListener {
         let payload = msg.payload.unwrap();
         let value = payload.into_iter().map(|c| c as char).collect::<String>();
         let uri = msg.attributes.unwrap().source.unwrap().to_string();
-        println!("Receiving response {value} from {uri}");
+        println!("Receiving response '{value}' from {uri}");
         self.notify.notify_one();
     }
 }

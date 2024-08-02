@@ -50,7 +50,7 @@ impl UListener for RpcListener {
             .collect::<String>();
         let source = attributes.clone().unwrap().source.unwrap();
         let sink = attributes.clone().unwrap().sink.unwrap();
-        println!("Receiving {value} from {source} to {sink}");
+        println!("Receiving '{value}' from {source} to {sink}");
 
         // Send back result
         let umessage = UMessageBuilder::response_for_request(&attributes)
