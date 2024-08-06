@@ -296,6 +296,7 @@ impl UPTransportZenoh {
                 flag |= MessageFlag::Notification;
             }
             if (src_resource == 0 && rpc_range.contains(&dst_resource))
+                || (src_resource == 0xFFFF && rpc_range.contains(&dst_resource))
                 || (src_resource == 0xFFFF && dst_resource == 0xFFFF)
             {
                 flag |= MessageFlag::Request;
@@ -310,9 +311,15 @@ impl UPTransportZenoh {
             flag |= MessageFlag::Publish;
         }
         if flag.is_none() {
+            let src_resource = format!("{:X}", source_uuri.resource_id);
+            let dst_resource = if let Some(dst_uuri) = sink_uuri {
+                format!("{:X}", dst_uuri.resource_id)
+            } else {
+                String::from("None")
+            };
             Err(UStatus::fail_with_code(
                 UCode::INTERNAL,
-                "Wrong combination of source UUri and sink UUri",
+                format!("Wrong combination of resource ID in source UUri ({src_resource}) and sink UUri ({dst_resource}). Please check up-spec for more details."),
             ))
         } else {
             Ok(flag)
@@ -370,13 +377,13 @@ mod tests {
     #[test_case("//192.168.1.100/10AB/3/80CD", Some("//192.168.1.101/20EF/4/0"), Ok(MessageFlag::Notification); "Notification Message")]
     #[test_case("//192.168.1.100/10AB/3/0", Some("//192.168.1.101/20EF/4/B"), Ok(MessageFlag::Request); "Request Message")]
     #[test_case("//192.168.1.101/20EF/4/B", Some("//192.168.1.100/10AB/3/0"), Ok(MessageFlag::Response); "Response Message")]
-    #[test_case("//*/FFFF/FF/FFFF", Some("//192.168.1.100/10AB/3/0"), Ok(MessageFlag::Notification | MessageFlag::Response); "Listen to Notification and Response Message")]
-    #[test_case("//*/FFFF/FF/FFFF", None, Err(UCode::INTERNAL); "Impossible scenario: Unable to receive all publish messages")]
-    #[test_case("//*/FFFF/FF/FFFF", Some("//192.168.1.101/20EF/4/B"), Err(UCode::INTERNAL); "Impossible scenario 1")]
-    #[test_case("//192.168.1.100/10AB/3/0", Some("//*/FFFF/FF/FFFF"), Err(UCode::INTERNAL); "Impossible scenario 2")]
-    #[test_case("//192.168.1.101/20EF/4/B", Some("//*/FFFF/FF/FFFF"), Err(UCode::INTERNAL); "Impossible scenario 3")]
-    #[test_case("//192.168.1.100/10AB/3/80CD", Some("//*/FFFF/FF/FFFF"), Err(UCode::INTERNAL); "Impossible scenario 4")]
-    #[test_case("//*/FFFF/FF/FFFF", Some("//[::1]/FFFF/FF/FFFF"), Ok(MessageFlag::Notification | MessageFlag::Request | MessageFlag::Response); "All messages to a device")]
+    #[test_case("//*/FFFF/FF/FFFF", Some("//192.168.1.101/20EF/4/B"), Ok(MessageFlag::Request); "Listen to all Request Messages")]
+    #[test_case("//*/FFFF/FF/FFFF", Some("//192.168.1.100/10AB/3/0"), Ok(MessageFlag::Notification | MessageFlag::Response); "Listen to Notification and Response Messages")]
+    #[test_case("//*/FFFF/FF/FFFF", Some("//[::1]/FFFF/FF/FFFF"), Ok(MessageFlag::Notification | MessageFlag::Request | MessageFlag::Response); "Listen to all messages to a device")]
+    #[test_case("//*/FFFF/FF/FFFF", None, Err(UCode::INTERNAL); "Impossible scenario: Listen to all Publish Messages")]
+    #[test_case("//192.168.1.100/10AB/3/0", Some("//*/FFFF/FF/FFFF"), Err(UCode::INTERNAL); "Impossible scenario: Broadcast Request Message")]
+    #[test_case("//192.168.1.101/20EF/4/B", Some("//*/FFFF/FF/FFFF"), Err(UCode::INTERNAL); "Impossible scenario: Broadcast Response Message")]
+    #[test_case("//192.168.1.100/10AB/3/80CD", Some("//*/FFFF/FF/FFFF"), Err(UCode::INTERNAL); "Impossible scenario: Broadcast Notification Message")]
     #[tokio::test(flavor = "multi_thread")]
     async fn test_get_listener_message_type(
         src_uri: &str,

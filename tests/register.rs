@@ -24,12 +24,11 @@ impl UListener for FooListener {
 }
 
 #[test_case("//src/1/1/8000", None; "Listen to Publish")]
-#[test_case("//*/FFFF/FF/FFFF", Some("//dst/2/1/0"); "Listen to Notification")]
 #[test_case("//src/1/1/8000", Some("//dst/2/1/0"); "Listen to specific Notification")]
-#[test_case("//*/FFFF/FF/0", Some("//dst/2/1/1"); "Listen to Request")]
 #[test_case("//src/1/1/0", Some("//dst/2/1/1"); "Listen to specific Request")]
-#[test_case("//*/FFFF/FF/FFFF", Some("//dst/2/1/0"); "Listen to Response")]
 #[test_case("//src/1/1/1", Some("//dst/2/1/0"); "Listen to specific Response")]
+#[test_case("//*/FFFF/FF/FFFF", Some("//dst/2/1/1"); "Listen to all Requests")]
+#[test_case("//*/FFFF/FF/FFFF", Some("//dst/2/1/0"); "Listen to all Notification and Response Messages")]
 #[test_case("//src/FFFF/FF/FFFF", Some("//*/FFFF/FF/FFFF"); "uStreamer case")]
 #[tokio::test(flavor = "multi_thread")]
 async fn test_register_and_unregister(source_filter: &str, sink_filter: Option<&str>) {
