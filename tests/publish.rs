@@ -46,7 +46,6 @@ impl UListener for PublishNotificationListener {
 }
 
 #[test_case("//publisher/1/1/0", 0x8000, "//publisher/1/1/8000"; "Normal UUri")]
-#[test_case("//publisher/2/1/0", 0x8001, "//publisher/FFFF/FF/FFFF"; "Special UUri")]
 #[tokio::test(flavor = "multi_thread")]
 async fn test_publish_and_subscribe(src_uuri: &str, resource_id: u16, listen_uuri: &str) {
     test_lib::before_test();

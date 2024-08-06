@@ -306,7 +306,7 @@ impl UPTransportZenoh {
             {
                 flag |= MessageFlag::Response;
             }
-        } else if nonrpc_range.contains(&src_resource) || src_resource == 0xFFFF {
+        } else if nonrpc_range.contains(&src_resource) {
             flag |= MessageFlag::Publish;
         }
         if flag.is_none() {
@@ -371,6 +371,7 @@ mod tests {
     #[test_case("//192.168.1.100/10AB/3/0", Some("//192.168.1.101/20EF/4/B"), Ok(MessageFlag::Request); "Request Message")]
     #[test_case("//192.168.1.101/20EF/4/B", Some("//192.168.1.100/10AB/3/0"), Ok(MessageFlag::Response); "Response Message")]
     #[test_case("//*/FFFF/FF/FFFF", Some("//192.168.1.100/10AB/3/0"), Ok(MessageFlag::Notification | MessageFlag::Response); "Listen to Notification and Response Message")]
+    #[test_case("//*/FFFF/FF/FFFF", None, Err(UCode::INTERNAL); "Impossible scenario: Unable to receive all publish messages")]
     #[test_case("//*/FFFF/FF/FFFF", Some("//192.168.1.101/20EF/4/B"), Err(UCode::INTERNAL); "Impossible scenario 1")]
     #[test_case("//192.168.1.100/10AB/3/0", Some("//*/FFFF/FF/FFFF"), Err(UCode::INTERNAL); "Impossible scenario 2")]
     #[test_case("//192.168.1.101/20EF/4/B", Some("//*/FFFF/FF/FFFF"), Err(UCode::INTERNAL); "Impossible scenario 3")]
