@@ -10,20 +10,72 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  ********************************************************************************/
+use clap::Parser;
 use up_transport_zenoh::zenoh_config;
+
+#[derive(clap::ValueEnum, Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum WhatAmIType {
+    Peer,
+    Client,
+    Router,
+}
+
+#[derive(clap::Parser, Clone, PartialEq, Eq, Hash, Debug)]
+pub struct Args {
+    #[arg(short, long)]
+    /// A configuration file.
+    config: Option<String>,
+    #[arg(short, long)]
+    /// The Zenoh session mode [default: peer].
+    mode: Option<WhatAmIType>,
+    #[arg(short = 'e', long)]
+    /// Endpoints to connect to.
+    connect: Vec<String>,
+    #[arg(short, long)]
+    /// Endpoints to listen on.
+    listen: Vec<String>,
+    #[arg(long)]
+    /// Disable the multicast-based scouting mechanism.
+    no_multicast_scouting: bool,
+}
 
 #[allow(clippy::must_use_candidate, clippy::missing_panics_doc)]
 pub fn get_zenoh_config() -> zenoh_config::Config {
-    // Load the config from file path
-    // Config Examples: https://github.com/eclipse-zenoh/zenoh/blob/0.10.1-rc/DEFAULT_CONFIG.json5
-    // let mut zenoh_cfg = Config::from_file("./DEFAULT_CONFIG.json5").unwrap();
+    let args = Args::parse();
 
-    // Loat the default config struct
-    let mut zenoh_cfg = zenoh_config::Config::default();
+    // Load the config from file path
+    let mut zenoh_cfg = match &args.config {
+        Some(path) => zenoh_config::Config::from_file(path).unwrap(),
+        None => zenoh_config::Config::default(),
+    };
+
     // You can choose from Router, Peer, Client
-    zenoh_cfg
-        .set_mode(Some(zenoh_config::WhatAmI::Peer))
-        .unwrap();
+    match args.mode {
+        Some(WhatAmIType::Peer) => zenoh_cfg.set_mode(Some(zenoh::config::WhatAmI::Peer)),
+        Some(WhatAmIType::Client) => zenoh_cfg.set_mode(Some(zenoh::config::WhatAmI::Client)),
+        Some(WhatAmIType::Router) => zenoh_cfg.set_mode(Some(zenoh::config::WhatAmI::Router)),
+        None => Ok(None),
+    }
+    .unwrap();
+
+    // Set connection address
+    if !args.connect.is_empty() {
+        zenoh_cfg.connect.endpoints = args.connect.iter().map(|v| v.parse().unwrap()).collect();
+    }
+
+    // Set listener address
+    if !args.listen.is_empty() {
+        zenoh_cfg.listen.endpoints = args.listen.iter().map(|v| v.parse().unwrap()).collect();
+    }
+
+    // Set multicast configuration
+    if args.no_multicast_scouting {
+        zenoh_cfg
+            .scouting
+            .multicast
+            .set_enabled(Some(false))
+            .unwrap();
+    }
 
     zenoh_cfg
 }

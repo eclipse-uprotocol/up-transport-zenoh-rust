@@ -18,21 +18,27 @@ cargo tarpaulin -o lcov -o html --output-dir target/tarpaulin
 ## Examples
 
 The examples of up-transport-zenoh-rust can be found under examples folder.
+Assume you're using debug build.
 
 ```shell
 # Publisher
-cargo run --example publisher
+./target/debug/examples/publisher
 # Subscriber
-cargo run --example subscriber
+./target/debug/examples/subscriber
 # Notifier
-cargo run --example notifier
+./target/debug/examples/notifier
 # Notification Receiver
-cargo run --example notification_receiver
+./target/debug/examples/notification_receiver
 # RPC Server
-cargo run --example rpc_server
+./target/debug/examples/rpc_server
 # RPC Client
-cargo run --example rpc_client
+./target/debug/examples/rpc_client
+# L2 RPC Client
+./target/debug/examples/l2_rpc_client
 ```
+
+For the advanced Zenoh configuration, you can either use `-h` to see more details or pass the configuration file with `-c`.
+The configuration file example is under the folder `config`.
 
 ## Note
 
