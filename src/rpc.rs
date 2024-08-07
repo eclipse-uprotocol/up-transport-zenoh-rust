@@ -84,7 +84,7 @@ impl RpcClient for ZenohRpcClient {
         // Send the query
         let mut getbuilder = self.transport.session.get(&zenoh_key);
         getbuilder = match payload_data {
-            Some(data) => getbuilder.payload(data.as_ref()),
+            Some(data) => getbuilder.payload(data),
             None => getbuilder,
         }
         .attachment(attachment)
@@ -125,10 +125,7 @@ impl RpcClient for ZenohRpcClient {
                         ..Default::default()
                     }));
                 };
-                Ok(Some(UPayload::new(
-                    sample.payload().into::<Vec<u8>>().into(),
-                    payload_format,
-                )))
+                Ok(Some(UPayload::new(sample.payload().into(), payload_format)))
             }
             Err(e) => {
                 let msg = format!("Error while parsing Zenoh reply: {e:?}");
