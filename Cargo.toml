@@ -19,6 +19,7 @@ include = [
     "/examples/*",
     "/Cargo.toml",
     "/README.md",
+    "/config/*",
 ]
 keywords = ["uProtocol", "SDK", "communication", "Zenoh"]
 license = "Apache-2.0"

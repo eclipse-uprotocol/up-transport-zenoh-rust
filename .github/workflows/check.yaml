@@ -11,11 +11,12 @@
 #  SPDX-License-Identifier: Apache-2.0
 # *******************************************************************************/
 
-name: Pull Request
+name: Check
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
   pull_request:
     paths:
       - "src/**"
@@ -24,6 +25,13 @@ on:
       - "Cargo.*"
       - ".github/**"
   workflow_call:
+    outputs:
+      test_results_url:
+        description: "URL of the test results artifact"
+        value: ${{ jobs.nextest.outputs.test_results_url }}
+      doctest_results_url:
+        description: "URL of the doctest results artifact"
+        value: ${{ jobs.doctest.outputs.test_results_url }}
   workflow_dispatch:
 
 concurrency:
@@ -32,6 +40,7 @@ concurrency:
 
 env:
   RUST_TOOLCHAIN: ${{ vars.RUST_TOOLCHAIN || 'stable' }}
+  RUSTFLAGS: -Dwarnings
   CARGO_TERM_COLOR: always
 
 jobs:
@@ -54,7 +63,7 @@ jobs:
         with: 
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: rustfmt
-      - name: cargo fmt
+      - name: Run cargo fmt
         run: |
           cargo fmt --all -- --check
 
@@ -71,7 +80,47 @@ jobs:
           cargo clippy --version
           cargo clippy --all-targets -- -W warnings -D warnings
 
-  run-doctest:
+  build-docs:
+    runs-on: ubuntu-latest
+    env:
+      RUSTDOCFLAGS: -Dwarnings
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with: 
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Create Documentation
+        run: |
+          cargo doc --no-deps --all-features
+
+  nextest:
+    outputs:
+      test_results_url: ${{ steps.test_results.outputs.artifact-url }}
+    runs-on: ubuntu-latest
+    env: 
+      NEXTEST_EXPERIMENTAL_LIBTEST_JSON: 1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with: 
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@v2
+      # Using nextest because it's faster than built-in test
+      - uses: taiki-e/install-action@nextest
+      - name: Run cargo nextest
+        run: |
+          cargo nextest run --message-format libtest-json-plus > testresults.json
+      - name: Upload all-features test results artifact
+        id: test_results
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: testresults.json
+
+  doctest:
+    # Run doctests separately, as nextest doesn't yet (https://github.com/nextest-rs/nextest/issues/16)
+    outputs:
+      test_results_url: ${{ steps.doctest_results.outputs.artifact-url }}
     runs-on: ubuntu-latest
     env:
       RUSTDOCFLAGS: -Dwarnings
@@ -88,19 +137,3 @@ jobs:
         with:
           name: doctest-results
           path: doctestresults.json
-
-  build-docs:
-    runs-on: ubuntu-latest
-    env:
-      RUSTDOCFLAGS: -Dwarnings
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
-        with: 
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-      - name: Create Documentation
-        run: |
-          cargo doc --no-deps
-
-  nextest:
-    uses: ./.github/workflows/nextest.yaml
