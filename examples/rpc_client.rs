@@ -13,12 +13,14 @@
 mod common;
 
 use async_trait::async_trait;
-use std::{str::FromStr, sync::Arc};
+use std::{str::FromStr, sync::Arc, time::Duration};
 use tokio::sync::Notify;
 use up_rust::{
     LocalUriProvider, UListener, UMessage, UMessageBuilder, UPayloadFormat, UTransport, UUri,
 };
 use up_transport_zenoh::UPTransportZenoh;
+
+const DEFAULT_TIMEOUT: u32 = 1000;
 
 // ResponseListener
 struct ResponseListener {
@@ -64,11 +66,19 @@ async fn main() {
 
     // create uPayload and send request
     let data = String::from("GetCurrentTime");
-    let umsg = UMessageBuilder::request(sink_uuri.clone(), src_uuri.clone(), 1000)
+    let umsg = UMessageBuilder::request(sink_uuri.clone(), src_uuri.clone(), DEFAULT_TIMEOUT)
         .build_with_payload(data, UPayloadFormat::UPAYLOAD_FORMAT_TEXT)
         .unwrap();
     println!("Sending request from {src_uuri} to {sink_uuri}");
     rpc_client.send(umsg).await.unwrap();
 
-    notify.notified().await;
+    match tokio::time::timeout(
+        Duration::from_millis(u64::from(DEFAULT_TIMEOUT)),
+        notify.notified(),
+    )
+    .await
+    {
+        Ok(()) => {}
+        Err(_) => println!("Failed to receive the reply"),
+    };
 }

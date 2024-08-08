@@ -50,11 +50,17 @@ async fn main() {
     );
     let result = rpc_client
         .invoke_method(sink_uuri, call_options, Some(payload))
-        .await
-        .unwrap();
+        .await;
 
     // process the result
-    let payload = result.unwrap().payload();
-    let value = payload.into_iter().map(|c| c as char).collect::<String>();
-    println!("Receive {value}");
+    match result {
+        Ok(result) => {
+            let payload = result.unwrap().payload();
+            let value = payload.into_iter().map(|c| c as char).collect::<String>();
+            println!("Receive {value}");
+        }
+        Err(_) => {
+            println!("Failed to receive the reply");
+        }
+    }
 }
