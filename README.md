@@ -2,6 +2,8 @@
 
 uProtocol transport implementation for Zenoh in Rust
 
+The implementation follows the spec defined in [up-l1/zenoh](https://github.com/eclipse-uprotocol/up-spec/blob/main/up-l1/zenoh.adoc).
+
 ## Build
 
 ```shell
@@ -40,6 +42,17 @@ Assume you're using debug build.
 For the advanced Zenoh configuration, you can either use `-h` to see more details or pass the configuration file with `-c`.
 The configuration file example is under the folder `config`.
 
-## Note
+## Troubleshooting
 
-The implementation follows the spec defined in [up-l1/zenoh](https://github.com/eclipse-uprotocol/up-spec/blob/main/up-l1/zenoh.adoc).
+1. Examples fail to communicate with each other.
+  
+   Check the multicast functionality of your network interface.
+   You can use the unicast connection directly.
+   For example:
+
+   ```shell
+   # server
+   ./target/debug/examples/rpc_server -l tcp/<IP>:<port>
+   # client
+   ./target/debug/examples/rpc_client -e tcp/<IP>:<port>
+   ```
