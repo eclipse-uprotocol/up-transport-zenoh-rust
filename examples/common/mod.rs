@@ -60,12 +60,20 @@ pub fn get_zenoh_config() -> zenoh_config::Config {
 
     // Set connection address
     if !args.connect.is_empty() {
-        zenoh_cfg.connect.endpoints = args.connect.iter().map(|v| v.parse().unwrap()).collect();
+        zenoh_cfg
+            .connect
+            .endpoints
+            .set(args.connect.iter().map(|v| v.parse().unwrap()).collect())
+            .unwrap();
     }
 
     // Set listener address
     if !args.listen.is_empty() {
-        zenoh_cfg.listen.endpoints = args.listen.iter().map(|v| v.parse().unwrap()).collect();
+        zenoh_cfg
+            .listen
+            .endpoints
+            .set(args.listen.iter().map(|v| v.parse().unwrap()).collect())
+            .unwrap();
     }
 
     // Set multicast configuration

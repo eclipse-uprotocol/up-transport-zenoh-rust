@@ -31,11 +31,13 @@ use up_rust::{
 // Re-export Zenoh config
 pub use zenoh::config as zenoh_config;
 use zenoh::{
-    prelude::r#async::*,
-    queryable::{Query, Queryable},
-    runtime::Runtime as ZRuntime,
-    sample::{Attachment, AttachmentBuilder},
-    subscriber::Subscriber,
+    bytes::ZBytes,
+    internal::runtime::Runtime as ZRuntime,
+    key_expr::OwnedKeyExpr,
+    pubsub::Subscriber,
+    qos::Priority,
+    query::{Query, Queryable},
+    Session,
 };
 
 const UATTRIBUTE_VERSION: u8 = 1;
@@ -104,7 +106,7 @@ impl UPTransportZenoh {
         uri: impl Into<String>,
     ) -> Result<UPTransportZenoh, UStatus> {
         // Create Zenoh session
-        let Ok(session) = zenoh::open(config).res().await else {
+        let Ok(session) = zenoh::open(config).await else {
             let msg = "Unable to open Zenoh session".to_string();
             error!("{msg}");
             return Err(UStatus::fail_with_code(UCode::INTERNAL, msg));
@@ -125,7 +127,7 @@ impl UPTransportZenoh {
         runtime: ZRuntime,
         uri: impl Into<String>,
     ) -> Result<UPTransportZenoh, UStatus> {
-        let Ok(session) = zenoh::init(runtime).res().await else {
+        let Ok(session) = zenoh::session::init(runtime).await else {
             let msg = "Unable to open Zenoh session".to_string();
             error!("{msg}");
             return Err(UStatus::fail_with_code(UCode::INTERNAL, msg));
@@ -237,21 +239,22 @@ impl UPTransportZenoh {
         }
     }
 
-    fn uattributes_to_attachment(uattributes: &UAttributes) -> anyhow::Result<AttachmentBuilder> {
-        let mut attachment = AttachmentBuilder::new();
-        attachment.insert("", &UATTRIBUTE_VERSION.to_le_bytes());
-        attachment.insert("", &uattributes.write_to_bytes()?);
-        Ok(attachment)
+    fn uattributes_to_attachment(uattributes: &UAttributes) -> anyhow::Result<ZBytes> {
+        let attachment = [
+            UATTRIBUTE_VERSION.to_le_bytes().to_vec(),
+            uattributes.write_to_bytes()?,
+        ];
+        Ok(attachment.iter().collect::<ZBytes>())
     }
 
-    fn attachment_to_uattributes(attachment: &Attachment) -> anyhow::Result<UAttributes> {
-        let mut attachment_iter = attachment.iter();
-        if let Some((_, value)) = attachment_iter.next() {
-            let version = *value.as_slice().first().ok_or_else(|| {
-                let msg = format!("UAttributes version is empty (should be {UATTRIBUTE_VERSION})");
-                error!("{msg}");
-                UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
-            })?;
+    fn attachment_to_uattributes(attachment: &ZBytes) -> anyhow::Result<UAttributes> {
+        let mut attachment_iter = attachment.iter::<Vec<u8>>();
+        // Check the version
+        if let Some(version) = attachment_iter
+            .next()
+            .and_then(Result::ok)
+            .and_then(|v| v.first().copied())
+        {
             if version != UATTRIBUTE_VERSION {
                 let msg =
                     format!("UAttributes version is {version} (should be {UATTRIBUTE_VERSION})");
@@ -263,8 +266,9 @@ impl UPTransportZenoh {
             error!("{msg}");
             return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg).into());
         }
-        let uattributes = if let Some((_, value)) = attachment_iter.next() {
-            UAttributes::parse_from_bytes(value.as_slice())?
+        // Get the attributes
+        let uattributes = if let Some(value) = attachment_iter.next().and_then(Result::ok) {
+            UAttributes::parse_from_bytes(&value)?
         } else {
             let msg = "Unable to get the UAttributes".to_string();
             error!("{msg}");

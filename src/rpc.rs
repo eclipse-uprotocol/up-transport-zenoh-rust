@@ -19,7 +19,7 @@ use up_rust::{
     LocalUriProvider, UAttributes, UCode, UMessageType, UPayloadFormat, UPriority, UStatus, UUri,
     UUID,
 };
-use zenoh::prelude::r#async::*;
+use zenoh::{query::QueryTarget, sample::SampleBuilderTrait};
 
 pub struct ZenohRpcClient {
     transport: Arc<UPTransportZenoh>,
@@ -84,13 +84,13 @@ impl RpcClient for ZenohRpcClient {
         // Send the query
         let mut getbuilder = self.transport.session.get(&zenoh_key);
         getbuilder = match payload_data {
-            Some(data) => getbuilder.with_value(data.as_ref()),
+            Some(data) => getbuilder.payload(data),
             None => getbuilder,
         }
-        .with_attachment(attachment.build())
+        .attachment(attachment)
         .target(QueryTarget::BestMatching)
         .timeout(Duration::from_millis(u64::from(call_options.ttl())));
-        let Ok(replies) = getbuilder.res().await else {
+        let Ok(replies) = getbuilder.await else {
             let msg = "Error while sending Zenoh query".to_string();
             error!("{msg}");
             return Err(ServiceInvocationError::RpcError(UStatus {
@@ -110,16 +110,22 @@ impl RpcClient for ZenohRpcClient {
                 ..Default::default()
             }));
         };
-        match reply.sample {
+        match reply.result() {
             Ok(sample) => {
-                let payload_format = sample
+                let Some(payload_format) = sample
                     .attachment()
-                    .and_then(|a| UPTransportZenoh::attachment_to_uattributes(a).ok())
-                    .map(|attr| attr.payload_format.enum_value_or_default());
-                Ok(Some(UPayload::new(
-                    sample.payload.contiguous().to_vec().into(),
-                    payload_format.unwrap_or_default(),
-                )))
+                    .and_then(|attach| UPTransportZenoh::attachment_to_uattributes(attach).ok())
+                    .map(|attr| attr.payload_format.enum_value_or_default())
+                else {
+                    let msg = "Unable to get the UPayloadFormat from the attachment".to_string();
+                    error!("{msg}");
+                    return Err(ServiceInvocationError::RpcError(UStatus {
+                        code: UCode::INTERNAL.into(),
+                        message: Some(msg),
+                        ..Default::default()
+                    }));
+                };
+                Ok(Some(UPayload::new(sample.payload().into(), payload_format)))
             }
             Err(e) => {
                 let msg = format!("Error while parsing Zenoh reply: {e:?}");
