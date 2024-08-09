@@ -18,7 +18,7 @@ cargo tarpaulin -o lcov -o html --output-dir target/tarpaulin
 ## Examples
 
 The examples of up-transport-zenoh-rust can be found under examples folder.
-Assume you're using debug build.
+Assume you're using debug build.[^1]
 
 ```shell
 # Publisher
@@ -43,3 +43,6 @@ The configuration file example is under the folder `config`.
 ## Note
 
 The implementation follows the spec defined in [up-l1/zenoh](https://github.com/eclipse-uprotocol/up-spec/blob/main/up-l1/zenoh.adoc).
+
+[^1]: Some PC configurations cannot connect locally. Add multicast to lo interface using
+  ` $ sudo ip link set dev lo multicast on `
