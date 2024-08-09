@@ -27,7 +27,7 @@ name = "up-transport-zenoh"
 readme = "README.md"
 repository = "https://github.com/eclipse-uprotocol/up-transport-zenoh-rust"
 rust-version = "1.74.1"
-version = "0.1.0"
+version = "0.1.1"
 
 [lints.clippy]
 all = "deny"
