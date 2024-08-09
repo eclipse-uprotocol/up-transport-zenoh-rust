@@ -19,6 +19,7 @@ on:
 
 env:
   RUST_TOOLCHAIN: ${{ vars.RUST_TOOLCHAIN || 'stable' }}
+  RUSTFLAGS: -Dwarnings
   CARGO_TERM_COLOR: always
 
 jobs:
