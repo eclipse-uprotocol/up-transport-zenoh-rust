@@ -60,8 +60,8 @@ enum MessageFlag {
     Response,
 }
 
-type SubscriberMap = Arc<Mutex<HashMap<(String, ComparableListener), Subscriber<'static, ()>>>>;
-type QueryableMap = Arc<Mutex<HashMap<(String, ComparableListener), Queryable<'static, ()>>>>;
+type SubscriberMap = Arc<Mutex<HashMap<(String, ComparableListener), Subscriber<()>>>>;
+type QueryableMap = Arc<Mutex<HashMap<(String, ComparableListener), Queryable<()>>>>;
 type QueryMap = Arc<Mutex<HashMap<String, Query>>>;
 type RpcCallbackMap = Arc<Mutex<HashMap<OwnedKeyExpr, Arc<dyn UListener>>>>;
 pub struct UPTransportZenoh {

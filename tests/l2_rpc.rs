@@ -50,7 +50,7 @@ impl RequestHandler for ExampleHandler {
         assert_eq!(data, self.request_data);
         // return
         let payload = UPayload::new(
-            self.response_data.clone().into(),
+            self.response_data.clone(),
             UPayloadFormat::UPAYLOAD_FORMAT_TEXT,
         );
         Ok(Some(payload))
@@ -91,7 +91,7 @@ async fn test_l2_rpc() {
     // Create L2 RPC client
     let rpc_client = Arc::new(ZenohRpcClient::new(uptransport_client.clone()));
 
-    let payload = UPayload::new(request_data.into(), UPayloadFormat::UPAYLOAD_FORMAT_TEXT);
+    let payload = UPayload::new(request_data, UPayloadFormat::UPAYLOAD_FORMAT_TEXT);
     let call_options = CallOptions::for_rpc_request(5_000, None, None, None);
     let result = rpc_client
         .invoke_method(

@@ -19,7 +19,7 @@ use up_rust::{
     LocalUriProvider, UAttributes, UCode, UMessageType, UPayloadFormat, UPriority, UStatus, UUri,
     UUID,
 };
-use zenoh::{query::QueryTarget, sample::SampleBuilderTrait};
+use zenoh::query::QueryTarget;
 
 pub struct ZenohRpcClient {
     transport: Arc<UPTransportZenoh>,
@@ -125,7 +125,10 @@ impl RpcClient for ZenohRpcClient {
                         ..Default::default()
                     }));
                 };
-                Ok(Some(UPayload::new(sample.payload().into(), payload_format)))
+                Ok(Some(UPayload::new(
+                    sample.payload().into::<Vec<u8>>(),
+                    payload_format,
+                )))
             }
             Err(e) => {
                 let msg = format!("Error while parsing Zenoh reply: {e:?}");

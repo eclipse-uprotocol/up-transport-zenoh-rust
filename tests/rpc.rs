@@ -151,10 +151,7 @@ async fn test_rpc_server_client(
     {
         let rpc_client = Arc::new(ZenohRpcClient::new(uptransport_client.clone()));
 
-        let payload = UPayload::new(
-            request_data.clone().into(),
-            UPayloadFormat::UPAYLOAD_FORMAT_TEXT,
-        );
+        let payload = UPayload::new(request_data.clone(), UPayloadFormat::UPAYLOAD_FORMAT_TEXT);
         let call_options = CallOptions::for_rpc_request(
             5_000,
             Some(UUID::build()),
@@ -183,7 +180,7 @@ async fn test_rpc_server_client(
 
         // Send request
         let umessage = UMessageBuilder::request(sink_uuri.clone(), src_uuri.clone(), 1000)
-            .build_with_payload(request_data.clone(), UPayloadFormat::UPAYLOAD_FORMAT_TEXT)
+            .build_with_payload(request_data, UPayloadFormat::UPAYLOAD_FORMAT_TEXT)
             .unwrap();
         uptransport_client.send(umessage).await.unwrap();
 
