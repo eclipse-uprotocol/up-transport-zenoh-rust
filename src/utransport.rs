@@ -29,7 +29,6 @@ use up_rust::{
 };
 use zenoh::{
     key_expr::keyexpr,
-    prelude::*,
     query::{Query, QueryTarget, Reply},
     sample::Sample,
 };
