@@ -20,7 +20,7 @@ use bitmask_enum::bitmask;
 use protobuf::Message;
 use std::{
     collections::HashMap,
-    str::FromStr,
+    fmt::Display,
     sync::{Arc, Mutex},
 };
 use tokio::runtime::Runtime;
@@ -75,7 +75,7 @@ pub struct UPTransportZenoh {
     // Save the callback for RPC response
     rpc_callback_map: RpcCallbackMap,
     // URI
-    uri: UUri,
+    local_uri: UUri,
 }
 
 impl UPTransportZenoh {
@@ -101,10 +101,11 @@ impl UPTransportZenoh {
     ///         .unwrap();
     /// # }
     /// ```
-    pub async fn new(
-        config: zenoh_config::Config,
-        uri: impl Into<String>,
-    ) -> Result<UPTransportZenoh, UStatus> {
+    pub async fn new<U>(config: zenoh_config::Config, uri: U) -> Result<UPTransportZenoh, UStatus>
+    where
+        U: TryInto<UUri>,
+        U::Error: Display,
+    {
         // Create Zenoh session
         let Ok(session) = zenoh::open(config).await else {
             let msg = "Unable to open Zenoh session".to_string();
@@ -123,10 +124,11 @@ impl UPTransportZenoh {
     ///
     /// # Errors
     /// Will return `Err` if unable to create `UPTransportZenoh`
-    pub async fn new_with_runtime(
-        runtime: ZRuntime,
-        uri: impl Into<String>,
-    ) -> Result<UPTransportZenoh, UStatus> {
+    pub async fn new_with_runtime<U>(runtime: ZRuntime, uri: U) -> Result<UPTransportZenoh, UStatus>
+    where
+        U: TryInto<UUri>,
+        U::Error: Display,
+    {
         let Ok(session) = zenoh::session::init(runtime).await else {
             let msg = "Unable to open Zenoh session".to_string();
             error!("{msg}");
@@ -135,24 +137,25 @@ impl UPTransportZenoh {
         UPTransportZenoh::init_with_session(session, uri)
     }
 
-    fn init_with_session(
-        session: Session,
-        uri: impl Into<String>,
-    ) -> Result<UPTransportZenoh, UStatus> {
+    fn init_with_session<U>(session: Session, uri: U) -> Result<UPTransportZenoh, UStatus>
+    where
+        U: TryInto<UUri>,
+        U::Error: Display,
+    {
         // From String to UUri
-        let uri = UUri::from_str(&uri.into()).map_err(|_| {
-            let msg = "Unable to transform the uri to UUri".to_string();
+        let local_uri: UUri = uri.try_into().map_err(|e| {
+            let msg = e.to_string();
             error!("{msg}");
             UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
         })?;
         // Need to make sure the authority is always non-empty
-        if uri.has_empty_authority() {
+        if local_uri.has_empty_authority() {
             let msg = "Empty authority is not allowed".to_string();
             error!("{msg}");
             return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg));
         }
         // Make sure the resource ID is always 0
-        if uri.resource_id != 0 {
+        if local_uri.resource_id != 0 {
             let msg = "Resource ID should always be 0".to_string();
             error!("{msg}");
             return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg));
@@ -164,7 +167,7 @@ impl UPTransportZenoh {
             queryable_map: Arc::new(Mutex::new(HashMap::new())),
             query_map: Arc::new(Mutex::new(HashMap::new())),
             rpc_callback_map: Arc::new(Mutex::new(HashMap::new())),
-            uri,
+            local_uri,
         })
     }
 
@@ -338,12 +341,17 @@ mod tests {
     use test_case::test_case;
     use up_rust::UUri;
 
-    #[test_case("//vehicle1/AABB/7/0", true; "succeeds with valid UUri")]
-    #[test_case("This is not UUri", false; "fails with invalid UUri")]
-    #[test_case("/AABB/7/0", false; "fails with empty UAuthority")]
-    #[test_case("//vehicle1/AABB/7/1", false; "fails with non-zero resource ID")]
+    #[test_case("//vehicle1/AABB/7/0", true; "succeeds for valid URI")]
+    #[test_case(UUri::try_from_parts("vehicle1", 0xAABB, 0x07, 0x00).unwrap(), true; "succeeds for valid UUri")]
+    #[test_case("This is not UUri", false; "fails for invalid URI")]
+    #[test_case("/AABB/7/0", false; "fails for empty UAuthority")]
+    #[test_case("//vehicle1/AABB/7/1", false; "fails for non-zero resource ID")]
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_new_up_transport_zenoh(uri: &str, expected_result: bool) {
+    async fn test_new_up_transport_zenoh<U>(uri: U, expected_result: bool)
+    where
+        U: TryInto<UUri>,
+        U::Error: Display,
+    {
         let up_transport_zenoh = UPTransportZenoh::new(zenoh_config::Config::default(), uri).await;
         assert_eq!(up_transport_zenoh.is_ok(), expected_result);
     }

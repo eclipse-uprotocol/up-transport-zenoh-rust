@@ -16,7 +16,7 @@ use up_rust::{LocalUriProvider, UUri};
 
 impl LocalUriProvider for UPTransportZenoh {
     fn get_authority(&self) -> String {
-        self.uri.authority_name.clone()
+        self.local_uri.authority_name.clone()
     }
 
     fn get_resource_uri(&self, resource_id: u16) -> UUri {
@@ -26,7 +26,7 @@ impl LocalUriProvider for UPTransportZenoh {
     }
 
     fn get_source_uri(&self) -> UUri {
-        self.uri.clone()
+        self.local_uri.clone()
     }
 }
 
