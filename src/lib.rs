@@ -20,6 +20,7 @@ use bitmask_enum::bitmask;
 use protobuf::Message;
 use std::{
     collections::HashMap,
+    fmt::Display,
     sync::{Arc, Mutex},
 };
 use tokio::runtime::Runtime;
@@ -100,10 +101,11 @@ impl UPTransportZenoh {
     ///         .unwrap();
     /// # }
     /// ```
-    pub async fn new(
-        config: zenoh_config::Config,
-        uri: impl TryInto<UUri>,
-    ) -> Result<UPTransportZenoh, UStatus> {
+    pub async fn new<U>(config: zenoh_config::Config, uri: U) -> Result<UPTransportZenoh, UStatus>
+    where
+        U: TryInto<UUri>,
+        U::Error: Display,
+    {
         // Create Zenoh session
         let Ok(session) = zenoh::open(config).await else {
             let msg = "Unable to open Zenoh session".to_string();
@@ -122,10 +124,11 @@ impl UPTransportZenoh {
     ///
     /// # Errors
     /// Will return `Err` if unable to create `UPTransportZenoh`
-    pub async fn new_with_runtime(
-        runtime: ZRuntime,
-        uri: impl TryInto<UUri>,
-    ) -> Result<UPTransportZenoh, UStatus> {
+    pub async fn new_with_runtime<U>(runtime: ZRuntime, uri: U) -> Result<UPTransportZenoh, UStatus>
+    where
+        U: TryInto<UUri>,
+        U::Error: Display,
+    {
         let Ok(session) = zenoh::session::init(runtime).await else {
             let msg = "Unable to open Zenoh session".to_string();
             error!("{msg}");
@@ -134,13 +137,14 @@ impl UPTransportZenoh {
         UPTransportZenoh::init_with_session(session, uri)
     }
 
-    fn init_with_session(
-        session: Session,
-        uri: impl TryInto<UUri>,
-    ) -> Result<UPTransportZenoh, UStatus> {
+    fn init_with_session<U>(session: Session, uri: U) -> Result<UPTransportZenoh, UStatus>
+    where
+        U: TryInto<UUri>,
+        U::Error: Display,
+    {
         // From String to UUri
-        let local_uri: UUri = uri.try_into().map_err(|_| {
-            let msg = "invalid local UUri".to_string();
+        let local_uri: UUri = uri.try_into().map_err(|e| {
+            let msg = e.to_string();
             error!("{msg}");
             UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
         })?;
@@ -343,7 +347,11 @@ mod tests {
     #[test_case("/AABB/7/0", false; "fails for empty UAuthority")]
     #[test_case("//vehicle1/AABB/7/1", false; "fails for non-zero resource ID")]
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_new_up_transport_zenoh(uri: impl TryInto<UUri>, expected_result: bool) {
+    async fn test_new_up_transport_zenoh<U>(uri: U, expected_result: bool)
+    where
+        U: TryInto<UUri>,
+        U::Error: Display,
+    {
         let up_transport_zenoh = UPTransportZenoh::new(zenoh_config::Config::default(), uri).await;
         assert_eq!(up_transport_zenoh.is_ok(), expected_result);
     }
