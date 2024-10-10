@@ -231,16 +231,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bitmask-enum"
-version = "2.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "afb15541e888071f64592c0b4364fdff21b7cb0a247f984296699351963a8721"
-dependencies = [
- "quote",
- "syn 2.0.72",
-]
-
-[[package]]
 name = "block-buffer"
 version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2637,7 +2627,6 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "bitmask-enum",
  "bytes",
  "chrono",
  "clap",

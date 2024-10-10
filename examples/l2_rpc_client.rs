@@ -14,10 +14,10 @@ mod common;
 
 use std::{str::FromStr, sync::Arc};
 use up_rust::{
-    communication::{CallOptions, RpcClient, UPayload},
+    communication::{CallOptions, InMemoryRpcClient, RpcClient, UPayload},
     LocalUriProvider, UPayloadFormat, UPriority, UUri, UUID,
 };
-use up_transport_zenoh::{UPTransportZenoh, ZenohRpcClient};
+use up_transport_zenoh::UPTransportZenoh;
 
 #[tokio::main]
 async fn main() {
@@ -30,7 +30,10 @@ async fn main() {
             .await
             .unwrap(),
     );
-    let rpc_client = Arc::new(ZenohRpcClient::new(zenoh_transport.clone()));
+    let rpc_client = InMemoryRpcClient::new(zenoh_transport.clone(), zenoh_transport.clone())
+        .await
+        .map(Arc::new)
+        .expect("failed to create RpcClient for Zenoh transport");
 
     let sink_uuri = UUri::from_str("//rpc_server/1/1/1").unwrap();
 

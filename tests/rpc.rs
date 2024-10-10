@@ -24,11 +24,11 @@ use tokio::{
     time::{sleep, Duration},
 };
 use up_rust::{
-    communication::{CallOptions, RpcClient, UPayload},
+    communication::{CallOptions, InMemoryRpcClient, RpcClient, UPayload},
     LocalUriProvider, UListener, UMessage, UMessageBuilder, UPayloadFormat, UPriority, UTransport,
     UUri, UUID,
 };
-use up_transport_zenoh::{UPTransportZenoh, ZenohRpcClient};
+use up_transport_zenoh::UPTransportZenoh;
 
 // RequestListener
 struct RequestListener {
@@ -144,12 +144,16 @@ async fn test_rpc_server_client(
         .register_listener(&src_filter, sink_filter.as_ref(), request_listener.clone())
         .await
         .unwrap();
-    // Need some time for queryable to run
+    // Need some time for listener to be registered and announced
     sleep(Duration::from_millis(1000)).await;
 
-    // Send Request with ZenohRpcClient (L2 API)
+    // Send Request with RpcClient (L2 API)
     {
-        let rpc_client = Arc::new(ZenohRpcClient::new(uptransport_client.clone()));
+        let rpc_client =
+            InMemoryRpcClient::new(uptransport_client.clone(), uptransport_client.clone())
+                .await
+                .map(Arc::new)
+                .expect("failed to create RpcClient for Zenoh transport");
 
         let payload = UPayload::new(request_data.clone(), UPayloadFormat::UPAYLOAD_FORMAT_TEXT);
         let call_options = CallOptions::for_rpc_request(
