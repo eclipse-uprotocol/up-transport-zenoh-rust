@@ -10,13 +10,9 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  ********************************************************************************/
-pub mod rpc;
 pub mod uri_provider;
 pub mod utransport;
 
-pub use rpc::ZenohRpcClient;
-
-use bitmask_enum::bitmask;
 use protobuf::Message;
 use std::{
     collections::HashMap,
@@ -25,18 +21,11 @@ use std::{
 };
 use tokio::runtime::Runtime;
 use tracing::error;
-use up_rust::{
-    ComparableListener, LocalUriProvider, UAttributes, UCode, UListener, UPriority, UStatus, UUri,
-};
+use up_rust::{ComparableListener, LocalUriProvider, UAttributes, UCode, UPriority, UStatus, UUri};
 // Re-export Zenoh config
 pub use zenoh::config as zenoh_config;
 use zenoh::{
-    bytes::ZBytes,
-    internal::runtime::Runtime as ZRuntime,
-    key_expr::OwnedKeyExpr,
-    pubsub::Subscriber,
-    qos::Priority,
-    query::{Query, Queryable},
+    bytes::ZBytes, internal::runtime::Runtime as ZRuntime, pubsub::Subscriber, qos::Priority,
     Session,
 };
 
@@ -52,28 +41,11 @@ lazy_static::lazy_static! {
                .expect("Unable to create callback runtime");
 }
 
-#[bitmask(u8)]
-enum MessageFlag {
-    Publish,
-    Notification,
-    Request,
-    Response,
-}
-
 type SubscriberMap = Arc<Mutex<HashMap<(String, ComparableListener), Subscriber<()>>>>;
-type QueryableMap = Arc<Mutex<HashMap<(String, ComparableListener), Queryable<()>>>>;
-type QueryMap = Arc<Mutex<HashMap<String, Query>>>;
-type RpcCallbackMap = Arc<Mutex<HashMap<OwnedKeyExpr, Arc<dyn UListener>>>>;
 pub struct UPTransportZenoh {
     session: Arc<Session>,
     // Able to unregister Subscriber
     subscriber_map: SubscriberMap,
-    // Able to unregister Queryable
-    queryable_map: QueryableMap,
-    // Save the reqid to be able to send back response
-    query_map: QueryMap,
-    // Save the callback for RPC response
-    rpc_callback_map: RpcCallbackMap,
     // URI
     local_uri: UUri,
 }
@@ -164,9 +136,6 @@ impl UPTransportZenoh {
         Ok(UPTransportZenoh {
             session: Arc::new(session),
             subscriber_map: Arc::new(Mutex::new(HashMap::new())),
-            queryable_map: Arc::new(Mutex::new(HashMap::new())),
-            query_map: Arc::new(Mutex::new(HashMap::new())),
-            rpc_callback_map: Arc::new(Mutex::new(HashMap::new())),
             local_uri,
         })
     }
@@ -279,59 +248,6 @@ impl UPTransportZenoh {
         };
         Ok(uattributes)
     }
-
-    // You can take a look at the table in up-spec for more detail
-    // https://github.com/eclipse-uprotocol/up-spec/blob/ca8172a8cf17d70e4f095e6c0d57fe2ebc68c58d/up-l1/README.adoc#23-registerlistener
-    #[allow(clippy::nonminimal_bool)] // Don't simplify the boolean expression for better understanding
-    fn get_listener_message_type(
-        source_uuri: &UUri,
-        sink_uuri: Option<&UUri>,
-    ) -> Result<MessageFlag, UStatus> {
-        let mut flag = MessageFlag::none();
-        let rpc_range = 1..0x7FFF_u32;
-        let nonrpc_range = 0x8000..0xFFFE_u32;
-
-        let src_resource = source_uuri.resource_id;
-        // Notification / Request / Response
-        if let Some(dst_uuri) = sink_uuri {
-            let dst_resource = dst_uuri.resource_id;
-
-            if (nonrpc_range.contains(&src_resource) && dst_resource == 0)
-                || (src_resource == 0xFFFF && dst_resource == 0)
-                || (src_resource == 0xFFFF && dst_resource == 0xFFFF)
-            {
-                flag |= MessageFlag::Notification;
-            }
-            if (src_resource == 0 && rpc_range.contains(&dst_resource))
-                || (src_resource == 0xFFFF && rpc_range.contains(&dst_resource))
-                || (src_resource == 0xFFFF && dst_resource == 0xFFFF)
-            {
-                flag |= MessageFlag::Request;
-            }
-            if (rpc_range.contains(&src_resource) && dst_resource == 0)
-                || (src_resource == 0xFFFF && dst_resource == 0)
-                || (src_resource == 0xFFFF && dst_resource == 0xFFFF)
-            {
-                flag |= MessageFlag::Response;
-            }
-        } else if nonrpc_range.contains(&src_resource) {
-            flag |= MessageFlag::Publish;
-        }
-        if flag.is_none() {
-            let src_resource = format!("{:X}", source_uuri.resource_id);
-            let dst_resource = if let Some(dst_uuri) = sink_uuri {
-                format!("{:X}", dst_uuri.resource_id)
-            } else {
-                String::from("None")
-            };
-            Err(UStatus::fail_with_code(
-                UCode::INTERNAL,
-                format!("Wrong combination of resource ID in source UUri ({src_resource}) and sink UUri ({dst_resource}). Please check up-spec for more details."),
-            ))
-        } else {
-            Ok(flag)
-        }
-    }
 }
 
 #[cfg(test)]
@@ -381,39 +297,6 @@ mod tests {
             assert_eq!(
                 up_transport_zenoh.to_zenoh_key_string(&src, None),
                 zenoh_key.to_string()
-            );
-        }
-    }
-
-    #[test_case("//192.168.1.100/10AB/3/80CD", None, Ok(MessageFlag::Publish); "Publish Message")]
-    #[test_case("//192.168.1.100/10AB/3/80CD", Some("//192.168.1.101/20EF/4/0"), Ok(MessageFlag::Notification); "Notification Message")]
-    #[test_case("//192.168.1.100/10AB/3/0", Some("//192.168.1.101/20EF/4/B"), Ok(MessageFlag::Request); "Request Message")]
-    #[test_case("//192.168.1.101/20EF/4/B", Some("//192.168.1.100/10AB/3/0"), Ok(MessageFlag::Response); "Response Message")]
-    #[test_case("//*/FFFF/FF/FFFF", Some("//192.168.1.101/20EF/4/B"), Ok(MessageFlag::Request); "Listen to all Request Messages")]
-    #[test_case("//*/FFFF/FF/FFFF", Some("//192.168.1.100/10AB/3/0"), Ok(MessageFlag::Notification | MessageFlag::Response); "Listen to Notification and Response Messages")]
-    #[test_case("//*/FFFF/FF/FFFF", Some("//[::1]/FFFF/FF/FFFF"), Ok(MessageFlag::Notification | MessageFlag::Request | MessageFlag::Response); "Listen to all messages to a device")]
-    #[test_case("//*/FFFF/FF/FFFF", None, Err(UCode::INTERNAL); "Impossible scenario: Listen to all Publish Messages")]
-    #[test_case("//192.168.1.100/10AB/3/0", Some("//*/FFFF/FF/FFFF"), Err(UCode::INTERNAL); "Impossible scenario: Broadcast Request Message")]
-    #[test_case("//192.168.1.101/20EF/4/B", Some("//*/FFFF/FF/FFFF"), Err(UCode::INTERNAL); "Impossible scenario: Broadcast Response Message")]
-    #[test_case("//192.168.1.100/10AB/3/80CD", Some("//*/FFFF/FF/FFFF"), Err(UCode::INTERNAL); "Impossible scenario: Broadcast Notification Message")]
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_get_listener_message_type(
-        src_uri: &str,
-        sink_uri: Option<&str>,
-        result: Result<MessageFlag, UCode>,
-    ) {
-        let src = UUri::from_str(src_uri).unwrap();
-        if let Some(uri) = sink_uri {
-            let dst = UUri::from_str(uri).unwrap();
-            assert_eq!(
-                UPTransportZenoh::get_listener_message_type(&src, Some(&dst))
-                    .map_err(|e| e.get_code()),
-                result
-            );
-        } else {
-            assert_eq!(
-                UPTransportZenoh::get_listener_message_type(&src, None).map_err(|e| e.get_code()),
-                result
             );
         }
     }

@@ -16,12 +16,11 @@ use std::sync::Arc;
 use tokio::time::{sleep, Duration};
 use up_rust::{
     communication::{
-        CallOptions, InMemoryRpcServer, RequestHandler, RpcClient, RpcServer,
+        CallOptions, InMemoryRpcClient, InMemoryRpcServer, RequestHandler, RpcClient, RpcServer,
         ServiceInvocationError, UPayload,
     },
     LocalUriProvider, UPayloadFormat,
 };
-use up_transport_zenoh::ZenohRpcClient;
 
 const METHOD_RESOURCE_ID: u16 = 0x00a0;
 
@@ -89,7 +88,10 @@ async fn test_l2_rpc() {
     sleep(Duration::from_millis(1000)).await;
 
     // Create L2 RPC client
-    let rpc_client = Arc::new(ZenohRpcClient::new(uptransport_client.clone()));
+    let rpc_client = InMemoryRpcClient::new(uptransport_client.clone(), uptransport_client.clone())
+        .await
+        .map(Arc::new)
+        .expect("failed to create RpcClient for Zenoh transport");
 
     let payload = UPayload::new(request_data, UPayloadFormat::UPAYLOAD_FORMAT_TEXT);
     let call_options = CallOptions::for_rpc_request(5_000, None, None, None);
