@@ -61,4 +61,5 @@ jobs:
      
       - name: Run cargo nextest
         run: |
+          cargo clean
           cargo nextest run
