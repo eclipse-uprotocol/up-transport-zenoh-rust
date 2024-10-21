@@ -92,7 +92,7 @@ impl UPTransportZenoh {
             // Create UMessage
             let msg = UMessage {
                 attributes: Some(u_attribute).into(),
-                payload: Some(sample.payload().into()),
+                payload: Some(sample.payload().to_bytes().to_vec().into()),
                 ..Default::default()
             };
             spawn_nonblock_callback(&listener_cloned, msg);

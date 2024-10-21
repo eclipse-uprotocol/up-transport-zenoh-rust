@@ -212,40 +212,46 @@ impl UPTransportZenoh {
     }
 
     fn uattributes_to_attachment(uattributes: &UAttributes) -> anyhow::Result<ZBytes> {
-        let attachment = [
-            UATTRIBUTE_VERSION.to_le_bytes().to_vec(),
-            uattributes.write_to_bytes()?,
-        ];
-        Ok(attachment.iter().collect::<ZBytes>())
+        let mut writer = ZBytes::writer();
+        writer.append(ZBytes::from(UATTRIBUTE_VERSION.to_le_bytes().to_vec()));
+        writer.append(ZBytes::from(uattributes.write_to_bytes()?));
+        let zbytes = writer.finish();
+        Ok(zbytes)
     }
 
     fn attachment_to_uattributes(attachment: &ZBytes) -> anyhow::Result<UAttributes> {
-        let mut attachment_iter = attachment.iter::<Vec<u8>>();
-        // Check the version
-        if let Some(version) = attachment_iter
-            .next()
-            .and_then(Result::ok)
-            .and_then(|v| v.first().copied())
-        {
-            if version != UATTRIBUTE_VERSION {
-                let msg =
-                    format!("UAttributes version is {version} (should be {UATTRIBUTE_VERSION})");
-                error!("{msg}");
-                return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg).into());
-            }
-        } else {
-            let msg = "Unable to get the UAttributes version".to_string();
+        let mut attachment_iter = attachment.slices();
+        // This is the workaround solution and wait for fix on https://github.com/eclipse-zenoh/zenoh/issues/1552
+        let content = attachment_iter.next().unwrap();
+        let version = content[0];
+        if version != UATTRIBUTE_VERSION {
+            let msg = format!("UAttributes version is {version} (should be {UATTRIBUTE_VERSION})");
             error!("{msg}");
             return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg).into());
         }
-        // Get the attributes
-        let uattributes = if let Some(value) = attachment_iter.next().and_then(Result::ok) {
-            UAttributes::parse_from_bytes(&value)?
-        } else {
-            let msg = "Unable to get the UAttributes".to_string();
-            error!("{msg}");
-            return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg).into());
-        };
+        let uattributes = UAttributes::parse_from_bytes(&content[1..])?;
+
+        //// Check the version
+        //if let Some(version) = attachment_iter.next().and_then(|v| v.first().copied()) {
+        //    if version != UATTRIBUTE_VERSION {
+        //        let msg =
+        //            format!("UAttributes version is {version} (should be {UATTRIBUTE_VERSION})");
+        //        error!("{msg}");
+        //        return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg).into());
+        //    }
+        //} else {
+        //    let msg = "Unable to get the UAttributes version".to_string();
+        //    error!("{msg}");
+        //    return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg).into());
+        //}
+        //// Get the attributes
+        //let uattributes = if let Some(value) = attachment_iter.next() {
+        //    UAttributes::parse_from_bytes(value)?
+        //} else {
+        //    let msg = "Unable to get the UAttributes".to_string();
+        //    error!("{msg}");
+        //    return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg).into());
+        //};
         Ok(uattributes)
     }
 }
