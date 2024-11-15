@@ -26,6 +26,9 @@ jobs:
   check-msrv:
     uses: ./.github/workflows/verify-msrv.yaml
 
+  test-all-features:
+    uses: ./.github/workflows/test-featurematrix.yaml
+
   x-build:
     # The jury is still out on whether this actually adds any value, besides simply being possible...
     uses: ./.github/workflows/x-build.yaml
