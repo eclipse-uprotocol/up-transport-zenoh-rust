@@ -87,6 +87,7 @@ impl UPTransportZenoh {
     }
 
     /// Create `UPTransportZenoh` by applying the Zenoh Runtime and local `UUri`. This can be used by uStreamer.
+    /// You need to enable feature `zenoh-unstable` to support this function.
     ///
     /// # Arguments
     ///

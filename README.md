@@ -9,6 +9,8 @@ uProtocol transport implementation for Zenoh in Rust
 cargo clippy --all-targets
 # Build
 cargo build
+# Optional: Build with feature `zenoh-unstable` in uStreamer use case
+cargo build --features zenoh-unstable
 # Run test
 cargo test
 # Test coverage
