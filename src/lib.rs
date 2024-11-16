@@ -24,10 +24,9 @@ use tracing::error;
 use up_rust::{ComparableListener, LocalUriProvider, UAttributes, UCode, UPriority, UStatus, UUri};
 // Re-export Zenoh config
 pub use zenoh::config as zenoh_config;
-use zenoh::{
-    bytes::ZBytes, internal::runtime::Runtime as ZRuntime, pubsub::Subscriber, qos::Priority,
-    Session,
-};
+#[cfg(feature = "zenoh-unstable")]
+use zenoh::internal::runtime::Runtime as ZRuntime;
+use zenoh::{bytes::ZBytes, pubsub::Subscriber, qos::Priority, Session};
 
 const UATTRIBUTE_VERSION: u8 = 1;
 const THREAD_NUM: usize = 10;
@@ -88,6 +87,7 @@ impl UPTransportZenoh {
     }
 
     /// Create `UPTransportZenoh` by applying the Zenoh Runtime and local `UUri`. This can be used by uStreamer.
+    /// You need to enable feature `zenoh-unstable` to support this function.
     ///
     /// # Arguments
     ///
@@ -96,6 +96,7 @@ impl UPTransportZenoh {
     ///
     /// # Errors
     /// Will return `Err` if unable to create `UPTransportZenoh`
+    #[cfg(feature = "zenoh-unstable")]
     pub async fn new_with_runtime<U>(runtime: ZRuntime, uri: U) -> Result<UPTransportZenoh, UStatus>
     where
         U: TryInto<UUri>,

@@ -20,6 +20,15 @@ pub enum WhatAmIType {
     Router,
 }
 
+#[cfg(not(feature = "zenoh-unstable"))]
+#[derive(clap::Parser, Clone, PartialEq, Eq, Hash, Debug)]
+pub struct Args {
+    #[arg(short, long)]
+    /// A configuration file.
+    config: Option<String>,
+}
+
+#[cfg(feature = "zenoh-unstable")]
 #[derive(clap::Parser, Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Args {
     #[arg(short, long)]
@@ -44,45 +53,49 @@ pub fn get_zenoh_config() -> zenoh_config::Config {
     let args = Args::parse();
 
     // Load the config from file path
+    #[allow(unused_mut)]
     let mut zenoh_cfg = match &args.config {
         Some(path) => zenoh_config::Config::from_file(path).unwrap(),
         None => zenoh_config::Config::default(),
     };
 
-    // You can choose from Router, Peer, Client
-    match args.mode {
-        Some(WhatAmIType::Peer) => zenoh_cfg.set_mode(Some(zenoh::config::WhatAmI::Peer)),
-        Some(WhatAmIType::Client) => zenoh_cfg.set_mode(Some(zenoh::config::WhatAmI::Client)),
-        Some(WhatAmIType::Router) => zenoh_cfg.set_mode(Some(zenoh::config::WhatAmI::Router)),
-        None => Ok(None),
-    }
-    .unwrap();
+    #[cfg(feature = "zenoh-unstable")]
+    {
+        // You can choose from Router, Peer, Client
+        match args.mode {
+            Some(WhatAmIType::Peer) => zenoh_cfg.set_mode(Some(zenoh::config::WhatAmI::Peer)),
+            Some(WhatAmIType::Client) => zenoh_cfg.set_mode(Some(zenoh::config::WhatAmI::Client)),
+            Some(WhatAmIType::Router) => zenoh_cfg.set_mode(Some(zenoh::config::WhatAmI::Router)),
+            None => Ok(None),
+        }
+        .unwrap();
 
-    // Set connection address
-    if !args.connect.is_empty() {
-        zenoh_cfg
-            .connect
-            .endpoints
-            .set(args.connect.iter().map(|v| v.parse().unwrap()).collect())
-            .unwrap();
-    }
+        // Set connection address
+        if !args.connect.is_empty() {
+            zenoh_cfg
+                .connect
+                .endpoints
+                .set(args.connect.iter().map(|v| v.parse().unwrap()).collect())
+                .unwrap();
+        }
 
-    // Set listener address
-    if !args.listen.is_empty() {
-        zenoh_cfg
-            .listen
-            .endpoints
-            .set(args.listen.iter().map(|v| v.parse().unwrap()).collect())
-            .unwrap();
-    }
+        // Set listener address
+        if !args.listen.is_empty() {
+            zenoh_cfg
+                .listen
+                .endpoints
+                .set(args.listen.iter().map(|v| v.parse().unwrap()).collect())
+                .unwrap();
+        }
 
-    // Set multicast configuration
-    if args.no_multicast_scouting {
-        zenoh_cfg
-            .scouting
-            .multicast
-            .set_enabled(Some(false))
-            .unwrap();
+        // Set multicast configuration
+        if args.no_multicast_scouting {
+            zenoh_cfg
+                .scouting
+                .multicast
+                .set_enabled(Some(false))
+                .unwrap();
+        }
     }
 
     zenoh_cfg
