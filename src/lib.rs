@@ -164,7 +164,7 @@ impl UPTransportZenoh {
             uri.authority_name.clone()
         };
         // ue_id
-        let ue_id = if uri.has_wildcard_entity_id() {
+        let ue_id = if uri.has_wildcard_entity_type() {
             "*".to_string()
         } else {
             format!("{:X}", uri.ue_id)
