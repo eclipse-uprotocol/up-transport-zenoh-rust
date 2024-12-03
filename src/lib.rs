@@ -169,13 +169,11 @@ impl UPTransportZenoh {
         let ue_id = if uri.has_wildcard_entity_type() {
             // If entity type is wildcard, the whole entity should be wilrdcard
             "*".to_string()
+        } else if uri.has_wildcard_entity_instance() {
+            // If entity instance is wildcard, we still need to check the entity type
+            format!("$*{:04X}", uri.ue_id & WILDCARD_ENTITY_TYPE)
         } else {
-            if uri.has_wildcard_entity_instance() {
-                // If entity instance is wildcard, we still need to check the entity type
-                format!("$*{:04X}", uri.ue_id & WILDCARD_ENTITY_TYPE)
-            } else {
-                format!("{:X}", uri.ue_id)
-            }
+            format!("{:X}", uri.ue_id)
         };
         // ue_version_major
         let ue_version_major = if uri.has_wildcard_version() {
