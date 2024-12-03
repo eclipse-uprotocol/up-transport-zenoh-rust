@@ -2584,9 +2584,9 @@ dependencies = [
 
 [[package]]
 name = "up-rust"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af7f283ab2b74869f69bcd5a87950b87db5110e46764af2ddae3248109f0e374"
+checksum = "30118ab07c7ca420e2196bbc0f6f380b3100928d03ec1cd960f9220472f48f1a"
 dependencies = [
  "async-trait",
  "bytes",
