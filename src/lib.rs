@@ -28,6 +28,8 @@ pub use zenoh::config as zenoh_config;
 use zenoh::internal::runtime::Runtime as ZRuntime;
 use zenoh::{bytes::ZBytes, pubsub::Subscriber, qos::Priority, Session};
 
+const WILDCARD_ENTITY_TYPE: u32 = 0x0000_FFFF;
+
 const UATTRIBUTE_VERSION: u8 = 1;
 const THREAD_NUM: usize = 10;
 
@@ -165,9 +167,15 @@ impl UPTransportZenoh {
         };
         // ue_id
         let ue_id = if uri.has_wildcard_entity_type() {
+            // If entity type is wildcard, the whole entity should be wilrdcard
             "*".to_string()
         } else {
-            format!("{:X}", uri.ue_id)
+            if uri.has_wildcard_entity_instance() {
+                // If entity instance is wildcard, we still need to check the entity type
+                format!("$*{:04X}", uri.ue_id & WILDCARD_ENTITY_TYPE)
+            } else {
+                format!("{:X}", uri.ue_id)
+            }
         };
         // ue_version_major
         let ue_version_major = if uri.has_wildcard_version() {
@@ -264,6 +272,22 @@ mod tests {
     {
         let up_transport_zenoh = UPTransportZenoh::new(zenoh_config::Config::default(), uri).await;
         assert_eq!(up_transport_zenoh.is_ok(), expected_result);
+    }
+
+    #[test_case("//1.2.3.4/1234/2/8001", "1.2.3.4/1234/2/8001"; "Standard")]
+    #[test_case("//1.2.3.4/12345678/2/8001", "1.2.3.4/12345678/2/8001"; "Standard with entity instance")]
+    #[test_case("//1.2.3.4/FFFF5678/2/8001", "1.2.3.4/$*5678/2/8001"; "Standard with wildcard entity instance")]
+    #[test_case("//*/FFFF/FF/FFFF", "*/*/*/*"; "All wildcard")]
+    #[test_case("//*/1234FFFF/FF/FFFF", "*/*/*/*"; "All wildcard but ignore entity instance")]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn uri_to_zenoh_key(src_uri: &str, zenoh_key: &str) {
+        let up_transport_zenoh =
+            UPTransportZenoh::new(zenoh_config::Config::default(), "//uuri_dont_care/1234/5/0")
+                .await
+                .unwrap();
+        let src = UUri::from_str(src_uri).unwrap();
+        let zenoh_key_string = up_transport_zenoh.uri_to_zenoh_key(&src);
+        assert_eq!(zenoh_key_string, zenoh_key);
     }
 
     // Mapping with the examples in Zenoh spec
