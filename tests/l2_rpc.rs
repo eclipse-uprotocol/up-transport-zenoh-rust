@@ -19,7 +19,7 @@ use up_rust::{
         CallOptions, InMemoryRpcClient, InMemoryRpcServer, RequestHandler, RpcClient, RpcServer,
         ServiceInvocationError, UPayload,
     },
-    LocalUriProvider, UPayloadFormat,
+    LocalUriProvider, UAttributes, UPayloadFormat,
 };
 
 const METHOD_RESOURCE_ID: u16 = 0x00a0;
@@ -41,6 +41,7 @@ impl RequestHandler for ExampleHandler {
     async fn handle_request(
         &self,
         _resource_id: u16,
+        _metadata: &UAttributes,
         request_payload: Option<UPayload>,
     ) -> Result<Option<UPayload>, ServiceInvocationError> {
         let payload = request_payload.unwrap().payload();
