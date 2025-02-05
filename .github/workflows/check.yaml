@@ -53,7 +53,7 @@ jobs:
         toolchain: ${{ env.RUST_TOOLCHAIN }}
     - name: Run cargo check
       run: |
-        cargo check --all --tests
+        cargo check --workspace --all-targets --all-features
 
   fmt:
     runs-on: ubuntu-latest
@@ -65,7 +65,7 @@ jobs:
           components: rustfmt
       - name: Run cargo fmt
         run: |
-          cargo fmt --all -- --check
+          cargo fmt --all --check
 
   clippy:
     runs-on: ubuntu-latest
@@ -78,7 +78,7 @@ jobs:
       - name: cargo clippy
         run: |
           cargo clippy --version
-          cargo clippy --all-targets -- -W warnings -D warnings
+          cargo clippy --all-targets --all-features --no-deps -- -W warnings -D warnings
 
   build-docs:
     runs-on: ubuntu-latest
@@ -131,9 +131,9 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - name: Run doc tests
         run: |
-          RUSTC_BOOTSTRAP=1 cargo test --doc -- -Z unstable-options --format json --report-time > doctestresults.json
+          RUSTC_BOOTSTRAP=1 cargo test --doc --all-features -- -Z unstable-options --format json --report-time > doctestresults--all-features.json
       - name: Upload doctest results artifact
         uses: actions/upload-artifact@v4
         with:
           name: doctest-results
-          path: doctestresults.json
+          path: doctestresults--all-features.json

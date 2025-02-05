@@ -11,28 +11,29 @@
 #  SPDX-License-Identifier: Apache-2.0
 # *******************************************************************************/
 
-name: Check MSRV
+# Checks if the crate can be built using the latest stable toolchain with the latest
+# compatible dependencies.
+# The job definition has been inspired by the example given in the Rust Cargo book.
+
+name: Check latest dependencies
 
 on:
   workflow_call:
   workflow_dispatch:
 
 env:
-  RUST_TOOLCHAIN: ${{ vars.RUST_TOOLCHAIN || 'stable' }}
-  RUSTFLAGS: -Dwarnings
   CARGO_TERM_COLOR: always
 
 jobs:
-  check:
+  latest-deps:
+    name: Latest Dependencies
     runs-on: ubuntu-latest
+    continue-on-error: true
+    env:
+      CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS: allow
     steps:
     - uses: actions/checkout@v4
-      with:
-        submodules: "recursive"
-    - uses: dtolnay/rust-toolchain@master
-      with: 
-        toolchain: ${{ env.RUST_TOOLCHAIN }}
-    - uses: taiki-e/install-action@cargo-hack
-    - name: check MSRV
-      run: |
-        cargo hack check --rust-version --workspace --all-targets --all-features --ignore-private
+    - run: rustup update stable && rustup default stable
+    - run: cargo update --verbose
+    - run: cargo build --verbose --all-features
+    - run: cargo test --verbose --all-features
