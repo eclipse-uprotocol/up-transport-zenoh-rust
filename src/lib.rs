@@ -28,8 +28,6 @@ pub use zenoh::config as zenoh_config;
 use zenoh::internal::runtime::Runtime as ZRuntime;
 use zenoh::{bytes::ZBytes, pubsub::Subscriber, qos::Priority, Session};
 
-const WILDCARD_ENTITY_TYPE: u32 = 0x0000_FFFF;
-
 const UATTRIBUTE_VERSION: u8 = 1;
 const THREAD_NUM: usize = 10;
 
@@ -163,41 +161,44 @@ impl UPTransportZenoh {
         let authority = if uri.authority_name.is_empty() {
             self.get_authority()
         } else {
-            uri.authority_name.clone()
+            uri.authority_name()
         };
-        // ue_id
-        let ue_id = if uri.has_wildcard_entity_type() {
-            // If entity type is wildcard, the whole entity should be wilrdcard
+        // ue_type
+        let ue_type = if uri.has_wildcard_entity_type() {
             "*".to_string()
-        } else if uri.has_wildcard_entity_instance() {
-            // If entity instance is wildcard, we still need to check the entity type
-            format!("$*{:04X}", uri.ue_id & WILDCARD_ENTITY_TYPE)
         } else {
-            format!("{:X}", uri.ue_id)
+            format!("{:X}", uri.uentity_type_id())
+        }
+        .to_string();
+        // ue_instance
+        let ue_instance = if uri.has_wildcard_entity_instance() {
+            "*".to_string()
+        } else {
+            format!("{:X}", uri.uentity_instance_id())
         };
         // ue_version_major
         let ue_version_major = if uri.has_wildcard_version() {
             "*".to_string()
         } else {
-            format!("{:X}", uri.ue_version_major)
+            format!("{:X}", uri.uentity_major_version())
         };
         // resource_id
         let resource_id = if uri.has_wildcard_resource_id() {
             "*".to_string()
         } else {
-            format!("{:X}", uri.resource_id)
+            format!("{:X}", uri.resource_id())
         };
-        format!("{authority}/{ue_id}/{ue_version_major}/{resource_id}")
+        format!("{authority}/{ue_type}/{ue_instance}/{ue_version_major}/{resource_id}")
     }
 
     // The format of Zenoh key should be
-    // up/[src.authority]/[src.ue_id]/[src.ue_version_major]/[src.resource_id]/[sink.authority]/[sink.ue_id]/[sink.ue_version_major]/[sink.resource_id]
+    // up/[src.authority]/[src.ue_type]/[src.ue_instance]/[src.ue_version_major]/[src.resource_id]/[sink.authority]/[sink.ue_type]/[sink.ue_instance]/[sink.ue_version_major]/[sink.resource_id]
     fn to_zenoh_key_string(&self, src_uri: &UUri, dst_uri: Option<&UUri>) -> String {
         let src = self.uri_to_zenoh_key(src_uri);
         let dst = if let Some(dst) = dst_uri {
             self.uri_to_zenoh_key(dst)
         } else {
-            "{}/{}/{}/{}".to_string()
+            "{}/{}/{}/{}/{}".to_string()
         };
         format!("up/{src}/{dst}")
     }
@@ -272,11 +273,10 @@ mod tests {
         assert_eq!(up_transport_zenoh.is_ok(), expected_result);
     }
 
-    #[test_case("//1.2.3.4/1234/2/8001", "1.2.3.4/1234/2/8001"; "Standard")]
-    #[test_case("//1.2.3.4/12345678/2/8001", "1.2.3.4/12345678/2/8001"; "Standard with entity instance")]
-    #[test_case("//1.2.3.4/FFFF5678/2/8001", "1.2.3.4/$*5678/2/8001"; "Standard with wildcard entity instance")]
-    #[test_case("//*/FFFF/FF/FFFF", "*/*/*/*"; "All wildcard")]
-    #[test_case("//*/1234FFFF/FF/FFFF", "*/*/*/*"; "All wildcard but ignore entity instance")]
+    #[test_case("//1.2.3.4/1234/2/8001", "1.2.3.4/1234/0/2/8001"; "Standard")]
+    #[test_case("//1.2.3.4/12345678/2/8001", "1.2.3.4/5678/1234/2/8001"; "Standard with entity instance")]
+    #[test_case("//1.2.3.4/FFFF5678/2/8001", "1.2.3.4/5678/*/2/8001"; "Standard with wildcard entity instance")]
+    #[test_case("//*/FFFFFFFF/FF/FFFF", "*/*/*/*/*"; "All wildcard")]
     #[tokio::test(flavor = "multi_thread")]
     async fn uri_to_zenoh_key(src_uri: &str, zenoh_key: &str) {
         let up_transport_zenoh =
@@ -289,13 +289,13 @@ mod tests {
     }
 
     // Mapping with the examples in Zenoh spec
-    #[test_case("/10AB/3/80CD", None, "up/192.168.1.100/10AB/3/80CD/{}/{}/{}/{}"; "Send Publish")]
-    #[test_case("//192.168.1.100/10AB/3/80CD", None, "up/192.168.1.100/10AB/3/80CD/{}/{}/{}/{}"; "Subscribe messages")]
-    #[test_case("//192.168.1.100/10AB/3/80CD", Some("//192.168.1.101/20EF/4/0"), "up/192.168.1.100/10AB/3/80CD/192.168.1.101/20EF/4/0"; "Send Notification")]
-    #[test_case("//*/FFFF/FF/FFFF", Some("//192.168.1.101/20EF/4/0"), "up/*/*/*/*/192.168.1.101/20EF/4/0"; "Receive all Notifications")]
-    #[test_case("//my-host1/10AB/3/0", Some("//my-host2/20EF/4/B"), "up/my-host1/10AB/3/0/my-host2/20EF/4/B"; "Send Request")]
-    #[test_case("//*/FFFF/FF/FFFF", Some("//my-host2/20EF/4/B"), "up/*/*/*/*/my-host2/20EF/4/B"; "Receive all Requests")]
-    #[test_case("//*/FFFF/FF/FFFF", Some("//[::1]/FFFF/FF/FFFF"), "up/*/*/*/*/[::1]/*/*/*"; "Receive all messages to a device")]
+    #[test_case("/10AB/3/80CD", None, "up/192.168.1.100/10AB/0/3/80CD/{}/{}/{}/{}/{}"; "Send Publish")]
+    #[test_case("//192.168.1.100/10AB/3/80CD", None, "up/192.168.1.100/10AB/0/3/80CD/{}/{}/{}/{}/{}"; "Subscribe messages")]
+    #[test_case("//192.168.1.100/10AB/3/80CD", Some("//192.168.1.101/300EF/4/0"), "up/192.168.1.100/10AB/0/3/80CD/192.168.1.101/EF/3/4/0"; "Send Notification")]
+    #[test_case("//*/FFFFFFFF/FF/FFFF", Some("//192.168.1.101/300EF/4/0"), "up/*/*/*/*/*/192.168.1.101/EF/3/4/0"; "Receive all Notifications")]
+    #[test_case("//my-host1/403AB/3/0", Some("//my-host2/CD/4/B"), "up/my-host1/3AB/4/3/0/my-host2/CD/0/4/B"; "Send Request")]
+    #[test_case("//*/FFFFFFFF/FF/FFFF", Some("//my-host2/CD/4/B"), "up/*/*/*/*/*/my-host2/CD/0/4/B"; "Receive all Requests")]
+    #[test_case("//*/FFFFFFFF/FF/FFFF", Some("//[::1]/FFFFFFFF/FF/FFFF"), "up/*/*/*/*/*/[::1]/*/*/*/*"; "Receive all messages to a device")]
     #[tokio::test(flavor = "multi_thread")]
     async fn test_to_zenoh_key_string(src_uri: &str, sink_uri: Option<&str>, zenoh_key: &str) {
         let up_transport_zenoh =
