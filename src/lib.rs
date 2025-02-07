@@ -168,8 +168,7 @@ impl UPTransportZenoh {
             "*".to_string()
         } else {
             format!("{:X}", uri.uentity_type_id())
-        }
-        .to_string();
+        };
         // ue_instance
         let ue_instance = if uri.has_wildcard_entity_instance() {
             "*".to_string()
