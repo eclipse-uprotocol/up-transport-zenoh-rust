@@ -28,7 +28,7 @@ pub use zenoh::config as zenoh_config;
 use zenoh::internal::runtime::Runtime as ZRuntime;
 use zenoh::{bytes::ZBytes, pubsub::Subscriber, qos::Priority, Session};
 
-const UATTRIBUTE_VERSION: u8 = 1;
+const UPROTOCOL_MAJOR_VERSION: u8 = 1;
 const THREAD_NUM: usize = 10;
 
 // Create a separate tokio Runtime for running the callback
@@ -156,6 +156,7 @@ impl UPTransportZenoh {
         }
     }
 
+    // [impl->dsn~up-transport-zenoh-key-expr~1]
     fn uri_to_zenoh_key(&self, uri: &UUri) -> String {
         // authority_name
         let authority = if uri.authority_name.is_empty() {
@@ -192,6 +193,7 @@ impl UPTransportZenoh {
 
     // The format of Zenoh key should be
     // up/[src.authority]/[src.ue_type]/[src.ue_instance]/[src.ue_version_major]/[src.resource_id]/[sink.authority]/[sink.ue_type]/[sink.ue_instance]/[sink.ue_version_major]/[sink.resource_id]
+    // [impl->dsn~up-transport-zenoh-key-expr~1]
     fn to_zenoh_key_string(&self, src_uri: &UUri, dst_uri: Option<&UUri>) -> String {
         let src = self.uri_to_zenoh_key(src_uri);
         let dst = if let Some(dst) = dst_uri {
@@ -202,6 +204,7 @@ impl UPTransportZenoh {
         format!("up/{src}/{dst}")
     }
 
+    // [impl->dsn~up-transport-zenoh-message-priority-mapping~1]
     #[allow(clippy::match_same_arms)]
     fn map_zenoh_priority(upriority: UPriority) -> Priority {
         match upriority {
@@ -218,9 +221,10 @@ impl UPTransportZenoh {
         }
     }
 
+    // [impl->dsn~up-transport-zenoh-attributes-mapping~1]
     fn uattributes_to_attachment(uattributes: &UAttributes) -> anyhow::Result<ZBytes> {
         let mut writer = ZBytes::writer();
-        writer.append(ZBytes::from(UATTRIBUTE_VERSION.to_le_bytes().to_vec()));
+        writer.append(ZBytes::from(UPROTOCOL_MAJOR_VERSION.to_le_bytes().to_vec()));
         writer.append(ZBytes::from(uattributes.write_to_bytes()?));
         let zbytes = writer.finish();
         Ok(zbytes)
@@ -237,9 +241,9 @@ impl UPTransportZenoh {
 
         let attachment_bytes = attachment.to_bytes();
         let ver = attachment_bytes[0];
-        if ver != UATTRIBUTE_VERSION {
+        if ver != UPROTOCOL_MAJOR_VERSION {
             let msg = format!(
-                "Expected UAttributes version {UATTRIBUTE_VERSION} but found version {ver}"
+                "Expected UAttributes version {UPROTOCOL_MAJOR_VERSION} but found version {ver}"
             );
             error!("{msg}");
             return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg).into());
@@ -277,6 +281,7 @@ mod tests {
     #[test_case("//1.2.3.4/FFFF5678/2/8001", "1.2.3.4/5678/*/2/8001"; "Standard with wildcard entity instance")]
     #[test_case("//*/FFFFFFFF/FF/FFFF", "*/*/*/*/*"; "All wildcard")]
     #[tokio::test(flavor = "multi_thread")]
+    // [utest->dsn~up-transport-zenoh-key-expr~1]
     async fn uri_to_zenoh_key(src_uri: &str, zenoh_key: &str) {
         let up_transport_zenoh =
             UPTransportZenoh::new(zenoh_config::Config::default(), "//uuri_dont_care/1234/5/0")
@@ -296,6 +301,7 @@ mod tests {
     #[test_case("//*/FFFFFFFF/FF/FFFF", Some("//my-host2/CD/4/B"), "up/*/*/*/*/*/my-host2/CD/0/4/B"; "Receive all Requests")]
     #[test_case("//*/FFFFFFFF/FF/FFFF", Some("//[::1]/FFFFFFFF/FF/FFFF"), "up/*/*/*/*/*/[::1]/*/*/*/*"; "Receive all messages to a device")]
     #[tokio::test(flavor = "multi_thread")]
+    // [utest->dsn~up-transport-zenoh-key-expr~1]
     async fn test_to_zenoh_key_string(src_uri: &str, sink_uri: Option<&str>, zenoh_key: &str) {
         let up_transport_zenoh =
             UPTransportZenoh::new(zenoh_config::Config::default(), "//192.168.1.100/10AB/3/0")
