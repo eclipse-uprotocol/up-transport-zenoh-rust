@@ -50,13 +50,17 @@ impl UPTransportZenoh {
         })?;
 
         // Map the priority to Zenoh
+        // [impl->dsn~up-transport-zenoh-message-priority-mapping~1]
         let priority =
             UPTransportZenoh::map_zenoh_priority(attributes.priority.enum_value_or_default());
 
         // Send data
         self.session
+            // [impl->dsn~up-transport-zenoh-message-type-mapping~1]
+            // [impl->dsn~up-transport-zenoh-payload-mapping~1]
             .put(zenoh_key, payload)
             .priority(priority)
+            // [impl->dsn~up-transport-zenoh-attributes-mapping~1]
             .attachment(attachment)
             .await
             .map_err(|e| {
@@ -137,6 +141,7 @@ impl UTransport for UPTransportZenoh {
             })?;
 
         // Get Zenoh key
+        // [impl->dsn~up-transport-zenoh-key-expr~1]
         let zenoh_key =
             self.to_zenoh_key_string(attribs.source.get_or_default(), attribs.sink.as_ref());
 

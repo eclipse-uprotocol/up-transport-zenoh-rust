@@ -46,5 +46,9 @@ The configuration file example is under the folder `config`.
 
 The implementation follows the spec defined in [up-l1/zenoh](https://github.com/eclipse-uprotocol/up-spec/blob/main/up-l1/zenoh.adoc).
 
-[^1]: Some PC configurations cannot connect locally. Add multicast to lo interface using
+## Change Log
+
+Please refer to the [Releases on GitHub](https://github.com/eclipse-uprotocol/up-transport-zenoh-rust/releases) for the change log.
+
+[^1]: Some PC configurations cannot connect locally. Add multicast to `lo` interface using
   ` $ sudo ip link set dev lo multicast on `

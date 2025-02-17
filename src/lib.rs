@@ -28,7 +28,7 @@ pub use zenoh::config as zenoh_config;
 use zenoh::internal::runtime::Runtime as ZRuntime;
 use zenoh::{bytes::ZBytes, pubsub::Subscriber, qos::Priority, Session};
 
-const UATTRIBUTE_VERSION: u8 = 1;
+const UPROTOCOL_MAJOR_VERSION: u8 = 1;
 const THREAD_NUM: usize = 10;
 
 // Create a separate tokio Runtime for running the callback
@@ -156,6 +156,7 @@ impl UPTransportZenoh {
         }
     }
 
+    // [impl->dsn~up-transport-zenoh-key-expr~1]
     fn uri_to_zenoh_key(&self, uri: &UUri) -> String {
         // authority_name
         let authority = if uri.authority_name.is_empty() {
@@ -192,6 +193,7 @@ impl UPTransportZenoh {
 
     // The format of Zenoh key should be
     // up/[src.authority]/[src.ue_type]/[src.ue_instance]/[src.ue_version_major]/[src.resource_id]/[sink.authority]/[sink.ue_type]/[sink.ue_instance]/[sink.ue_version_major]/[sink.resource_id]
+    // [impl->dsn~up-transport-zenoh-key-expr~1]
     fn to_zenoh_key_string(&self, src_uri: &UUri, dst_uri: Option<&UUri>) -> String {
         let src = self.uri_to_zenoh_key(src_uri);
         let dst = if let Some(dst) = dst_uri {
@@ -202,6 +204,7 @@ impl UPTransportZenoh {
         format!("up/{src}/{dst}")
     }
 
+    // [impl->dsn~up-transport-zenoh-message-priority-mapping~1]
     #[allow(clippy::match_same_arms)]
     fn map_zenoh_priority(upriority: UPriority) -> Priority {
         match upriority {
@@ -218,9 +221,10 @@ impl UPTransportZenoh {
         }
     }
 
+    // [impl->dsn~up-transport-zenoh-attributes-mapping~1]
     fn uattributes_to_attachment(uattributes: &UAttributes) -> anyhow::Result<ZBytes> {
         let mut writer = ZBytes::writer();
-        writer.append(ZBytes::from(UATTRIBUTE_VERSION.to_le_bytes().to_vec()));
+        writer.append(ZBytes::from(UPROTOCOL_MAJOR_VERSION.to_le_bytes().to_vec()));
         writer.append(ZBytes::from(uattributes.write_to_bytes()?));
         let zbytes = writer.finish();
         Ok(zbytes)
@@ -237,9 +241,9 @@ impl UPTransportZenoh {
 
         let attachment_bytes = attachment.to_bytes();
         let ver = attachment_bytes[0];
-        if ver != UATTRIBUTE_VERSION {
+        if ver != UPROTOCOL_MAJOR_VERSION {
             let msg = format!(
-                "Expected UAttributes version {UATTRIBUTE_VERSION} but found version {ver}"
+                "Expected UAttributes version {UPROTOCOL_MAJOR_VERSION} but found version {ver}"
             );
             error!("{msg}");
             return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg).into());
@@ -273,32 +277,37 @@ mod tests {
     }
 
     #[test_case("//1.2.3.4/1234/2/8001", "1.2.3.4/1234/0/2/8001"; "Standard")]
+    #[test_case("/1234/2/8001", "local_authority/1234/0/2/8001"; "Standard without authority")]
     #[test_case("//1.2.3.4/12345678/2/8001", "1.2.3.4/5678/1234/2/8001"; "Standard with entity instance")]
     #[test_case("//1.2.3.4/FFFF5678/2/8001", "1.2.3.4/5678/*/2/8001"; "Standard with wildcard entity instance")]
     #[test_case("//*/FFFFFFFF/FF/FFFF", "*/*/*/*/*"; "All wildcard")]
     #[tokio::test(flavor = "multi_thread")]
+    // [utest->dsn~up-transport-zenoh-key-expr~1]
     async fn uri_to_zenoh_key(src_uri: &str, zenoh_key: &str) {
-        let up_transport_zenoh =
-            UPTransportZenoh::new(zenoh_config::Config::default(), "//uuri_dont_care/1234/5/0")
-                .await
-                .unwrap();
+        let up_transport_zenoh = UPTransportZenoh::new(
+            zenoh_config::Config::default(),
+            "//local_authority/1234/5/0",
+        )
+        .await
+        .unwrap();
         let src = UUri::from_str(src_uri).unwrap();
         let zenoh_key_string = up_transport_zenoh.uri_to_zenoh_key(&src);
         assert_eq!(zenoh_key_string, zenoh_key);
     }
 
     // Mapping with the examples in Zenoh spec
-    #[test_case("/10AB/3/80CD", None, "up/192.168.1.100/10AB/0/3/80CD/{}/{}/{}/{}/{}"; "Send Publish")]
-    #[test_case("//192.168.1.100/10AB/3/80CD", None, "up/192.168.1.100/10AB/0/3/80CD/{}/{}/{}/{}/{}"; "Subscribe messages")]
-    #[test_case("//192.168.1.100/10AB/3/80CD", Some("//192.168.1.101/300EF/4/0"), "up/192.168.1.100/10AB/0/3/80CD/192.168.1.101/EF/3/4/0"; "Send Notification")]
-    #[test_case("//*/FFFFFFFF/FF/FFFF", Some("//192.168.1.101/300EF/4/0"), "up/*/*/*/*/*/192.168.1.101/EF/3/4/0"; "Receive all Notifications")]
-    #[test_case("//my-host1/403AB/3/0", Some("//my-host2/CD/4/B"), "up/my-host1/3AB/4/3/0/my-host2/CD/0/4/B"; "Send Request")]
-    #[test_case("//*/FFFFFFFF/FF/FFFF", Some("//my-host2/CD/4/B"), "up/*/*/*/*/*/my-host2/CD/0/4/B"; "Receive all Requests")]
-    #[test_case("//*/FFFFFFFF/FF/FFFF", Some("//[::1]/FFFFFFFF/FF/FFFF"), "up/*/*/*/*/*/[::1]/*/*/*/*"; "Receive all messages to a device")]
+    #[test_case("/10AB/3/80CD", None, "up/device1/10AB/0/3/80CD/{}/{}/{}/{}/{}"; "Send Publish")]
+    #[test_case("up://device1/10AB/3/80CD", Some("//device2/300EF/4/0"), "up/device1/10AB/0/3/80CD/device2/EF/3/4/0"; "Send Notification")]
+    #[test_case("/403AB/3/0", Some("//device2/CD/4/B"), "up/device1/3AB/4/3/0/device2/CD/0/4/B"; "Send RPC Request")]
+    #[test_case("up://device2/10AB/3/80CD", None, "up/device2/10AB/0/3/80CD/{}/{}/{}/{}/{}"; "Subscribe messages")]
+    #[test_case("//*/FFFFFFFF/FF/FFFF", Some("/300EF/4/0"), "up/*/*/*/*/*/device1/EF/3/4/0"; "Receive all Notifications")]
+    #[test_case("up://*/FFFF05A1/2/FFFF", Some("up://device1/300EF/4/B18"), "up/*/5A1/*/2/*/device1/EF/3/4/B18"; "Receive all RPC Requests from a specific entity type")]
+    #[test_case("//*/FFFFFFFF/FF/FFFF", Some("//device1/FFFFFFFF/FF/FFFF"), "up/*/*/*/*/*/device1/*/*/*/*"; "Receive all messages to the local authority")]
     #[tokio::test(flavor = "multi_thread")]
+    // [utest->dsn~up-transport-zenoh-key-expr~1]
     async fn test_to_zenoh_key_string(src_uri: &str, sink_uri: Option<&str>, zenoh_key: &str) {
         let up_transport_zenoh =
-            UPTransportZenoh::new(zenoh_config::Config::default(), "//192.168.1.100/10AB/3/0")
+            UPTransportZenoh::new(zenoh_config::Config::default(), "//device1/10AB/3/0")
                 .await
                 .unwrap();
         let src = UUri::from_str(src_uri).unwrap();
