@@ -31,13 +31,13 @@ jobs:
     uses: ./.github/workflows/check.yaml
 
   check-msrv:
-    uses: eclipse-uprotocol/ci-cd/workflows/rust/verify-msrv.yaml@main
+    uses: eclipse-uprotocol/ci-cd/.github/workflows/rust-verify-msrv.yaml@main
 
   coverage:
-    uses: eclipse-uprotocol/ci-cd/workflows/rust/coverage.yaml@main
+    uses: eclipse-uprotocol/ci-cd/.github/workflows/rust-coverage.yaml@main
 
   requirements-tracing:
-    uses: eclipse-uprotocol/ci-cd/workflows/requirements-tracing.yaml@main
+    uses: eclipse-uprotocol/ci-cd/.github/workflows/requirements-tracing.yaml@main
     with:
       oft-file-patterns: "${{ vars.UP_SPEC_OPEN_FAST_TRACE_FILE_PATTERNS }} ${{ vars.UP_COMPONENT_OPEN_FAST_TRACE_FILE_PATTERNS }}"
 

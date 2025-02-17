@@ -277,34 +277,37 @@ mod tests {
     }
 
     #[test_case("//1.2.3.4/1234/2/8001", "1.2.3.4/1234/0/2/8001"; "Standard")]
+    #[test_case("/1234/2/8001", "local_authority/1234/0/2/8001"; "Standard without authority")]
     #[test_case("//1.2.3.4/12345678/2/8001", "1.2.3.4/5678/1234/2/8001"; "Standard with entity instance")]
     #[test_case("//1.2.3.4/FFFF5678/2/8001", "1.2.3.4/5678/*/2/8001"; "Standard with wildcard entity instance")]
     #[test_case("//*/FFFFFFFF/FF/FFFF", "*/*/*/*/*"; "All wildcard")]
     #[tokio::test(flavor = "multi_thread")]
     // [utest->dsn~up-transport-zenoh-key-expr~1]
     async fn uri_to_zenoh_key(src_uri: &str, zenoh_key: &str) {
-        let up_transport_zenoh =
-            UPTransportZenoh::new(zenoh_config::Config::default(), "//uuri_dont_care/1234/5/0")
-                .await
-                .unwrap();
+        let up_transport_zenoh = UPTransportZenoh::new(
+            zenoh_config::Config::default(),
+            "//local_authority/1234/5/0",
+        )
+        .await
+        .unwrap();
         let src = UUri::from_str(src_uri).unwrap();
         let zenoh_key_string = up_transport_zenoh.uri_to_zenoh_key(&src);
         assert_eq!(zenoh_key_string, zenoh_key);
     }
 
     // Mapping with the examples in Zenoh spec
-    #[test_case("/10AB/3/80CD", None, "up/192.168.1.100/10AB/0/3/80CD/{}/{}/{}/{}/{}"; "Send Publish")]
-    #[test_case("//192.168.1.100/10AB/3/80CD", None, "up/192.168.1.100/10AB/0/3/80CD/{}/{}/{}/{}/{}"; "Subscribe messages")]
-    #[test_case("//192.168.1.100/10AB/3/80CD", Some("//192.168.1.101/300EF/4/0"), "up/192.168.1.100/10AB/0/3/80CD/192.168.1.101/EF/3/4/0"; "Send Notification")]
-    #[test_case("//*/FFFFFFFF/FF/FFFF", Some("//192.168.1.101/300EF/4/0"), "up/*/*/*/*/*/192.168.1.101/EF/3/4/0"; "Receive all Notifications")]
-    #[test_case("//my-host1/403AB/3/0", Some("//my-host2/CD/4/B"), "up/my-host1/3AB/4/3/0/my-host2/CD/0/4/B"; "Send Request")]
-    #[test_case("//*/FFFFFFFF/FF/FFFF", Some("//my-host2/CD/4/B"), "up/*/*/*/*/*/my-host2/CD/0/4/B"; "Receive all Requests")]
-    #[test_case("//*/FFFFFFFF/FF/FFFF", Some("//[::1]/FFFFFFFF/FF/FFFF"), "up/*/*/*/*/*/[::1]/*/*/*/*"; "Receive all messages to a device")]
+    #[test_case("/10AB/3/80CD", None, "up/device1/10AB/0/3/80CD/{}/{}/{}/{}/{}"; "Send Publish")]
+    #[test_case("up://device1/10AB/3/80CD", Some("//device2/300EF/4/0"), "up/device1/10AB/0/3/80CD/device2/EF/3/4/0"; "Send Notification")]
+    #[test_case("/403AB/3/0", Some("//device2/CD/4/B"), "up/device1/3AB/4/3/0/device2/CD/0/4/B"; "Send RPC Request")]
+    #[test_case("up://device2/10AB/3/80CD", None, "up/device2/10AB/0/3/80CD/{}/{}/{}/{}/{}"; "Subscribe messages")]
+    #[test_case("//*/FFFFFFFF/FF/FFFF", Some("/300EF/4/0"), "up/*/*/*/*/*/device1/EF/3/4/0"; "Receive all Notifications")]
+    #[test_case("up://*/FFFF05A1/2/FFFF", Some("up://device1/300EF/4/B18"), "up/*/5A1/*/2/*/device1/EF/3/4/B18"; "Receive all RPC Requests from a specific entity type")]
+    #[test_case("//*/FFFFFFFF/FF/FFFF", Some("//device1/FFFFFFFF/FF/FFFF"), "up/*/*/*/*/*/device1/*/*/*/*"; "Receive all messages to the local authority")]
     #[tokio::test(flavor = "multi_thread")]
     // [utest->dsn~up-transport-zenoh-key-expr~1]
     async fn test_to_zenoh_key_string(src_uri: &str, sink_uri: Option<&str>, zenoh_key: &str) {
         let up_transport_zenoh =
-            UPTransportZenoh::new(zenoh_config::Config::default(), "//192.168.1.100/10AB/3/0")
+            UPTransportZenoh::new(zenoh_config::Config::default(), "//device1/10AB/3/0")
                 .await
                 .unwrap();
         let src = UUri::from_str(src_uri).unwrap();
