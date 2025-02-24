@@ -1,0 +1,60 @@
+# ********************************************************************************
+#  Copyright (c) 2025 Contributors to the Eclipse Foundation
+#
+#  See the NOTICE file(s) distributed with this work for additional
+#  information regarding copyright ownership.
+#
+#  This program and the accompanying materials are made available under the
+#  terms of the Apache License Version 2.0 which is available at
+#  https://www.apache.org/licenses/LICENSE-2.0
+#
+#  SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************/
+
+# Config file for cargo deny
+# For all options see https://github.com/EmbarkStudios/cargo-deny/blob/main/deny.template.toml
+
+# If you add a license in the following section also consider changing about.toml
+[licenses]
+allow = [
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "EPL-2.0",
+    "ISC",
+    "MIT",
+    "MPL-2.0",
+    "OpenSSL",
+    # Unicode-3.0 is not (yet) on the Eclipse Foundation's list of approved licenses
+    # however, all of its predecessors are, thus we assume that 3.0 is also ok to use
+    "Unicode-3.0",
+    "Zlib",
+]
+private = { ignore = true }
+unused-allowed-license = "allow"
+
+[[licenses.clarify]]
+crate = "ring@0.17.9"
+expression = "MIT AND ISC AND OpenSSL"
+license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
+
+[bans]
+multiple-versions = "deny"
+wildcards = "deny"
+skip = [
+    { crate = "base64@0.21.7", reason = "an outdated version that is still used by some crates we depend on" },
+    { crate = "hashbrown@0.14.5", reason = "an outdated version that is still used by some crates we depend on" },
+    { crate = "itertools@0.12.1", reason = "an outdated version that is still used by some crates we depend on" },
+    { crate = "rustc-hash@1.1.0", reason = "an outdated version that is still used by some crates we depend on" },
+]
+skip-tree = [
+    { crate = "windows-sys", reason = "a foundational crate for many that bumps far too frequently to ever have a shared version" },
+    { crate = "getrandom@0.2.15", reason = "an outdated version that is still used by some other crates we depend on" },
+    { crate = "regex-automata@0.1.10", reason = "an outdated version that is still used by some other crates we depend on" },
+    { crate = "thiserror@1.0.69", reason = "an outdated version that is still used by some other crates we depend on" },
+]
+
+[advisories]
+ignore = [
+    { id = "RUSTSEC-2023-0071", reason = "there currently is no version of the rsa crate available that fixes this vulnerability" }
+]

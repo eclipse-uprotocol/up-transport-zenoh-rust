@@ -29,6 +29,11 @@ jobs:
   check-latest-deps:
     uses: eclipse-uprotocol/ci-cd/.github/workflows/rust-verify-latest-deps.yaml@main
 
+  cargo-deny:
+    uses: eclipse-uprotocol/ci-cd/.github/workflows/rust-deny-check.yaml@main
+    with:
+      arguments: --all-features --locked --exclude-dev
+
   test-all-features:
     uses: eclipse-uprotocol/ci-cd/.github/workflows/rust-test-featurematrix.yaml@main
 
