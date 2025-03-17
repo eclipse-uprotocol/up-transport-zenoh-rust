@@ -36,10 +36,12 @@ jobs:
   coverage:
     uses: eclipse-uprotocol/ci-cd/.github/workflows/rust-coverage.yaml@main
 
-  requirements-tracing:
-    uses: eclipse-uprotocol/ci-cd/.github/workflows/requirements-tracing.yaml@main
-    with:
-      oft-file-patterns: "${{ vars.UP_SPEC_OPEN_FAST_TRACE_FILE_PATTERNS }} ${{ vars.UP_COMPONENT_OPEN_FAST_TRACE_FILE_PATTERNS }}"
+  # TODO: Disable the OFT CI for the time being.
+  #       We will enable it after https://github.com/eclipse-uprotocol/up-transport-zenoh-rust/issues/103
+  #requirements-tracing:
+  #  uses: eclipse-uprotocol/ci-cd/.github/workflows/requirements-tracing.yaml@main
+  #  with:
+  #    oft-file-patterns: "${{ vars.UP_SPEC_OPEN_FAST_TRACE_FILE_PATTERNS }} ${{ vars.UP_COMPONENT_OPEN_FAST_TRACE_FILE_PATTERNS }}"
 
   tag_release_artifacts:
     # This only runs if this workflow is initiated via a tag-push with pattern 'v*'
