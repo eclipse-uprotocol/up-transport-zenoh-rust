@@ -58,6 +58,8 @@ jobs:
     permissions: write-all
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
 
       # TODO: Disable the OFT CI for the time being.
       #       We will enable it after https://github.com/eclipse-uprotocol/up-transport-zenoh-rust/issues/103
