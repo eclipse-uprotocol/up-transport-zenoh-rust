@@ -56,5 +56,6 @@ skip-tree = [
 
 [advisories]
 ignore = [
-    { id = "RUSTSEC-2023-0071", reason = "there currently is no version of the rsa crate available that fixes this vulnerability" }
+    { id = "RUSTSEC-2023-0071", reason = "there currently is no version of the rsa crate available that fixes this vulnerability" },
+    { id = "RUSTSEC-2024-0436", reason = "there is no better alternative of the crate, and the codebase has been stable for a long time" },
 ]
