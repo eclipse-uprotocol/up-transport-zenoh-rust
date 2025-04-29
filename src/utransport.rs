@@ -13,19 +13,13 @@
 use crate::{UPTransportZenoh, CB_RUNTIME};
 use async_trait::async_trait;
 use bytes::Bytes;
-use lazy_static::lazy_static;
-use std::sync::{Arc, Mutex};
-use tokio::runtime::Runtime;
+use std::sync::Arc;
 use tracing::{error, warn};
 use up_rust::{
     ComparableListener, UAttributes, UAttributesValidators, UCode, UListener, UMessage, UStatus,
     UTransport, UUri,
 };
 use zenoh::sample::Sample;
-
-lazy_static! {
-    static ref TOKIO_RUNTIME: Mutex<Runtime> = Mutex::new(Runtime::new().unwrap());
-}
 
 #[inline]
 fn spawn_nonblock_callback(listener: &Arc<dyn UListener>, listener_msg: UMessage) {

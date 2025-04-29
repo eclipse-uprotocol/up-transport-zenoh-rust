@@ -20,6 +20,8 @@ allow = [
     "Apache-2.0",
     "BSD-2-Clause",
     "BSD-3-Clause",
+    # CDLA-Permissive-2.0 is not (yet) on the Eclipse Foundation's list of approved licenses
+    "CDLA-Permissive-2.0",
     "EPL-2.0",
     "ISC",
     "MIT",
@@ -43,15 +45,15 @@ multiple-versions = "deny"
 wildcards = "deny"
 skip = [
     { crate = "base64@0.21.7", reason = "an outdated version that is still used by some crates we depend on" },
-    { crate = "hashbrown@0.14.5", reason = "an outdated version that is still used by some crates we depend on" },
-    { crate = "itertools@0.12.1", reason = "an outdated version that is still used by some crates we depend on" },
-    { crate = "rustc-hash@1.1.0", reason = "an outdated version that is still used by some crates we depend on" },
+    { crate = "rustls-webpki@0.102.8", reason = "an outdated version that is still used by zenoh" },
 ]
 skip-tree = [
-    { crate = "windows-sys", reason = "a foundational crate for many that bumps far too frequently to ever have a shared version" },
-    { crate = "getrandom@0.2.15", reason = "an outdated version that is still used by some other crates we depend on" },
+    { crate = "hashbrown@0.14.5", reason = "an outdated version that is still used by some crates we depend on" },
+    { crate = "rand@0.9.1", reason = "a newer version that is used by zenoh-link-quic" },
     { crate = "regex-automata@0.1.10", reason = "an outdated version that is still used by some other crates we depend on" },
+    { crate = "rustix@0.38.44", reason = "an outdated version that is still used by the (soon to be renamed) protobuf crate" },
     { crate = "thiserror@1.0.69", reason = "an outdated version that is still used by some other crates we depend on" },
+    { crate = "windows-sys", reason = "a foundational crate for many that bumps far too frequently to ever have a shared version" },
 ]
 
 [advisories]
