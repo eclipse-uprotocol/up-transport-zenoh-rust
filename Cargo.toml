@@ -20,7 +20,7 @@ license = "Apache-2.0"
 name = "up-transport-zenoh"
 readme = "README.md"
 repository = "https://github.com/eclipse-uprotocol/up-transport-zenoh-rust"
-rust-version = "1.82"
+rust-version = "1.85"
 version = "0.6.0"
 
 [lints.clippy]
@@ -34,14 +34,7 @@ pedantic = "deny"
 anyhow = "1.0.75"
 async-trait = "0.1"
 bytes = "1.10.1"
-# explicitly depend on 0.15.2 to include fix for https://rustsec.org/advisories/RUSTSEC-2024-0402
-hashbrown = { version = "0.15.2" }
-lazy_static = "1.4.0"
 protobuf = { version = "3.7.2" }
-# explicitly depend on 0.17.13 to include fix for https://rustsec.org/advisories/RUSTSEC-2025-0009
-ring = { version = "0.17.13" }
-# explicitly depend on 0.23.18 to include fix for https://rustsec.org/advisories/RUSTSEC-2024-0399
-rustls = { version = "0.23.18" }
 serde_json = "1.0.128"
 tokio = { version = "1.44", default-features = false }
 tracing = "0.1.40"
@@ -49,10 +42,10 @@ tracing-subscriber = "0.3.18"
 up-rust = { version = "0.5.0", default-features = false }
 url = { version = "2.5.4" }
 # [impl->dsn~up-transport-zenoh-protocol-version~1]
-zenoh = { version = "1.2.1" }
+zenoh = { version = "1.3.4" }
 
 [dev-dependencies]
-chrono = "0.4.39"
+chrono = "0.4.41"
 clap = { version = "4.5.31", features = ["derive"] }
 test-case = { version = "3.3" }
 up-rust = { version = "0.5.0", features = ["communication"] }

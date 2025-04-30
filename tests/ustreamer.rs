@@ -89,7 +89,7 @@ impl UListener for UStreamerListener {
             _ => {
                 panic!("Wrong UMessageType!");
             }
-        };
+        }
     }
 }
 

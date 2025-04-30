@@ -17,7 +17,7 @@ use protobuf::Message;
 use std::{
     collections::HashMap,
     fmt::Display,
-    sync::{Arc, Mutex},
+    sync::{Arc, LazyLock, Mutex},
 };
 use tokio::runtime::Runtime;
 use tracing::error;
@@ -32,13 +32,13 @@ const UPROTOCOL_MAJOR_VERSION: u8 = 1;
 const THREAD_NUM: usize = 10;
 
 // Create a separate tokio Runtime for running the callback
-lazy_static::lazy_static! {
-    static ref CB_RUNTIME: Runtime = tokio::runtime::Builder::new_multi_thread()
-               .worker_threads(THREAD_NUM)
-               .enable_all()
-               .build()
-               .expect("Unable to create callback runtime");
-}
+static CB_RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(THREAD_NUM)
+        .enable_all()
+        .build()
+        .expect("Unable to create callback runtime")
+});
 
 type SubscriberMap = Arc<Mutex<HashMap<(String, ComparableListener), Subscriber<()>>>>;
 pub struct UPTransportZenoh {
