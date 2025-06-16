@@ -36,12 +36,10 @@ jobs:
   coverage:
     uses: eclipse-uprotocol/ci-cd/.github/workflows/rust-coverage.yaml@main
 
-  # TODO: Disable the OFT CI for the time being.
-  #       We will enable it after https://github.com/eclipse-uprotocol/up-transport-zenoh-rust/issues/103
-  # current-spec-compliance:
-  #   uses: eclipse-uprotocol/ci-cd/.github/workflows/requirements-tracing.yaml@main
-  #   with:
-  #     env-file-suffix: "oft-current"
+  current-spec-compliance:
+    uses: eclipse-uprotocol/ci-cd/.github/workflows/requirements-tracing.yaml@main
+    with:
+      env-file-suffix: "oft-current"
 
   tag_release_artifacts:
     # This only runs if this workflow is initiated via a tag-push with pattern 'v*'
@@ -52,31 +50,27 @@ jobs:
       - check
       - check-msrv
       - coverage
-      # TODO: Disable the OFT CI for the time being.
-      #       We will enable it after https://github.com/eclipse-uprotocol/up-transport-zenoh-rust/issues/103
-      #- current-spec-compliance
+      - current-spec-compliance
     permissions: write-all
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: "recursive"
 
-      # TODO: Disable the OFT CI for the time being.
-      #       We will enable it after https://github.com/eclipse-uprotocol/up-transport-zenoh-rust/issues/103
       # Requirements Tracing report - we later need the download_url output of the upload step
-      #- name: Download requirements tracing report
-      #  uses: actions/download-artifact@v4
-      #  with:
-      #    name: tracing-report-html
-      #    path: dist/tracing/
-      #- name: Upload requirements tracing report to release
-      #  uses: svenstaro/upload-release-action@v2
-      #  id: upload_requirements_tracing_report
-      #  with:
-      #    repo_token: ${{ secrets.GITHUB_TOKEN }}
-      #    file: dist/tracing/*
-      #    file_glob: true
-      #    tag: ${{ github.ref }}
+      - name: Download requirements tracing report
+        uses: actions/download-artifact@v4
+        with:
+          name: tracing-report-html
+          path: dist/tracing/
+      - name: Upload requirements tracing report to release
+        uses: svenstaro/upload-release-action@v2
+        id: upload_requirements_tracing_report
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: dist/tracing/*
+          file_glob: true
+          tag: ${{ github.ref }}
 
       # Test report - we later need the download_url output of the upload step
       - name: Download test report
@@ -136,16 +130,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     
       - name: Collect quality artifacts
-        uses: anotherdaniel/quevee@v0.3.0
+        uses: eclipse-dash/quevee@v1
         id: quevee_manifest
         with:          
           release_url: ${{ steps.latest_release_info.outputs.html_url }}
           artifacts_readme: ${{ steps.upload_readme.outputs.browser_download_url }}
           artifacts_requirements: ${{ steps.upload_up_spec.outputs.browser_download_url }}
-          # TODO: Disable the OFT CI for the time being.
-          #       We will enable it after https://github.com/eclipse-uprotocol/up-transport-zenoh-rust/issues/103
-          #artifacts_testing: ${{ steps.upload_test_report.outputs.browser_download_url }},${{ steps.upload_test_coverage.outputs.browser_download_url }},${{ steps.upload_requirements_tracing_report.outputs.browser_download_url }}
-          artifacts_testing: ${{ steps.upload_test_report.outputs.browser_download_url }},${{ steps.upload_test_coverage.outputs.browser_download_url }}
+          artifacts_testing: ${{ steps.upload_test_report.outputs.browser_download_url }},${{ steps.upload_test_coverage.outputs.browser_download_url }},${{ steps.upload_requirements_tracing_report.outputs.browser_download_url }}
 
       - name: Upload manifest to release
         uses: svenstaro/upload-release-action@v2

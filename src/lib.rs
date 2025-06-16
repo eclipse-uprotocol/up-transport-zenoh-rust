@@ -141,19 +141,9 @@ impl UPTransportZenoh {
         })
     }
 
-    /// The function to enable tracing subscriber from the environment variables `RUST_LOG`.
+    /// Enables a tracing formatter subscriber that is initialized from the `RUST_LOG` environment variable.
     pub fn try_init_log_from_env() {
-        if let Ok(env_filter) = tracing_subscriber::EnvFilter::try_from_default_env() {
-            let subscriber = tracing_subscriber::fmt()
-                .with_env_filter(env_filter)
-                .with_thread_ids(true)
-                .with_thread_names(true)
-                .with_level(true)
-                .with_target(true);
-
-            let subscriber = subscriber.finish();
-            let _ = tracing::subscriber::set_global_default(subscriber);
-        }
+        zenoh::init_log_from_env_or("");
     }
 
     // [impl->dsn~up-transport-zenoh-key-expr~1]
