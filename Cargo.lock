@@ -3055,7 +3055,6 @@ dependencies = [
  "test-case",
  "tokio",
  "tracing",
- "tracing-subscriber",
  "up-rust",
  "url",
  "zenoh",
