@@ -25,10 +25,12 @@ Implemented in [`nightly.yaml`](nightly.yaml)
 Run the full tests without considering how long it will take.
 Triggered everyday.
 
-## Other workflow modules
+## uProtocol specification compatibility
 
-Besides the 3 workflows above, there are other workflows used by them:
+The uProtocol specification is evolving over time. In order to discover any discrepancies between the currently implemented version and the changes being introduced to the specification, we perform a nightly check that verifies if the current up-rust code base on the main branch can be compiled and test can be run successfully using the most recent revision of the uProtocol specification.
 
-- [`coverage.yaml`](coverage.yaml): Collect the code coverage information.
-- [`verify-msrv.yaml`](verify-msrv.yaml): Checks if the MSRV (Minimum Supported Rust Version) declared in Cargo.toml is correct
-- [`x-build.yaml`](x-build.yaml): Run release builds on multiple architecture targets
+This is implemented in [`latest-up-spec-compatibility.yaml`](latest-up-spec-compatibility.yaml)
+
+## Further workflow modules
+
+In addition to the main workflows described above, there exist a number of modules that are used by these main workflows. These live in the [uProtocol CI/CD repository](https://github.com/eclipse-uprotocol/ci-cd)

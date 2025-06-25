@@ -63,7 +63,7 @@ jobs:
           file-patterns: "${{ env.OFT_FILE_PATTERNS }}"
           tags: "${{ env.OFT_TAGS_}}"
 
-      # now try to build and run the tests which may fail if incomaptible changes
+      # now try to build and run the tests which may fail if incompatible changes
       # have been introduced into the uProtocol Core API
       - uses: dtolnay/rust-toolchain@master
         with: 
