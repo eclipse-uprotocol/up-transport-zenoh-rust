@@ -35,17 +35,16 @@ anyhow = "1.0.75"
 async-trait = "0.1"
 bytes = "1.10.1"
 protobuf = { version = "3.7.2" }
-serde_json = "1.0.128"
 tokio = { version = "1.45.1", default-features = false }
 tracing = "0.1.40"
 up-rust = { version = "0.6.0", default-features = false }
-url = { version = "2.5.4" }
 # [impl->dsn~up-transport-zenoh-protocol-version~1]
 zenoh = { version = "1.4.0" }
 
 [dev-dependencies]
 chrono = "0.4.41"
 clap = { version = "4.5.40", features = ["derive"] }
+serde_json = "1.0.128"
 test-case = { version = "3.3" }
 up-rust = { version = "0.6.0", features = ["communication"] }
 

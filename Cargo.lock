@@ -3056,7 +3056,6 @@ dependencies = [
  "tokio",
  "tracing",
  "up-rust",
- "url",
  "zenoh",
 ]
 
