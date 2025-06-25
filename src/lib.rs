@@ -54,7 +54,8 @@ impl UPTransportZenoh {
     ///
     /// # Arguments
     ///
-    /// * `config` - Zenoh configuration. You can refer to [here](https://github.com/eclipse-zenoh/zenoh/blob/0.11.0/DEFAULT_CONFIG.json5) for more configuration details.
+    /// * `config` - The Zenoh configuration to use.
+    ///   Please refer to the [Zenoh documentation](https://zenoh.io/docs/manual/configuration/) for details.
     /// * `uri` - Local `UUri`. Note that the Authority of the `UUri` MUST be non-empty and the resource ID should be non-zero.
     ///
     /// # Errors
@@ -205,8 +206,7 @@ impl UPTransportZenoh {
             UPriority::UPRIORITY_CS4 => Priority::InteractiveLow,
             UPriority::UPRIORITY_CS5 => Priority::InteractiveHigh,
             UPriority::UPRIORITY_CS6 => Priority::RealTime,
-            // If uProtocol prioritiy isn't specified, use CS1(DataLow) by default.
-            // https://github.com/eclipse-uprotocol/uprotocol-spec/blob/main/basics/qos.adoc
+            // If uProtocol priority isn't specified, use CS1(DataLow) by default.
             UPriority::UPRIORITY_UNSPECIFIED => Priority::DataLow,
         }
     }

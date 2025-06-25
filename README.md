@@ -1,8 +1,10 @@
-# up-transport-zenoh-rust
+# Rust based Eclipse Zenoh&trade; Transport Library for Eclipse uProtocol&trade;
 
-uProtocol transport implementation for Zenoh in Rust
+This crate implements the Zenoh transport as specified in [uProtocol v1.6.0-alpha.5](https://github.com/eclipse-uprotocol/up-spec/tree/v1.6.0-alpha.5).
 
-## Build
+## Getting started
+
+### Building the Library
 
 ```shell
 # Check clippy
@@ -17,9 +19,9 @@ cargo test
 cargo tarpaulin -o lcov -o html --output-dir target/tarpaulin
 ```
 
-## Examples
+### Running the Examples
 
-The examples of up-transport-zenoh-rust can be found under examples folder.
+The [examples](examples) folder contains sample code illustrating how the crate can be used for the different message exchange patterns supported by uProtocol.
 Assume you're using debug build.[^1]
 
 ```shell
@@ -40,11 +42,21 @@ Assume you're using debug build.[^1]
 ```
 
 For the advanced Zenoh configuration, you can either use `-h` to see more details or pass the configuration file with `-c`.
-The configuration file example is under the folder `config`.
+The example configuration file is located in the [config folder](config).
 
-## Note
+## Using the Library
 
-This crate implements the Zenoh transport as specified in [uProtocol v1.6.0-alpha.5](https://github.com/eclipse-uprotocol/up-spec/tree/v1.6.0-alpha.5).
+Most developers will want to create an instance of the *UPTransportZenoh* struct and use it with the Communication Level API and its default implementation which are provided by the *up-rust* library.
+
+The libraries need to be added to the `[dependencies]` section of the `Cargo.toml` file:
+
+```toml
+[dependencies]
+up-rust = { version = "0.6" }
+up-transport-zenoh = { version = "0.7" }
+```
+
+Please refer to the [publisher](/examples/publisher.rs) and [subscriber](/examples/subscriber.rs) examples to see how to initialize and use the transport.
 
 ## Change Log
 
