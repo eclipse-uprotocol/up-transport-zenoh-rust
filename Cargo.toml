@@ -46,7 +46,7 @@ chrono = "0.4.41"
 clap = { version = "4.5.40", features = ["derive"] }
 serde_json = "1.0.128"
 test-case = { version = "3.3" }
-up-rust = { version = "0.6.0", features = ["communication"] }
+up-rust = { version = "0.6.0", features = ["communication", "test-util"] }
 
 [features]
 default = []
