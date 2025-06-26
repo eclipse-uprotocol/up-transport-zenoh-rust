@@ -58,6 +58,64 @@ up-transport-zenoh = { version = "0.7" }
 
 Please refer to the [publisher](/examples/publisher.rs) and [subscriber](/examples/subscriber.rs) examples to see how to initialize and use the transport.
 
+### Supported Service Classes
+`uman~supported-service-classes~1`
+
+The Zenoh transport supports all service classes defined by uProtocol and maps them to corresponding Zenoh message priority levels.
+
+Covers:
+- `req~utransport-send-qos-mapping~1`
+
+### Supported Message Delivery Methods
+`uman~supported-message-delivery-methods~1`
+
+The transport provided by this crate supports the [push delivery method](https://github.com/eclipse-uprotocol/up-spec/blob/v1.6.0-alpha.5/up-l1/README.adoc#5-message-delivery) only.
+The `UPTransportZenoh::receive` function therefore always returns `UCode::UNIMPLEMENTED`.
+
+Covers:
+- `req~utransport-delivery-methods~1`
+
+### Authentication & Authorization
+`uman~auth-configuration~1`
+
+The transport provided by this crate can be configured with credentials that the transport will provide to the Zenoh router during connection establishment. A [_username_ and _password_](https://zenoh.io/docs/manual/user-password/) can be specified in the Zenoh config file that is passed into the `UPTransportZenoh::new` function to create a new transport instance.
+
+Access to resources can be configured in the Zenoh config file by means of [Access Control Lists](https://zenoh.io/docs/manual/access-control/).
+
+Covers:
+- `req~utransport-send-error-permission-denied~2`
+
+
+## Design
+
+### Message Delivery
+`dsn~supported-message-delivery-methods~1`
+
+All messages are being received by means of subscribing to relevant Zenoh key patterns and delivering the messages to listeners that have been registered via `UPTransportZenoh::register_listener`.
+
+Rationale:
+The Zenoh protocol does not provide means to poll other nodes for messages but only supports the push model by means of clients subscribing to key patterns.
+
+Covers:
+- `req~utransport-delivery-methods~1`
+
+Needs: impl, itest
+
+### Authorization
+`dsn~utransport-authorization~1`
+
+In general, uProtocol entities are only allowed to send messages on their own behalf. Certain specific uEntities acting as a uProtocol Streamer also need to send messages _on behalf of_ other uEntities in order to fulfill their original purpose of routing messages hence and forth between different transports. Making these authoritzation decisions requires the (proven) establishment of an _identity_ and its _authorities_.
+
+The Zenoh transport delegates all authorization decisions to the Zenoh router that the transport is configured to connect to. For this purpose, the transport supports configuration of credentials which are being used during connection establishment. The Zenoh router uses the provided credentials to establish the client's identity and its associated authorities. Whenever the uEntity sends a message via the router or registers a subscriber for a key pattern, the router verifies, if the client is authorized to publish using the key or receive messages matching the key pattern.
+
+Rationale:
+The Zenoh transport is implemented as a library that is linked to the (custom) code that implements a uEntity's functionality. It is therefore not feasible to perform the authentication and authoritzation within the transport library code, because uEntities can not be forced to actually utilize one of uProtocol's transport libraries but may instead chooose to implement the binding to the transport protocol themselves.
+
+Covers:
+- `req~utransport-send-error-permission-denied~2`
+
+Needs: impl, utest
+
 ## Change Log
 
 Please refer to the [Releases on GitHub](https://github.com/eclipse-uprotocol/up-transport-zenoh-rust/releases) for the change log.

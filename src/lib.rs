@@ -17,9 +17,9 @@ use protobuf::Message;
 use std::{
     collections::HashMap,
     fmt::Display,
-    sync::{Arc, LazyLock, Mutex},
+    sync::{Arc, LazyLock},
 };
-use tokio::runtime::Runtime;
+use tokio::{runtime::Runtime, sync::Mutex};
 use tracing::error;
 use up_rust::{ComparableListener, LocalUriProvider, UAttributes, UCode, UPriority, UStatus, UUri};
 // Re-export Zenoh config
@@ -40,10 +40,11 @@ static CB_RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
         .expect("Unable to create callback runtime")
 });
 
-type SubscriberMap = Arc<Mutex<HashMap<(String, ComparableListener), Subscriber<()>>>>;
+// mapping of (Zenoh Key expression, Message Listener) ->  Zenoh Subscriber
+type SubscriberMap = Mutex<HashMap<(String, ComparableListener), Subscriber<()>>>;
+
 pub struct UPTransportZenoh {
     session: Arc<Session>,
-    // Able to unregister Subscriber
     subscriber_map: SubscriberMap,
     // URI
     local_uri: UUri,
@@ -137,7 +138,7 @@ impl UPTransportZenoh {
         // Return UPTransportZenoh
         Ok(UPTransportZenoh {
             session: Arc::new(session),
-            subscriber_map: Arc::new(Mutex::new(HashMap::new())),
+            subscriber_map: Mutex::new(HashMap::new()),
             local_uri,
         })
     }
@@ -207,6 +208,7 @@ impl UPTransportZenoh {
             UPriority::UPRIORITY_CS5 => Priority::InteractiveHigh,
             UPriority::UPRIORITY_CS6 => Priority::RealTime,
             // If uProtocol priority isn't specified, use CS1(DataLow) by default.
+            // [impl->dsn~up-attributes-priority~1]
             UPriority::UPRIORITY_UNSPECIFIED => Priority::DataLow,
         }
     }
@@ -247,9 +249,10 @@ impl UPTransportZenoh {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use protobuf::Message;
     use std::str::FromStr;
     use test_case::test_case;
-    use up_rust::UUri;
+    use up_rust::{UMessageBuilder, UUri};
 
     #[test_case("//vehicle1/AABB/7/0", true; "succeeds for valid URI")]
     #[test_case(UUri::try_from_parts("vehicle1", 0xAABB, 0x07, 0x00).unwrap(), true; "succeeds for valid UUri")]
@@ -313,5 +316,52 @@ mod tests {
                 zenoh_key.to_string()
             );
         }
+    }
+
+    #[test_case(UPriority::UPRIORITY_CS0, Priority::Background; "for CS0")]
+    #[test_case(UPriority::UPRIORITY_CS1, Priority::DataLow; "for CS1")]
+    #[test_case(UPriority::UPRIORITY_CS2, Priority::Data; "for CS2")]
+    #[test_case(UPriority::UPRIORITY_CS3, Priority::DataHigh; "for CS3")]
+    #[test_case(UPriority::UPRIORITY_CS4, Priority::InteractiveLow; "for CS4")]
+    #[test_case(UPriority::UPRIORITY_CS5, Priority::InteractiveHigh; "for CS5")]
+    #[test_case(UPriority::UPRIORITY_CS6, Priority::RealTime; "for CS6")]
+    #[test_case(UPriority::UPRIORITY_UNSPECIFIED, Priority::DataLow; "for UNSPECIFIED")]
+    // [utest->dsn~up-transport-zenoh-message-priority-mapping~1]
+    fn test_map_zenoh_priority(prio: UPriority, expected_zenoh_prio: Priority) {
+        assert_eq!(
+            UPTransportZenoh::map_zenoh_priority(prio),
+            expected_zenoh_prio
+        );
+    }
+
+    #[test]
+    // [utest->dsn~up-attributes-priority~1]
+    fn test_map_zenoh_priority_applies_default_priority() {
+        let default_zenoh_priority =
+            UPTransportZenoh::map_zenoh_priority(UPriority::UPRIORITY_UNSPECIFIED);
+        assert_eq!(
+            default_zenoh_priority,
+            UPTransportZenoh::map_zenoh_priority(UPriority::UPRIORITY_CS1)
+        );
+    }
+
+    #[test]
+    // [utest->dsn~up-transport-zenoh-attributes-mapping~1]
+    fn test_uattributes_to_attachment() {
+        let msg = UMessageBuilder::publish(
+            UUri::try_from_parts("vehicle", 0xABCD, 1, 0xA165).expect("invalid topic"),
+        )
+        .build()
+        .expect("failed to create message");
+        let attributes = msg.attributes.as_ref().expect("message has no attributes");
+        let attachment = UPTransportZenoh::uattributes_to_attachment(attributes)
+            .expect("failed to create attachment");
+
+        assert!(attachment.len() >= 2);
+        let attachment_bytes = attachment.to_bytes();
+        let ver = attachment_bytes[0];
+        assert!(ver == UPROTOCOL_MAJOR_VERSION);
+        assert!(UAttributes::parse_from_bytes(&attachment_bytes[1..])
+            .is_ok_and(|deserialized_attributes| &deserialized_attributes == attributes));
     }
 }
