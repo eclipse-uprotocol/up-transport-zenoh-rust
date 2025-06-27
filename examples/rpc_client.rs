@@ -48,7 +48,7 @@ async fn main() {
     UPTransportZenoh::try_init_log_from_env();
 
     println!("uProtocol RPC client example");
-    let rpc_client = UPTransportZenoh::new(common::get_zenoh_config(), "//rpc_client/1/1/0")
+    let rpc_client = UPTransportZenoh::new(common::get_zenoh_config(), "//rpc_client/1/1/0", 10)
         .await
         .unwrap();
 

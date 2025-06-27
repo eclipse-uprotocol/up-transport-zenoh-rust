@@ -23,7 +23,7 @@ async fn main() {
     UPTransportZenoh::try_init_log_from_env();
 
     println!("uProtocol notifier example");
-    let notifier = UPTransportZenoh::new(common::get_zenoh_config(), "//notification/1/1/0")
+    let notifier = UPTransportZenoh::new(common::get_zenoh_config(), "//notification/1/1/0", 10)
         .await
         .unwrap();
 

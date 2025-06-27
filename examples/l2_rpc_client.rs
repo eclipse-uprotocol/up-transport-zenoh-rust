@@ -26,7 +26,7 @@ async fn main() {
 
     println!("uProtocol RPC client example");
     let zenoh_transport = Arc::new(
-        UPTransportZenoh::new(common::get_zenoh_config(), "//rpc_client/1/1/0")
+        UPTransportZenoh::new(common::get_zenoh_config(), "//rpc_client/1/1/0", 10)
             .await
             .unwrap(),
     );

@@ -35,7 +35,7 @@ async fn main() {
     UPTransportZenoh::try_init_log_from_env();
 
     println!("uProtocol notification receiver example");
-    let receiver = UPTransportZenoh::new(common::get_zenoh_config(), "//receiver/2/1/0")
+    let receiver = UPTransportZenoh::new(common::get_zenoh_config(), "//receiver/2/1/0", 10)
         .await
         .unwrap();
 

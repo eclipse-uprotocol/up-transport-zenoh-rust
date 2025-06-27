@@ -75,7 +75,7 @@ async fn main() {
 
     println!("uProtocol RPC server example");
     let rpc_server = Arc::new(
-        UPTransportZenoh::new(common::get_zenoh_config(), "//rpc_server/1/1/0")
+        UPTransportZenoh::new(common::get_zenoh_config(), "//rpc_server/1/1/0", 10)
             .await
             .unwrap(),
     );

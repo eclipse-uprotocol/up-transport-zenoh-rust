@@ -23,5 +23,5 @@ pub fn before_test() {
 /// # Errors
 /// Will return `Err` if unable to create `UPTransportZenoh`
 pub async fn create_up_transport_zenoh(uri: &str) -> Result<UPTransportZenoh, UStatus> {
-    UPTransportZenoh::new(zenoh_config::Config::default(), uri).await
+    UPTransportZenoh::new(zenoh_config::Config::default(), uri, 100).await
 }

@@ -35,7 +35,7 @@ mod tests {
     use crate::*;
     use std::str::FromStr;
     use test_case::test_case;
-    use up_rust::UUri;
+    use up_rust::{LocalUriProvider, UUri};
 
     #[test_case("//vehicle1/AABB/7/0", "vehicle1", 0x8001, UUri::from_str("//vehicle1/AABB/7/0").unwrap(); "Publish/Notification Resource ID")]
     #[test_case("//192.168.0.1/A1B2/1/0", "192.168.0.1", 0xA, UUri::from_str("//192.168.0.1/A1B2/1/0").unwrap(); "RPC Resource ID")]
@@ -46,7 +46,7 @@ mod tests {
         resource_id: u16,
         source_uri: UUri,
     ) {
-        let up_transport_zenoh = UPTransportZenoh::new(zenoh_config::Config::default(), uri)
+        let up_transport_zenoh = UPTransportZenoh::new(zenoh_config::Config::default(), uri, 10)
             .await
             .unwrap();
         assert_eq!(up_transport_zenoh.get_authority(), authority);

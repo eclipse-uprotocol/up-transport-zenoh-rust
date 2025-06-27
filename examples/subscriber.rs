@@ -35,7 +35,7 @@ async fn main() {
     UPTransportZenoh::try_init_log_from_env();
 
     println!("uProtocol subscriber example");
-    let subscriber = UPTransportZenoh::new(common::get_zenoh_config(), "//subscriber/2/1/0")
+    let subscriber = UPTransportZenoh::new(common::get_zenoh_config(), "//subscriber/2/1/0", 10)
         .await
         .unwrap();
 

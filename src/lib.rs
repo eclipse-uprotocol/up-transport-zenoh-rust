@@ -10,43 +10,26 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  ********************************************************************************/
+mod listener_registry;
 pub mod uri_provider;
 pub mod utransport;
 
-use protobuf::Message;
-use std::{
-    collections::HashMap,
-    fmt::Display,
-    sync::{Arc, LazyLock},
-};
-use tokio::{runtime::Runtime, sync::Mutex};
+use std::{fmt::Display, sync::Arc};
+
+use listener_registry::ListenerRegistry;
 use tracing::error;
-use up_rust::{ComparableListener, LocalUriProvider, UAttributes, UCode, UPriority, UStatus, UUri};
+use up_rust::{UCode, UStatus, UUri};
 // Re-export Zenoh config
 pub use zenoh::config as zenoh_config;
 #[cfg(feature = "zenoh-unstable")]
 use zenoh::internal::runtime::Runtime as ZRuntime;
-use zenoh::{bytes::ZBytes, pubsub::Subscriber, qos::Priority, Session};
+use zenoh::Session;
 
 const UPROTOCOL_MAJOR_VERSION: u8 = 1;
-const THREAD_NUM: usize = 10;
-
-// Create a separate tokio Runtime for running the callback
-static CB_RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
-    tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(THREAD_NUM)
-        .enable_all()
-        .build()
-        .expect("Unable to create callback runtime")
-});
-
-// mapping of (Zenoh Key expression, Message Listener) ->  Zenoh Subscriber
-type SubscriberMap = Mutex<HashMap<(String, ComparableListener), Subscriber<()>>>;
 
 pub struct UPTransportZenoh {
     session: Arc<Session>,
-    subscriber_map: SubscriberMap,
-    // URI
+    subscribers: ListenerRegistry,
     local_uri: UUri,
 }
 
@@ -57,10 +40,14 @@ impl UPTransportZenoh {
     ///
     /// * `config` - The Zenoh configuration to use.
     ///   Please refer to the [Zenoh documentation](https://zenoh.io/docs/manual/configuration/) for details.
-    /// * `uri` - Local `UUri`. Note that the Authority of the `UUri` MUST be non-empty and the resource ID should be non-zero.
+    /// * `uri` - The uProtocol URI identifying the local uEntity. Its authority MUST be non-empty and the
+    ///   resource ID must be 0.
+    /// * `max_listeners` - The maximum number of listeners that can be registered with this transport.
     ///
     /// # Errors
-    /// Will return `Err` if unable to create `UPTransportZenoh`
+    ///
+    /// Returns an error if the transport cannot be created. Returns an error with `UCode::ILLEGAL_ARGUMENT`,
+    /// if the given URI has an empty authority or a non-zero resource ID.
     ///
     /// # Examples
     ///
@@ -68,13 +55,18 @@ impl UPTransportZenoh {
     /// #[tokio::main]
     /// # async fn main() {
     /// use up_transport_zenoh::{zenoh_config, UPTransportZenoh};
-    /// let uptransport =
-    ///     UPTransportZenoh::new(zenoh_config::Config::default(), "//MyAuthName/ABCD/1/0")
+    ///
+    /// assert!(
+    ///     UPTransportZenoh::new(zenoh_config::Config::default(), "//MyAuthName/ABCD/1/0", 10)
     ///         .await
-    ///         .unwrap();
+    ///         .is_ok());
     /// # }
     /// ```
-    pub async fn new<U>(config: zenoh_config::Config, uri: U) -> Result<UPTransportZenoh, UStatus>
+    pub async fn new<U>(
+        config: zenoh_config::Config,
+        uri: U,
+        max_listeners: usize,
+    ) -> Result<UPTransportZenoh, UStatus>
     where
         U: TryInto<UUri>,
         U::Error: Display,
@@ -85,7 +77,7 @@ impl UPTransportZenoh {
             error!("{msg}");
             return Err(UStatus::fail_with_code(UCode::INTERNAL, msg));
         };
-        UPTransportZenoh::init_with_session(session, uri)
+        UPTransportZenoh::init_with_session(session, uri, max_listeners)
     }
 
     /// Create `UPTransportZenoh` by applying the Zenoh Runtime and local `UUri`. This can be used by uStreamer.
@@ -94,12 +86,18 @@ impl UPTransportZenoh {
     /// # Arguments
     ///
     /// * `runtime` - Zenoh Runtime.
-    /// * `uri` - Local `UUri`. Note that the Authority of the `UUri` MUST be non-empty and the resource ID should be non-zero.
+    /// * `uri` - The uProtocol URI identifying the local uEntity. Its authority MUST be non-empty and the
+    ///   resource ID must be 0.
+    /// * `max_listeners` - The maximum number of listeners that can be registered with this transport.
     ///
     /// # Errors
     /// Will return `Err` if unable to create `UPTransportZenoh`
     #[cfg(feature = "zenoh-unstable")]
-    pub async fn new_with_runtime<U>(runtime: ZRuntime, uri: U) -> Result<UPTransportZenoh, UStatus>
+    pub async fn new_with_runtime<U>(
+        runtime: ZRuntime,
+        uri: U,
+        max_listeners: usize,
+    ) -> Result<UPTransportZenoh, UStatus>
     where
         U: TryInto<UUri>,
         U::Error: Display,
@@ -109,10 +107,14 @@ impl UPTransportZenoh {
             error!("{msg}");
             return Err(UStatus::fail_with_code(UCode::INTERNAL, msg));
         };
-        UPTransportZenoh::init_with_session(session, uri)
+        UPTransportZenoh::init_with_session(session, uri, max_listeners)
     }
 
-    fn init_with_session<U>(session: Session, uri: U) -> Result<UPTransportZenoh, UStatus>
+    fn init_with_session<U>(
+        session: Session,
+        uri: U,
+        max_listeners: usize,
+    ) -> Result<UPTransportZenoh, UStatus>
     where
         U: TryInto<UUri>,
         U::Error: Display,
@@ -131,14 +133,15 @@ impl UPTransportZenoh {
         }
         // Make sure the resource ID is always 0
         if local_uri.resource_id != 0 {
-            let msg = "Resource ID should always be 0".to_string();
+            let msg = "Resource ID must be 0".to_string();
             error!("{msg}");
             return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg));
         }
+        let session_to_use = Arc::new(session);
         // Return UPTransportZenoh
         Ok(UPTransportZenoh {
-            session: Arc::new(session),
-            subscriber_map: Mutex::new(HashMap::new()),
+            session: session_to_use.clone(),
+            subscribers: ListenerRegistry::new(session_to_use, max_listeners),
             local_uri,
         })
     }
@@ -147,221 +150,27 @@ impl UPTransportZenoh {
     pub fn try_init_log_from_env() {
         zenoh::init_log_from_env_or("");
     }
-
-    // [impl->dsn~up-transport-zenoh-key-expr~1]
-    fn uri_to_zenoh_key(&self, uri: &UUri) -> String {
-        // authority_name
-        let authority = if uri.authority_name.is_empty() {
-            self.get_authority()
-        } else {
-            uri.authority_name()
-        };
-        // ue_type
-        let ue_type = if uri.has_wildcard_entity_type() {
-            "*".to_string()
-        } else {
-            format!("{:X}", uri.uentity_type_id())
-        };
-        // ue_instance
-        let ue_instance = if uri.has_wildcard_entity_instance() {
-            "*".to_string()
-        } else {
-            format!("{:X}", uri.uentity_instance_id())
-        };
-        // ue_version_major
-        let ue_version_major = if uri.has_wildcard_version() {
-            "*".to_string()
-        } else {
-            format!("{:X}", uri.uentity_major_version())
-        };
-        // resource_id
-        let resource_id = if uri.has_wildcard_resource_id() {
-            "*".to_string()
-        } else {
-            format!("{:X}", uri.resource_id())
-        };
-        format!("{authority}/{ue_type}/{ue_instance}/{ue_version_major}/{resource_id}")
-    }
-
-    // The format of Zenoh key should be
-    // up/[src.authority]/[src.ue_type]/[src.ue_instance]/[src.ue_version_major]/[src.resource_id]/[sink.authority]/[sink.ue_type]/[sink.ue_instance]/[sink.ue_version_major]/[sink.resource_id]
-    // [impl->dsn~up-transport-zenoh-key-expr~1]
-    fn to_zenoh_key_string(&self, src_uri: &UUri, dst_uri: Option<&UUri>) -> String {
-        let src = self.uri_to_zenoh_key(src_uri);
-        let dst = if let Some(dst) = dst_uri {
-            self.uri_to_zenoh_key(dst)
-        } else {
-            "{}/{}/{}/{}/{}".to_string()
-        };
-        format!("up/{src}/{dst}")
-    }
-
-    // [impl->dsn~up-transport-zenoh-message-priority-mapping~1]
-    #[allow(clippy::match_same_arms)]
-    fn map_zenoh_priority(upriority: UPriority) -> Priority {
-        match upriority {
-            UPriority::UPRIORITY_CS0 => Priority::Background,
-            UPriority::UPRIORITY_CS1 => Priority::DataLow,
-            UPriority::UPRIORITY_CS2 => Priority::Data,
-            UPriority::UPRIORITY_CS3 => Priority::DataHigh,
-            UPriority::UPRIORITY_CS4 => Priority::InteractiveLow,
-            UPriority::UPRIORITY_CS5 => Priority::InteractiveHigh,
-            UPriority::UPRIORITY_CS6 => Priority::RealTime,
-            // If uProtocol priority isn't specified, use CS1(DataLow) by default.
-            // [impl->dsn~up-attributes-priority~1]
-            UPriority::UPRIORITY_UNSPECIFIED => Priority::DataLow,
-        }
-    }
-
-    // [impl->dsn~up-transport-zenoh-attributes-mapping~1]
-    fn uattributes_to_attachment(uattributes: &UAttributes) -> anyhow::Result<ZBytes> {
-        let mut writer = ZBytes::writer();
-        writer.append(ZBytes::from(UPROTOCOL_MAJOR_VERSION.to_le_bytes().to_vec()));
-        writer.append(ZBytes::from(uattributes.write_to_bytes()?));
-        let zbytes = writer.finish();
-        Ok(zbytes)
-    }
-
-    fn attachment_to_uattributes(attachment: &ZBytes) -> anyhow::Result<UAttributes> {
-        if attachment.len() < 2 {
-            return Err(UStatus::fail_with_code(
-                UCode::INVALID_ARGUMENT,
-                "message has no/invalid attachment",
-            )
-            .into());
-        }
-
-        let attachment_bytes = attachment.to_bytes();
-        let ver = attachment_bytes[0];
-        if ver != UPROTOCOL_MAJOR_VERSION {
-            let msg = format!(
-                "Expected UAttributes version {UPROTOCOL_MAJOR_VERSION} but found version {ver}"
-            );
-            error!("{msg}");
-            return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg).into());
-        }
-        // Get the attributes
-        let uattributes = UAttributes::parse_from_bytes(&attachment_bytes[1..])?;
-        Ok(uattributes)
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use protobuf::Message;
-    use std::str::FromStr;
     use test_case::test_case;
-    use up_rust::{UMessageBuilder, UUri};
+    use up_rust::UUri;
 
-    #[test_case("//vehicle1/AABB/7/0", true; "succeeds for valid URI")]
-    #[test_case(UUri::try_from_parts("vehicle1", 0xAABB, 0x07, 0x00).unwrap(), true; "succeeds for valid UUri")]
-    #[test_case("This is not UUri", false; "fails for invalid URI")]
-    #[test_case("/AABB/7/0", false; "fails for empty UAuthority")]
-    #[test_case("//vehicle1/AABB/7/1", false; "fails for non-zero resource ID")]
+    #[test_case("//vehicle1/AABB/7/0" => true; "succeeds for valid URI")]
+    #[test_case(UUri::try_from_parts("vehicle1", 0xAABB, 0x07, 0x00).unwrap() => true; "succeeds for valid UUri")]
+    #[test_case("This is not UUri" => false; "fails for invalid URI")]
+    #[test_case("/AABB/7/0" => false; "fails for empty UAuthority")]
+    #[test_case("//vehicle1/AABB/7/1" => false; "fails for non-zero resource ID")]
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_new_up_transport_zenoh<U>(uri: U, expected_result: bool)
+    async fn test_new_up_transport_zenoh<U>(uri: U) -> bool
     where
         U: TryInto<UUri>,
         U::Error: Display,
     {
-        let up_transport_zenoh = UPTransportZenoh::new(zenoh_config::Config::default(), uri).await;
-        assert_eq!(up_transport_zenoh.is_ok(), expected_result);
-    }
-
-    #[test_case("//1.2.3.4/1234/2/8001", "1.2.3.4/1234/0/2/8001"; "Standard")]
-    #[test_case("/1234/2/8001", "local_authority/1234/0/2/8001"; "Standard without authority")]
-    #[test_case("//1.2.3.4/12345678/2/8001", "1.2.3.4/5678/1234/2/8001"; "Standard with entity instance")]
-    #[test_case("//1.2.3.4/FFFF5678/2/8001", "1.2.3.4/5678/*/2/8001"; "Standard with wildcard entity instance")]
-    #[test_case("//*/FFFFFFFF/FF/FFFF", "*/*/*/*/*"; "All wildcard")]
-    #[tokio::test(flavor = "multi_thread")]
-    // [utest->dsn~up-transport-zenoh-key-expr~1]
-    async fn uri_to_zenoh_key(src_uri: &str, zenoh_key: &str) {
-        let up_transport_zenoh = UPTransportZenoh::new(
-            zenoh_config::Config::default(),
-            "//local_authority/1234/5/0",
-        )
-        .await
-        .unwrap();
-        let src = UUri::from_str(src_uri).unwrap();
-        let zenoh_key_string = up_transport_zenoh.uri_to_zenoh_key(&src);
-        assert_eq!(zenoh_key_string, zenoh_key);
-    }
-
-    // Mapping with the examples in Zenoh spec
-    #[test_case("/10AB/3/80CD", None, "up/device1/10AB/0/3/80CD/{}/{}/{}/{}/{}"; "Send Publish")]
-    #[test_case("up://device1/10AB/3/80CD", Some("//device2/300EF/4/0"), "up/device1/10AB/0/3/80CD/device2/EF/3/4/0"; "Send Notification")]
-    #[test_case("/403AB/3/0", Some("//device2/CD/4/B"), "up/device1/3AB/4/3/0/device2/CD/0/4/B"; "Send RPC Request")]
-    #[test_case("up://device2/10AB/3/80CD", None, "up/device2/10AB/0/3/80CD/{}/{}/{}/{}/{}"; "Subscribe messages")]
-    #[test_case("//*/FFFFFFFF/FF/FFFF", Some("/300EF/4/0"), "up/*/*/*/*/*/device1/EF/3/4/0"; "Receive all Notifications")]
-    #[test_case("up://*/FFFF05A1/2/FFFF", Some("up://device1/300EF/4/B18"), "up/*/5A1/*/2/*/device1/EF/3/4/B18"; "Receive all RPC Requests from a specific entity type")]
-    #[test_case("//*/FFFFFFFF/FF/FFFF", Some("//device1/FFFFFFFF/FF/FFFF"), "up/*/*/*/*/*/device1/*/*/*/*"; "Receive all messages to the local authority")]
-    #[tokio::test(flavor = "multi_thread")]
-    // [utest->dsn~up-transport-zenoh-key-expr~1]
-    async fn test_to_zenoh_key_string(src_uri: &str, sink_uri: Option<&str>, zenoh_key: &str) {
-        let up_transport_zenoh =
-            UPTransportZenoh::new(zenoh_config::Config::default(), "//device1/10AB/3/0")
-                .await
-                .unwrap();
-        let src = UUri::from_str(src_uri).unwrap();
-        if let Some(sink) = sink_uri {
-            let sink = UUri::from_str(sink).unwrap();
-            assert_eq!(
-                up_transport_zenoh.to_zenoh_key_string(&src, Some(&sink)),
-                zenoh_key.to_string()
-            );
-        } else {
-            assert_eq!(
-                up_transport_zenoh.to_zenoh_key_string(&src, None),
-                zenoh_key.to_string()
-            );
-        }
-    }
-
-    #[test_case(UPriority::UPRIORITY_CS0, Priority::Background; "for CS0")]
-    #[test_case(UPriority::UPRIORITY_CS1, Priority::DataLow; "for CS1")]
-    #[test_case(UPriority::UPRIORITY_CS2, Priority::Data; "for CS2")]
-    #[test_case(UPriority::UPRIORITY_CS3, Priority::DataHigh; "for CS3")]
-    #[test_case(UPriority::UPRIORITY_CS4, Priority::InteractiveLow; "for CS4")]
-    #[test_case(UPriority::UPRIORITY_CS5, Priority::InteractiveHigh; "for CS5")]
-    #[test_case(UPriority::UPRIORITY_CS6, Priority::RealTime; "for CS6")]
-    #[test_case(UPriority::UPRIORITY_UNSPECIFIED, Priority::DataLow; "for UNSPECIFIED")]
-    // [utest->dsn~up-transport-zenoh-message-priority-mapping~1]
-    fn test_map_zenoh_priority(prio: UPriority, expected_zenoh_prio: Priority) {
-        assert_eq!(
-            UPTransportZenoh::map_zenoh_priority(prio),
-            expected_zenoh_prio
-        );
-    }
-
-    #[test]
-    // [utest->dsn~up-attributes-priority~1]
-    fn test_map_zenoh_priority_applies_default_priority() {
-        let default_zenoh_priority =
-            UPTransportZenoh::map_zenoh_priority(UPriority::UPRIORITY_UNSPECIFIED);
-        assert_eq!(
-            default_zenoh_priority,
-            UPTransportZenoh::map_zenoh_priority(UPriority::UPRIORITY_CS1)
-        );
-    }
-
-    #[test]
-    // [utest->dsn~up-transport-zenoh-attributes-mapping~1]
-    fn test_uattributes_to_attachment() {
-        let msg = UMessageBuilder::publish(
-            UUri::try_from_parts("vehicle", 0xABCD, 1, 0xA165).expect("invalid topic"),
-        )
-        .build()
-        .expect("failed to create message");
-        let attributes = msg.attributes.as_ref().expect("message has no attributes");
-        let attachment = UPTransportZenoh::uattributes_to_attachment(attributes)
-            .expect("failed to create attachment");
-
-        assert!(attachment.len() >= 2);
-        let attachment_bytes = attachment.to_bytes();
-        let ver = attachment_bytes[0];
-        assert!(ver == UPROTOCOL_MAJOR_VERSION);
-        assert!(UAttributes::parse_from_bytes(&attachment_bytes[1..])
-            .is_ok_and(|deserialized_attributes| &deserialized_attributes == attributes));
+        UPTransportZenoh::new(zenoh_config::Config::default(), uri, 10)
+            .await
+            .is_ok()
     }
 }
