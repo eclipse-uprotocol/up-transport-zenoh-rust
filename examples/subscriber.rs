@@ -30,23 +30,24 @@ impl UListener for SubscriberListener {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // initiate logging
     UPTransportZenoh::try_init_log_from_env();
 
     println!("uProtocol subscriber example");
-    let subscriber = UPTransportZenoh::new(common::get_zenoh_config(), "//subscriber/2/1/0", 10)
-        .await
-        .unwrap();
+    let subscriber = UPTransportZenoh::builder("//subscriber/2/1/0")
+        .expect("invalid URI")
+        .with_config(common::get_zenoh_config())
+        .build()
+        .await?;
 
     // create uuri
-    let uuri = UUri::from_str("//publisher/1/1/8001").unwrap();
+    let uuri = UUri::from_str("//publisher/1/1/8001")?;
 
     println!("Register the listener...");
     subscriber
         .register_listener(&uuri, None, Arc::new(SubscriberListener {}))
-        .await
-        .unwrap();
+        .await?;
 
     loop {
         sleep(Duration::from_millis(1000)).await;

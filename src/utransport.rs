@@ -316,10 +316,11 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     // [utest->dsn~utransport-receive-error-unimplemented~1]
     async fn test_receive_fails() {
-        let up_transport_zenoh =
-            UPTransportZenoh::new(zenoh::config::Config::default(), "//vehicle1/AABB/7/0", 10)
-                .await
-                .expect("failed to create transport");
+        let up_transport_zenoh = UPTransportZenoh::builder("//vehicle1/AABB/7/0")
+            .expect("invalid URI")
+            .build()
+            .await
+            .expect("failed to create transport");
         let source_filter = UUri::try_from_parts("vehicle2", 0xAACC, 0x01, 0x1)
             .expect("failed to create source filter");
         assert!(up_transport_zenoh
@@ -347,10 +348,11 @@ mod tests {
         source_filter_uri: &str,
         sink_filter_uri: Option<&str>,
     ) {
-        let up_transport_zenoh =
-            UPTransportZenoh::new(zenoh::config::Config::default(), "//vehicle2/AABB/7/0", 10)
-                .await
-                .expect("failed to create transport");
+        let up_transport_zenoh = UPTransportZenoh::builder("//vehicle1/AABB/7/0")
+            .expect("invalid URI")
+            .build()
+            .await
+            .expect("failed to create transport");
 
         let source_filter =
             UUri::from_str(source_filter_uri).expect("failed to create source filter");
@@ -375,10 +377,12 @@ mod tests {
     // [utest->dsn~utransport-registerlistener-error-resource-exhausted~1]
     // [utest->req~utransport-registerlistener-max-listeners~1]
     async fn test_register_listener_fails_if_max_listeners_has_been_reached() {
-        let up_transport_zenoh =
-            UPTransportZenoh::new(zenoh::config::Config::default(), "//vehicle2/AABB/7/0", 1)
-                .await
-                .expect("failed to create transport");
+        let up_transport_zenoh = UPTransportZenoh::builder("//vehicle1/AABB/7/0")
+            .expect("invalid URI")
+            .with_max_listeners(1)
+            .build()
+            .await
+            .expect("failed to create transport");
 
         // fill the listener registry
         let source_filter = UUri::try_from_parts("vehicle", 0xaabb, 0x07, 0xabcd).unwrap();
@@ -405,10 +409,11 @@ mod tests {
     #[test_case("//src/FFFF/FF/FFFF", Some("//*/FFFF/FF/FFFF"); "uStreamer case")]
     #[tokio::test(flavor = "multi_thread")]
     async fn test_register_and_unregister(source_filter_uri: &str, sink_filter_uri: Option<&str>) {
-        let up_transport_zenoh =
-            UPTransportZenoh::new(zenoh::config::Config::default(), "//vehicle2/AABB/7/0", 10)
-                .await
-                .expect("failed to create transport");
+        let up_transport_zenoh = UPTransportZenoh::builder("//vehicle1/AABB/7/0")
+            .expect("invalid URI")
+            .build()
+            .await
+            .expect("failed to create transport");
         let source_filter = UUri::from_str(source_filter_uri).unwrap();
         let sink_filter = sink_filter_uri.map(|f| UUri::from_str(f).unwrap());
         let foo_listener = Arc::new(MockUListener::new());
@@ -456,10 +461,11 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     // [utest->dsn~utransport-send-error-invalid-parameter~1]
     async fn test_send_fails_for_invalid_attributes() {
-        let up_transport_zenoh =
-            UPTransportZenoh::new(zenoh::config::Config::default(), "//vehicle2/AABB/7/0", 10)
-                .await
-                .expect("failed to create transport");
+        let up_transport_zenoh = UPTransportZenoh::builder("//vehicle2/AABB/7/0")
+            .expect("invalid URI")
+            .build()
+            .await
+            .expect("failed to create transport");
         // invalid notification message, lacking sink address
         let message = UMessage {
             attributes: Some(UAttributes {

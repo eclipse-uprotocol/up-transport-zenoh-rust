@@ -50,8 +50,8 @@ pub struct Args {
     no_multicast_scouting: bool,
 }
 
-#[allow(clippy::must_use_candidate, clippy::missing_panics_doc)]
-pub fn get_zenoh_config() -> zenoh_config::Config {
+// #[allow(clippy::must_use_candidate, clippy::missing_panics_doc)]
+pub(crate) fn get_zenoh_config() -> zenoh_config::Config {
     let args = Args::parse();
 
     // Load the config from file path

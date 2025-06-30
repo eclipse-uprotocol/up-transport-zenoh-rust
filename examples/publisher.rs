@@ -17,14 +17,16 @@ use up_rust::{LocalUriProvider, UMessageBuilder, UPayloadFormat, UTransport};
 use up_transport_zenoh::UPTransportZenoh;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // initiate logging
     UPTransportZenoh::try_init_log_from_env();
 
     println!("uProtocol publisher example");
-    let publisher = UPTransportZenoh::new(common::get_zenoh_config(), "//publisher/1/1/0", 10)
-        .await
-        .unwrap();
+    let publisher = UPTransportZenoh::builder("//publisher/1/1/0")
+        .expect("invalid URI")
+        .with_config(common::get_zenoh_config())
+        .build()
+        .await?;
 
     // create uuri
     let uuri = publisher.get_resource_uri(0x8001);

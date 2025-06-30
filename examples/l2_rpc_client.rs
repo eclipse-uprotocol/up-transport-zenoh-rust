@@ -10,6 +10,15 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  ********************************************************************************/
+
+/*!
+This example illustrates how uProtocol's Communication Layer API can be used to perform
+an RPC using the Zenoh transport.
+
+In order to successfully run this example, the `rpc_server` example needs to be started
+first.
+*/
+
 mod common;
 
 use std::{str::FromStr, sync::Arc};
@@ -20,22 +29,23 @@ use up_rust::{
 use up_transport_zenoh::UPTransportZenoh;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // initiate logging
     UPTransportZenoh::try_init_log_from_env();
 
     println!("uProtocol RPC client example");
-    let zenoh_transport = Arc::new(
-        UPTransportZenoh::new(common::get_zenoh_config(), "//rpc_client/1/1/0", 10)
-            .await
-            .unwrap(),
-    );
+    let zenoh_transport = UPTransportZenoh::builder("//rpc_client/1/1/0")
+        .expect("invalid URI")
+        .with_config(common::get_zenoh_config())
+        .build()
+        .await
+        .map(Arc::new)?;
+
     let rpc_client = InMemoryRpcClient::new(zenoh_transport.clone(), zenoh_transport.clone())
         .await
-        .map(Arc::new)
-        .expect("failed to create RpcClient for Zenoh transport");
+        .map(Arc::new)?;
 
-    let sink_uuri = UUri::from_str("//rpc_server/1/1/1").unwrap();
+    let sink_uuri = UUri::from_str("//rpc_server/1/1/1")?;
 
     // create uPayload and send request
     let data = String::from("GetCurrentTime");
@@ -51,19 +61,19 @@ async fn main() {
         zenoh_transport.get_source_uri(),
         sink_uuri
     );
-    let result = rpc_client
+    match rpc_client
         .invoke_method(sink_uuri, call_options, Some(payload))
-        .await;
-
-    // process the result
-    match result {
+        .await
+    {
         Ok(result) => {
             let payload = result.unwrap().payload();
             let value = payload.into_iter().map(|c| c as char).collect::<String>();
             println!("Receive {value}");
+            Ok(())
         }
-        Err(_) => {
+        Err(e) => {
             println!("Failed to receive the reply");
+            Err(Box::from(e))
         }
     }
 }

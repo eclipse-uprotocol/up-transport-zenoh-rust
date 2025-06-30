@@ -43,42 +43,42 @@ impl UListener for ResponseListener {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // initiate logging
     UPTransportZenoh::try_init_log_from_env();
 
     println!("uProtocol RPC client example");
-    let rpc_client = UPTransportZenoh::new(common::get_zenoh_config(), "//rpc_client/1/1/0", 10)
-        .await
-        .unwrap();
+    let rpc_client = UPTransportZenoh::builder("//rpc_client/1/1/0")
+        .expect("invalid URI")
+        .with_config(common::get_zenoh_config())
+        .build()
+        .await?;
 
     // create uuri
     let src_uuri = rpc_client.get_source_uri();
-    let sink_uuri = UUri::from_str("//rpc_server/1/1/1").unwrap();
+    let sink_uuri = UUri::from_str("//rpc_server/1/1/1")?;
 
     // register response callback
     let notify = Arc::new(Notify::new());
     let resp_listener = Arc::new(ResponseListener::new(notify.clone()));
     rpc_client
         .register_listener(&sink_uuri, Some(&src_uuri), resp_listener.clone())
-        .await
-        .unwrap();
+        .await?;
 
     // create uPayload and send request
     let data = String::from("GetCurrentTime");
     let umsg = UMessageBuilder::request(sink_uuri.clone(), src_uuri.clone(), DEFAULT_TIMEOUT)
-        .build_with_payload(data, UPayloadFormat::UPAYLOAD_FORMAT_TEXT)
-        .unwrap();
+        .build_with_payload(data, UPayloadFormat::UPAYLOAD_FORMAT_TEXT)?;
     println!("Sending request from {src_uuri} to {sink_uuri}");
-    rpc_client.send(umsg).await.unwrap();
+    rpc_client.send(umsg).await?;
 
-    match tokio::time::timeout(
+    tokio::time::timeout(
         Duration::from_millis(u64::from(DEFAULT_TIMEOUT)),
         notify.notified(),
     )
     .await
-    {
-        Ok(()) => {}
-        Err(_) => println!("Failed to receive the reply"),
-    };
+    .map_err(|err| {
+        println!("Failed to receive the reply: {err}");
+        Box::from(err)
+    })
 }

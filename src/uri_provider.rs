@@ -46,9 +46,11 @@ mod tests {
         resource_id: u16,
         source_uri: UUri,
     ) {
-        let up_transport_zenoh = UPTransportZenoh::new(zenoh_config::Config::default(), uri, 10)
+        let up_transport_zenoh = UPTransportZenoh::builder(uri)
+            .expect("Invalid URI")
+            .build()
             .await
-            .unwrap();
+            .expect("Failed to create UPTransportZenoh");
         assert_eq!(up_transport_zenoh.get_authority(), authority);
         assert_eq!(
             up_transport_zenoh.get_resource_uri(resource_id).resource_id,

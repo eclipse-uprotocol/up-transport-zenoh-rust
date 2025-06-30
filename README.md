@@ -88,7 +88,7 @@ Covers:
 ### Maximum number of listeners
 `uman~max-listeners-configuration~1`
 
-The transport provided by this crate supports setting an upper limit to the number of (filter pattern, listener) tuples that can be registered by means of the corresponding parameter passed into the `UPTransportZenoh::new` function. Please refer to the [API Documentation](https://docs.rs/up-transport-zenoh/) for details.
+The transport provided by this crate supports setting an upper limit to the number of (filter pattern, listener) tuples that can be registered by means of the `UPTransportZenohBuilder::with_max_listeners` function. Please refer to the [API Documentation](https://docs.rs/up-transport-zenoh/) for details.
 
 Covers:
 - `req~utransport-registerlistener-max-listeners~1`
