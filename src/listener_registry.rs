@@ -174,7 +174,7 @@ impl ListenerRegistry {
             }
             Err(e) => {
                 let msg = "Failed to register listener";
-                info!("{msg}: {e}");
+                warn!("{msg}: {e}");
                 Err(UStatus::fail_with_code(UCode::INTERNAL, msg))
             }
         }
