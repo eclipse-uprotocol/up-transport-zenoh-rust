@@ -69,19 +69,20 @@ impl UListener for RpcListener {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // initiate logging
     UPTransportZenoh::try_init_log_from_env();
 
     println!("uProtocol RPC server example");
-    let rpc_server = Arc::new(
-        UPTransportZenoh::new(common::get_zenoh_config(), "//rpc_server/1/1/0")
-            .await
-            .unwrap(),
-    );
+    let rpc_server = UPTransportZenoh::builder("//rpc_server/1/1/0")
+        .expect("invalid URI")
+        .with_config(common::get_zenoh_config())
+        .build()
+        .await
+        .map(Arc::new)?;
 
     // create uuri
-    let src_uuri = UUri::from_str("//*/FFFF/FF/0").unwrap();
+    let src_uuri = UUri::from_str("//*/FFFF/FF/0")?;
     let sink_uuri = rpc_server.get_resource_uri(1);
 
     println!("Register the listener...");
@@ -91,8 +92,7 @@ async fn main() {
             Some(&sink_uuri),
             Arc::new(RpcListener::new(rpc_server.clone())),
         )
-        .await
-        .unwrap();
+        .await?;
 
     loop {
         sleep(Duration::from_millis(1000)).await;

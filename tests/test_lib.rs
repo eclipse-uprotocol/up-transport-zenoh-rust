@@ -11,8 +11,8 @@
  * SPDX-License-Identifier: Apache-2.0
  ********************************************************************************/
 use std::sync::Once;
-use up_rust::UStatus;
-use up_transport_zenoh::{zenoh_config, UPTransportZenoh};
+use up_rust::{UCode, UStatus};
+use up_transport_zenoh::UPTransportZenoh;
 
 static INIT: Once = Once::new();
 
@@ -23,5 +23,8 @@ pub fn before_test() {
 /// # Errors
 /// Will return `Err` if unable to create `UPTransportZenoh`
 pub async fn create_up_transport_zenoh(uri: &str) -> Result<UPTransportZenoh, UStatus> {
-    UPTransportZenoh::new(zenoh_config::Config::default(), uri).await
+    let builder = UPTransportZenoh::builder(uri).map_err(|e| {
+        UStatus::fail_with_code(UCode::INVALID_ARGUMENT, format!("Invalid URI: {e}"))
+    })?;
+    builder.build().await
 }

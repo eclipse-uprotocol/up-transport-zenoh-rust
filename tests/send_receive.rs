@@ -17,7 +17,8 @@ use std::{str::FromStr, sync::Arc};
 use tokio::{sync::Notify, time::Duration};
 use tracing::info;
 use up_rust::{
-    UCode, UListener, UMessage, UMessageBuilder, UPayloadFormat, UStatus, UTransport, UUri, UUID,
+    MockUListener, UCode, UListener, UMessage, UMessageBuilder, UPayloadFormat, UStatus,
+    UTransport, UUri, UUID,
 };
 
 const MESSAGE_DATA: &str = "Hello World!";
@@ -88,6 +89,7 @@ async fn test_publish_message_gets_delivered_to_listener(
         .with_ttl(ttl)
         .build_with_payload(MESSAGE_DATA, UPayloadFormat::UPAYLOAD_FORMAT_TEXT)?;
 
+    // [utest->dsn~utransport-registerlistener-start-invoking-listeners~1]
     register_listener_and_send(authority, umessage, &source_filter, None).await
 }
 
@@ -138,6 +140,7 @@ async fn test_notification_message_gets_delivered_to_listener(
         .with_ttl(ttl)
         .build_with_payload(MESSAGE_DATA, UPayloadFormat::UPAYLOAD_FORMAT_TEXT)?;
 
+    // [utest->dsn~utransport-registerlistener-start-invoking-listeners~1]
     register_listener_and_send(authority, umessage, &source_filter, Some(&sink_filter)).await
 }
 
@@ -182,6 +185,7 @@ async fn test_rpc_request_message_gets_delivered_to_listener(
         .with_permission_level(15)
         .build_with_payload(MESSAGE_DATA, UPayloadFormat::UPAYLOAD_FORMAT_TEXT)?;
 
+    // [utest->dsn~utransport-registerlistener-start-invoking-listeners~1]
     register_listener_and_send(authority, umessage, &source_filter, Some(&sink_filter)).await
 }
 
@@ -221,6 +225,7 @@ async fn test_rpc_response_message_gets_delivered_to_listener(
         .with_comm_status(up_rust::UCode::NOT_FOUND)
         .build_with_payload(MESSAGE_DATA, UPayloadFormat::UPAYLOAD_FORMAT_TEXT)?;
 
+    // [utest->dsn~utransport-registerlistener-start-invoking-listeners~1]
     register_listener_and_send(authority, umessage, &source_filter, Some(&sink_filter)).await
 }
 
@@ -260,5 +265,163 @@ async fn test_expired_rpc_request_message_is_not_delivered_to_listener() {
                 matches!(err.get_code(), UCode::DEADLINE_EXCEEDED)
             }),
         "Expected to fail with DEADLINE_EXCEEDED error for expired message"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_unregister_listener_stops_processing_of_messages() {
+    let local_uuri = UUri::try_from_parts("vehicle", 0xABC, 1, 0).expect("invalid local URI");
+    let transport = test_lib::create_up_transport_zenoh(local_uuri.to_uri(false).as_str())
+        .await
+        .expect("failed to create transport");
+
+    let message_received = Arc::new(Notify::new());
+    let message_received_barrier = message_received.clone();
+    let mut listener = MockUListener::new();
+    listener.expect_on_receive().returning(move |_msg| {
+        message_received.notify_one();
+    });
+
+    let listener_to_register = Arc::new(listener);
+    let msg =
+        UMessageBuilder::publish(UUri::from_str("//vehicle/123/1/9000").expect("invalid topic"))
+            .build()
+            .expect("failed to create message");
+
+    // [utest->dsn~utransport-registerlistener-start-invoking-listeners~1]
+    assert!(transport
+        .register_listener(&UUri::any(), None, listener_to_register.clone())
+        .await
+        .is_ok());
+
+    // first message is expected to be processed by listener
+    assert!(transport.send(msg.clone()).await.is_ok());
+    assert!(
+        tokio::time::timeout(Duration::from_secs(3), message_received_barrier.notified())
+            .await
+            .is_ok()
+    );
+
+    // [utest->dsn~utransport-unregisterlistener-stop-invoking-listeners~1]
+    // after unregistering the listener,
+    assert!(transport
+        .unregister_listener(&UUri::any(), None, listener_to_register)
+        .await
+        .is_ok());
+    //  no further messages should be processed
+    assert!(
+        tokio::time::timeout(Duration::from_secs(3), message_received_barrier.notified())
+            .await
+            .is_err(),
+        "Expected no further messages to be processed after unregistering the listener"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+// [utest->dsn~utransport-registerlistener-listener-reuse~1]
+async fn test_same_listener_can_be_registered_for_multiple_filters() {
+    let local_uuri = UUri::try_from_parts("vehicle", 0xABC, 1, 0).expect("invalid local URI");
+    let transport = test_lib::create_up_transport_zenoh(local_uuri.to_uri(false).as_str())
+        .await
+        .expect("failed to create transport");
+
+    let message_received = Arc::new(Notify::new());
+    let message_received_barrier = message_received.clone();
+    let mut listener = MockUListener::new();
+    listener.expect_on_receive().returning(move |_msg| {
+        message_received.notify_one();
+    });
+
+    let listener_to_register = Arc::new(listener);
+    let topic1 = UUri::try_from_parts("vehicle", 0x1234, 0x01, 0x9000).expect("invalid topic");
+    let topic2 = UUri::try_from_parts("vehicle", 0xABCD, 0x01, 0xA000).expect("invalid topic");
+
+    assert!(transport
+        .register_listener(&topic1, None, listener_to_register.clone())
+        .await
+        .is_ok());
+    assert!(transport
+        .register_listener(&topic2, None, listener_to_register.clone())
+        .await
+        .is_ok());
+
+    assert!(transport
+        .send(
+            UMessageBuilder::publish(topic1.clone())
+                .build()
+                .expect("failed to create message")
+        )
+        .await
+        .is_ok());
+    assert!(
+        tokio::time::timeout(Duration::from_secs(3), message_received_barrier.notified())
+            .await
+            .is_ok()
+    );
+
+    assert!(transport
+        .send(
+            UMessageBuilder::publish(topic2.clone())
+                .build()
+                .expect("failed to create message")
+        )
+        .await
+        .is_ok());
+    assert!(
+        tokio::time::timeout(Duration::from_secs(3), message_received_barrier.notified())
+            .await
+            .is_ok()
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+// [utest->dsn~utransport-registerlistener-number-of-listeners~1]
+async fn test_multiple_listeners_can_be_registered_for_the_same_filter() {
+    let local_uuri = UUri::try_from_parts("vehicle", 0xABC, 1, 0).expect("invalid local URI");
+    let transport = test_lib::create_up_transport_zenoh(local_uuri.to_uri(false).as_str())
+        .await
+        .expect("failed to create transport");
+
+    let message_received1 = Arc::new(Notify::new());
+    let message_received_barrier1 = message_received1.clone();
+    let mut listener1 = MockUListener::new();
+    listener1.expect_on_receive().returning(move |_msg| {
+        message_received1.notify_one();
+    });
+    let message_received2 = Arc::new(Notify::new());
+    let message_received_barrier2 = message_received2.clone();
+    let mut listener2 = MockUListener::new();
+    listener2.expect_on_receive().returning(move |_msg| {
+        message_received2.notify_one();
+    });
+
+    let topic = UUri::try_from_parts("vehicle", 0x1234, 0x01, 0x9000).expect("invalid topic");
+
+    assert!(transport
+        .register_listener(&topic, None, Arc::new(listener1))
+        .await
+        .is_ok());
+    assert!(transport
+        .register_listener(&topic, None, Arc::new(listener2))
+        .await
+        .is_ok());
+
+    assert!(transport
+        .send(
+            UMessageBuilder::publish(topic.clone())
+                .build()
+                .expect("failed to create message")
+        )
+        .await
+        .is_ok());
+    assert!(
+        tokio::time::timeout(Duration::from_secs(3), message_received_barrier1.notified())
+            .await
+            .is_ok()
+    );
+    assert!(
+        tokio::time::timeout(Duration::from_secs(3), message_received_barrier2.notified())
+            .await
+            .is_ok()
     );
 }
