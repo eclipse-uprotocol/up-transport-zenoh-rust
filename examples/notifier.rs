@@ -10,11 +10,23 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  ********************************************************************************/
+
+/*!
+This example illustrates how uProtocol's Transport Layer API can be used to send
+notifications to another uEntity using the Zenoh transport.
+
+This example works in conjunction with the `notification_receiver`, which should
+be started in another terminal first.
+*/
+
 mod common;
 
 use std::str::FromStr;
 
-use up_rust::{LocalUriProvider, UMessageBuilder, UPayloadFormat, UTransport, UUri};
+use tracing::info;
+use up_rust::{
+    LocalUriProvider, StaticUriProvider, UMessageBuilder, UPayloadFormat, UTransport, UUri,
+};
 use up_transport_zenoh::UPTransportZenoh;
 
 #[tokio::main]
@@ -22,20 +34,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // initiate logging
     UPTransportZenoh::try_init_log_from_env();
 
-    println!("uProtocol notifier example");
-    let notifier = UPTransportZenoh::builder("//notification/1/1/0")
-        .expect("invalid URI")
+    info!("uProtocol notifier example");
+    let uri_provider = StaticUriProvider::new("notification", 0xa1b2, 1);
+    let transport = UPTransportZenoh::builder(uri_provider.get_authority())
+        .expect("invalid authority name")
         .with_config(common::get_zenoh_config())
         .build()
         .await?;
 
     // create uuri
-    let sink_uuri = UUri::from_str("//receiver/2/1/0")?;
+    let source_uuri = uri_provider.get_resource_uri(0x8001);
+    let sink_uuri = UUri::from_str("//receiver/10AB10/1/0")?;
 
-    let data = "The notification data";
-    let umessage =
-        UMessageBuilder::notification(notifier.get_resource_uri(0x8001), sink_uuri.clone())
+    for cnt in 1..=100 {
+        let data = format!("notification {cnt}");
+        info!(
+            "Sending notification [from: {}, to: {}, payload: {data}]",
+            &source_uuri.to_uri(false),
+            &sink_uuri.to_uri(false)
+        );
+        let umessage = UMessageBuilder::notification(source_uuri.clone(), sink_uuri.clone())
             .build_with_payload(data, UPayloadFormat::UPAYLOAD_FORMAT_TEXT)?;
-    println!("Sending notification '{data}' to {sink_uuri}...");
-    notifier.send(umessage).await.map_err(Box::from)
+        transport.send(umessage).await?;
+        tokio::time::sleep(core::time::Duration::from_secs(1)).await;
+    }
+    Ok(())
 }

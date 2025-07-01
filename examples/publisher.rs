@@ -10,10 +10,19 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  ********************************************************************************/
+
+/*!
+This example illustrates how uProtocol's Transport Layer API can be used to publish
+messages to a topic using the Zenoh transport.
+
+This example works in conjunction with the `subscriber`, which should be started in
+another terminal first.
+*/
+
 mod common;
 
-use tokio::time::{sleep, Duration};
-use up_rust::{LocalUriProvider, UMessageBuilder, UPayloadFormat, UTransport};
+use tracing::info;
+use up_rust::{LocalUriProvider, StaticUriProvider, UMessageBuilder, UPayloadFormat, UTransport};
 use up_transport_zenoh::UPTransportZenoh;
 
 #[tokio::main]
@@ -21,25 +30,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // initiate logging
     UPTransportZenoh::try_init_log_from_env();
 
-    println!("uProtocol publisher example");
-    let publisher = UPTransportZenoh::builder("//publisher/1/1/0")
-        .expect("invalid URI")
+    info!("uProtocol publisher example");
+    let uri_provider = StaticUriProvider::new("publisher", 0x3_b1da, 1);
+    let transport = UPTransportZenoh::builder(uri_provider.get_authority())
+        .expect("invalid authority name")
         .with_config(common::get_zenoh_config())
         .build()
         .await?;
 
-    // create uuri
-    let uuri = publisher.get_resource_uri(0x8001);
+    // create topic uuri
+    let topic = uri_provider.get_resource_uri(0x8001);
 
-    let mut cnt: u64 = 0;
-    loop {
-        let data = format!("{cnt}");
-        let umessage = UMessageBuilder::publish(uuri.clone())
-            .build_with_payload(data.clone(), UPayloadFormat::UPAYLOAD_FORMAT_TEXT)
-            .unwrap();
-        println!("Publishing {data} from {uuri}...");
-        publisher.send(umessage).await.unwrap();
-        sleep(Duration::from_millis(1000)).await;
-        cnt += 1;
+    for cnt in 1..=100 {
+        let data = format!("event {cnt}");
+        info!(
+            "Publishing message [topic: {}, payload: {data}]",
+            topic.to_uri(false)
+        );
+        let umessage = UMessageBuilder::publish(topic.clone())
+            .build_with_payload(data, UPayloadFormat::UPAYLOAD_FORMAT_TEXT)?;
+        transport.send(umessage).await?;
+        tokio::time::sleep(core::time::Duration::from_secs(1)).await;
     }
+    Ok(())
 }

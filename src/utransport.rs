@@ -171,7 +171,7 @@ impl UTransport for UPTransportZenoh {
         let zenoh_key = to_zenoh_key_string(
             attribs.source.get_or_default(),
             attribs.sink.as_ref(),
-            self.local_uri.authority_name().as_str(),
+            self.local_authority.as_str(),
         );
 
         // Get payload
@@ -193,11 +193,8 @@ impl UTransport for UPTransportZenoh {
         // [impl->dsn~utransport-registerlistener-error-unimplemented~1]
         // [impl->dsn~utransport-registerlistener-error-invalid-parameter~1]
         up_rust::verify_filter_criteria(source_filter, sink_filter)?;
-        let zenoh_key = to_zenoh_key_string(
-            source_filter,
-            sink_filter,
-            self.local_uri.authority_name().as_str(),
-        );
+        let zenoh_key =
+            to_zenoh_key_string(source_filter, sink_filter, self.local_authority.as_str());
         self.subscribers
             .register_subscriber(zenoh_key, listener)
             .await
@@ -212,11 +209,8 @@ impl UTransport for UPTransportZenoh {
         // [impl->dsn~utransport-unregisterlistener-error-unimplemented~1]
         // [impl->dsn~utransport-unregisterlistener-error-invalid-parameter~1]
         up_rust::verify_filter_criteria(source_filter, sink_filter)?;
-        let zenoh_key = to_zenoh_key_string(
-            source_filter,
-            sink_filter,
-            self.local_uri.authority_name().as_str(),
-        );
+        let zenoh_key =
+            to_zenoh_key_string(source_filter, sink_filter, self.local_authority.as_str());
         self.subscribers
             .unregister(zenoh_key.as_str(), ComparableListener::new(listener))
             .await
@@ -315,9 +309,9 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     // [utest->dsn~utransport-receive-error-unimplemented~1]
-    async fn test_receive_fails() {
-        let up_transport_zenoh = UPTransportZenoh::builder("//vehicle1/AABB/7/0")
-            .expect("invalid URI")
+    async fn test_receive_fails_due_to_unimplemented() {
+        let up_transport_zenoh = UPTransportZenoh::builder("vehicle1")
+            .expect("invalid authority name")
             .build()
             .await
             .expect("failed to create transport");
@@ -348,8 +342,8 @@ mod tests {
         source_filter_uri: &str,
         sink_filter_uri: Option<&str>,
     ) {
-        let up_transport_zenoh = UPTransportZenoh::builder("//vehicle1/AABB/7/0")
-            .expect("invalid URI")
+        let up_transport_zenoh = UPTransportZenoh::builder("vehicle1")
+            .expect("invalid authority name")
             .build()
             .await
             .expect("failed to create transport");
@@ -377,8 +371,8 @@ mod tests {
     // [utest->dsn~utransport-registerlistener-error-resource-exhausted~1]
     // [utest->req~utransport-registerlistener-max-listeners~1]
     async fn test_register_listener_fails_if_max_listeners_has_been_reached() {
-        let up_transport_zenoh = UPTransportZenoh::builder("//vehicle1/AABB/7/0")
-            .expect("invalid URI")
+        let up_transport_zenoh = UPTransportZenoh::builder("vehicle1")
+            .expect("invalid authority name")
             .with_max_listeners(1)
             .build()
             .await
@@ -409,8 +403,8 @@ mod tests {
     #[test_case("//src/FFFF/FF/FFFF", Some("//*/FFFF/FF/FFFF"); "uStreamer case")]
     #[tokio::test(flavor = "multi_thread")]
     async fn test_register_and_unregister(source_filter_uri: &str, sink_filter_uri: Option<&str>) {
-        let up_transport_zenoh = UPTransportZenoh::builder("//vehicle1/AABB/7/0")
-            .expect("invalid URI")
+        let up_transport_zenoh = UPTransportZenoh::builder("vehicle1")
+            .expect("invalid authority name")
             .build()
             .await
             .expect("failed to create transport");
@@ -461,8 +455,8 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     // [utest->dsn~utransport-send-error-invalid-parameter~1]
     async fn test_send_fails_for_invalid_attributes() {
-        let up_transport_zenoh = UPTransportZenoh::builder("//vehicle2/AABB/7/0")
-            .expect("invalid URI")
+        let up_transport_zenoh = UPTransportZenoh::builder("vehicle2")
+            .expect("invalid authority name")
             .build()
             .await
             .expect("failed to create transport");
