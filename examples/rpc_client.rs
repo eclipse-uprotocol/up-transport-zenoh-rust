@@ -24,7 +24,6 @@ mod common;
 use async_trait::async_trait;
 use std::{str::FromStr, sync::Arc, time::Duration};
 use tokio::sync::Notify;
-use tracing::{error, info};
 use up_rust::{
     LocalUriProvider, StaticUriProvider, UListener, UMessage, UMessageBuilder, UPayloadFormat,
     UTransport, UUri,
@@ -42,7 +41,7 @@ impl UListener for ResponseListener {
         let payload = msg.payload.unwrap();
         let value = String::from_utf8(payload.to_vec()).unwrap();
         let uri = msg.attributes.unwrap().source.unwrap().to_uri(false);
-        info!("Received RPC response [from: {uri}, payload: {value}]");
+        println!("Received RPC response [from: {uri}, payload: {value}]");
         self.0.notify_one();
     }
 }
@@ -52,7 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // initiate logging
     UPTransportZenoh::try_init_log_from_env();
 
-    info!("uProtocol RPC client example");
+    println!("uProtocol RPC client example");
     let uri_provider = StaticUriProvider::new("l1_rpc_client", 0xdd00, 2);
     let transport = UPTransportZenoh::builder(uri_provider.get_authority())
         .expect("invalid authority name")
@@ -75,7 +74,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let request_message =
         UMessageBuilder::request(operation_uuri.clone(), reply_to_uuri.clone(), REQUEST_TTL)
             .build_with_payload("GetCurrentTime", UPayloadFormat::UPAYLOAD_FORMAT_TEXT)?;
-    info!(
+    println!(
         "Sending RPC request [from: {}, to: {}]",
         reply_to_uuri.to_uri(false),
         operation_uuri.to_uri(false)
@@ -88,7 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .await
     .map_err(|e| {
-        error!("Failed to receive reply from service in time");
+        println!("Failed to receive reply from service in time");
         Box::from(e)
     })
 }

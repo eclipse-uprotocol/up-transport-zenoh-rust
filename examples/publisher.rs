@@ -21,7 +21,6 @@ another terminal first.
 
 mod common;
 
-use tracing::info;
 use up_rust::{LocalUriProvider, StaticUriProvider, UMessageBuilder, UPayloadFormat, UTransport};
 use up_transport_zenoh::UPTransportZenoh;
 
@@ -30,7 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // initiate logging
     UPTransportZenoh::try_init_log_from_env();
 
-    info!("uProtocol publisher example");
+    println!("uProtocol publisher example");
     let uri_provider = StaticUriProvider::new("publisher", 0x3_b1da, 1);
     let transport = UPTransportZenoh::builder(uri_provider.get_authority())
         .expect("invalid authority name")
@@ -43,7 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for cnt in 1..=100 {
         let data = format!("event {cnt}");
-        info!(
+        println!(
             "Publishing message [topic: {}, payload: {data}]",
             topic.to_uri(false)
         );

@@ -24,7 +24,6 @@ mod common;
 use async_trait::async_trait;
 use chrono::Utc;
 use std::{str::FromStr, sync::Arc};
-use tracing::info;
 use up_rust::{
     LocalUriProvider, StaticUriProvider, UListener, UMessage, UMessageBuilder, UPayloadFormat,
     UTransport, UUri,
@@ -38,7 +37,7 @@ impl UListener for RpcListener {
     async fn on_receive(&self, msg: UMessage) {
         if let (Some(attributes), Some(payload)) = (msg.attributes.as_ref(), msg.payload) {
             let request_value = String::from_utf8(payload.to_vec()).unwrap_or("N/A".to_string());
-            info!(
+            println!(
                 "Processing request [from: {}, to: {}, payload: {request_value}]",
                 attributes.source.to_uri(false),
                 attributes.sink.to_uri(false)
@@ -62,7 +61,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // initiate logging
     UPTransportZenoh::try_init_log_from_env();
 
-    info!("uProtocol RPC server example");
+    println!("uProtocol RPC server example");
     let operation_uuri = UUri::from_str("//rpc_server/AAA/1/6A10")?;
     let uri_provider = StaticUriProvider::try_from(&operation_uuri)?;
     let transport = UPTransportZenoh::builder(uri_provider.get_authority())
@@ -75,7 +74,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Filter matching any RPC request
     let source_filter = UUri::from_str("//*/FFFFFFFF/FF/0")?;
 
-    info!(
+    println!(
         "Registering RPC request handler [source filter: {}, sink filter: {}]",
         source_filter.to_uri(false),
         operation_uuri.to_uri(false)

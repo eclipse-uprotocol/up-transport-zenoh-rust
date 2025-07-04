@@ -23,7 +23,6 @@ mod common;
 
 use async_trait::async_trait;
 use std::{str::FromStr, sync::Arc};
-use tracing::info;
 use up_rust::{UListener, UMessage, UTransport, UUri};
 use up_transport_zenoh::UPTransportZenoh;
 
@@ -34,7 +33,7 @@ impl UListener for SubscriberListener {
         let payload = msg.payload.unwrap();
         let value = String::from_utf8(payload.to_vec()).unwrap();
         let uri = msg.attributes.unwrap().source.unwrap().to_uri(false);
-        info!("Received message [topic: {uri}, payload: {value}]");
+        println!("Received message [topic: {uri}, payload: {value}]");
     }
 }
 
@@ -43,7 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // initiate logging
     UPTransportZenoh::try_init_log_from_env();
 
-    info!("uProtocol subscriber example");
+    println!("uProtocol subscriber example");
     let transport = UPTransportZenoh::builder("subscriber")
         .expect("invalid authority name")
         .with_config(common::get_zenoh_config())
@@ -53,7 +52,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // create uuri
     let source_filter = UUri::from_str("//*/FFFFB1DA/1/8001")?;
 
-    info!(
+    println!(
         "Registering message listener [source filter: {}]",
         source_filter.to_uri(false)
     );

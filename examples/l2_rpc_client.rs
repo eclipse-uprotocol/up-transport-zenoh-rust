@@ -22,7 +22,6 @@ first.
 mod common;
 
 use std::{str::FromStr, sync::Arc};
-use tracing::{error, info};
 use up_rust::{
     communication::{CallOptions, InMemoryRpcClient, RpcClient, UPayload},
     LocalUriProvider, StaticUriProvider, UPayloadFormat, UPriority, UUri, UUID,
@@ -34,7 +33,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // initiate logging
     UPTransportZenoh::try_init_log_from_env();
 
-    info!("uProtocol RPC client example");
+    println!("uProtocol RPC client example");
     let uri_provider = Arc::new(StaticUriProvider::new("l2_rpc_client", 0x10_ab10, 1));
     let transport = UPTransportZenoh::builder(uri_provider.get_authority())
         .expect("invalid authority name")
@@ -56,7 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("my_token".to_string()),
         Some(UPriority::UPRIORITY_CS6),
     );
-    info!(
+    println!(
         "Sending request [source: {}, sink: {}]",
         uri_provider.get_source_uri().to_uri(false),
         operation_uuri.to_uri(false)
@@ -67,14 +66,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await
     {
         Err(_) => {
-            error!("Failed to receive reply from service");
+            println!("Failed to receive reply from service");
         }
         Ok(Some(payload)) => {
             let value = String::from_utf8(payload.payload().to_vec())?;
-            info!("Received reply [payload: {value}]");
+            println!("Received reply [payload: {value}]");
         }
         _ => {
-            error!("Reply did not contain payload");
+            println!("Reply did not contain payload");
         }
     }
     Ok(())

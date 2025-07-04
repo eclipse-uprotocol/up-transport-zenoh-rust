@@ -23,7 +23,6 @@ mod common;
 
 use async_trait::async_trait;
 use std::{str::FromStr, sync::Arc};
-use tracing::info;
 use up_rust::{LocalUriProvider, StaticUriProvider, UListener, UMessage, UTransport, UUri};
 use up_transport_zenoh::UPTransportZenoh;
 
@@ -34,7 +33,7 @@ impl UListener for SubscriberListener {
         let payload = msg.payload.unwrap();
         let value = String::from_utf8(payload.to_vec()).unwrap();
         let uri = msg.attributes.unwrap().source.unwrap().to_uri(false);
-        info!("Received notification [source: {uri}, payload: {value}]");
+        println!("Received notification [source: {uri}, payload: {value}]");
     }
 }
 
@@ -43,7 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // initiate logging
     UPTransportZenoh::try_init_log_from_env();
 
-    info!("uProtocol notification receiver example");
+    println!("uProtocol notification receiver example");
     let uri_provider = StaticUriProvider::new("receiver", 0x10_ab10, 1);
     let transport = UPTransportZenoh::builder(uri_provider.get_authority())
         .expect("invalid authority name")
@@ -54,7 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let source_filter = UUri::from_str("//*/FFFFA1B2/1/8001")?;
     let sink_filter = uri_provider.get_source_uri();
 
-    info!(
+    println!(
         "Registering notification listener [source filter: {}, sink filter: {}]",
         source_filter.to_uri(false),
         sink_filter.to_uri(false)

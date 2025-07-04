@@ -35,7 +35,7 @@ impl UListener for DelayListener {
                 }
             }
         }
-        let _ = self.0.send(msg_id).await;
+        self.0.send(msg_id).await.expect("failed to send response");
     }
 }
 

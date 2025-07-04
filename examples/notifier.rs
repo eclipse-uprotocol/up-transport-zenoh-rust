@@ -23,7 +23,6 @@ mod common;
 
 use std::str::FromStr;
 
-use tracing::info;
 use up_rust::{
     LocalUriProvider, StaticUriProvider, UMessageBuilder, UPayloadFormat, UTransport, UUri,
 };
@@ -34,7 +33,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // initiate logging
     UPTransportZenoh::try_init_log_from_env();
 
-    info!("uProtocol notifier example");
+    println!("uProtocol notifier example");
     let uri_provider = StaticUriProvider::new("notification", 0xa1b2, 1);
     let transport = UPTransportZenoh::builder(uri_provider.get_authority())
         .expect("invalid authority name")
@@ -48,7 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for cnt in 1..=100 {
         let data = format!("notification {cnt}");
-        info!(
+        println!(
             "Sending notification [from: {}, to: {}, payload: {data}]",
             &source_uuri.to_uri(false),
             &sink_uuri.to_uri(false)
