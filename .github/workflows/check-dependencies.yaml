@@ -1,0 +1,52 @@
+# ********************************************************************************
+#  Copyright (c) 2025 Contributors to the Eclipse Foundation
+#
+#  See the NOTICE file(s) distributed with this work for additional
+#  information regarding copyright ownership.
+#
+#  This program and the accompanying materials are made available under the
+#  terms of the Apache License Version 2.0 which is available at
+#  https://www.apache.org/licenses/LICENSE-2.0
+#
+#  SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************/
+
+name: Check 3rd party dependencies
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    paths:
+    - "Cargo.*"
+  workflow_call:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.ref }}-${{ github.workflow }}
+  cancel-in-progress: true
+
+env:
+  RUST_TOOLCHAIN: ${{ vars.RUST_TOOLCHAIN || 'stable' }}
+  RUSTFLAGS: -Dwarnings
+  CARGO_TERM_COLOR: always
+
+jobs:
+  deps:
+    name: "Check 3rd party licenses"
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Determine 3rd party dependencies
+      working-directory: ${{github.workspace}}
+      run: |
+        cargo tree --all-features --locked -e no-build,no-dev --prefix none --no-dedupe \
+          | sed -n '2~1p' \
+          | sort -u \
+          | grep -v '^[[:space:]]*$' \
+          | sed -E 's|([^ ]+) v([^ ]+).*|crate/cratesio/-/\1/\2|' \
+          > DEPS.txt
+    - name: Run Eclipse Dash Licenses tool
+      uses: eclipse-uprotocol/ci-cd/.github/actions/run-eclipse-dash@main
+      with:
+        components-file: DEPS.txt
