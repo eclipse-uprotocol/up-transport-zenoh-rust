@@ -10,61 +10,49 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  ********************************************************************************/
+
+/*!
+This example illustrates how uProtocol's Transport Layer API can be used to implement
+an operation that can be invoked by means of an RPC using the Zenoh transport.
+
+After having started the RPC server, the `rpc_client` and/or `l2_rpc_client` examples
+can be run to invoke the operation.
+*/
+
 mod common;
 
 use async_trait::async_trait;
 use chrono::Utc;
 use std::{str::FromStr, sync::Arc};
-use tokio::{
-    runtime::Handle,
-    task,
-    time::{sleep, Duration},
-};
 use up_rust::{
-    LocalUriProvider, UListener, UMessage, UMessageBuilder, UPayloadFormat, UTransport, UUri,
+    LocalUriProvider, StaticUriProvider, UListener, UMessage, UMessageBuilder, UPayloadFormat,
+    UTransport, UUri,
 };
 use up_transport_zenoh::UPTransportZenoh;
 
-struct RpcListener {
-    up_transport: Arc<UPTransportZenoh>,
-}
-impl RpcListener {
-    fn new(up_transport: Arc<UPTransportZenoh>) -> Self {
-        RpcListener { up_transport }
-    }
-}
+struct RpcListener(Arc<UPTransportZenoh>);
+
 #[async_trait]
 impl UListener for RpcListener {
     async fn on_receive(&self, msg: UMessage) {
-        let UMessage {
-            attributes,
-            payload,
-            ..
-        } = msg;
+        if let (Some(attributes), Some(payload)) = (msg.attributes.as_ref(), msg.payload) {
+            let request_value = String::from_utf8(payload.to_vec()).unwrap_or("N/A".to_string());
+            println!(
+                "Processing request [from: {}, to: {}, payload: {request_value}]",
+                attributes.source.to_uri(false),
+                attributes.sink.to_uri(false)
+            );
 
-        // Build the payload to send back
-        let value = payload
-            .unwrap()
-            .into_iter()
-            .map(|c| c as char)
-            .collect::<String>();
-        let source = attributes.clone().unwrap().source.unwrap();
-        let sink = attributes.clone().unwrap().sink.unwrap();
-        println!("Receiving '{value}' from {source} to {sink}");
-
-        // Send back result
-        let umessage = UMessageBuilder::response_for_request(&attributes)
-            .build_with_payload(
-                // Get current time
-                format!("{}", Utc::now()),
-                UPayloadFormat::UPAYLOAD_FORMAT_TEXT,
-            )
-            .unwrap();
-        task::block_in_place(|| {
-            Handle::current()
-                .block_on(self.up_transport.send(umessage))
+            // Send back result
+            let umessage = UMessageBuilder::response_for_request(attributes)
+                .build_with_payload(
+                    // Get current time
+                    format!("{}", Utc::now()),
+                    UPayloadFormat::UPAYLOAD_FORMAT_TEXT,
+                )
                 .unwrap();
-        });
+            let _ = self.0.send(umessage).await;
+        }
     }
 }
 
@@ -74,27 +62,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     UPTransportZenoh::try_init_log_from_env();
 
     println!("uProtocol RPC server example");
-    let rpc_server = UPTransportZenoh::builder("//rpc_server/1/1/0")
-        .expect("invalid URI")
+    let operation_uuri = UUri::from_str("//rpc_server/AAA/1/6A10")?;
+    let uri_provider = StaticUriProvider::try_from(&operation_uuri)?;
+    let transport = UPTransportZenoh::builder(uri_provider.get_authority())
+        .expect("invalid authority name")
         .with_config(common::get_zenoh_config())
         .build()
         .await
         .map(Arc::new)?;
 
-    // create uuri
-    let src_uuri = UUri::from_str("//*/FFFF/FF/0")?;
-    let sink_uuri = rpc_server.get_resource_uri(1);
+    // Filter matching any RPC request
+    let source_filter = UUri::from_str("//*/FFFFFFFF/FF/0")?;
 
-    println!("Register the listener...");
-    rpc_server
+    println!(
+        "Registering RPC request handler [source filter: {}, sink filter: {}]",
+        source_filter.to_uri(false),
+        operation_uuri.to_uri(false)
+    );
+    transport
         .register_listener(
-            &src_uuri,
-            Some(&sink_uuri),
-            Arc::new(RpcListener::new(rpc_server.clone())),
+            &source_filter,
+            Some(&operation_uuri),
+            Arc::new(RpcListener(transport.clone())),
         )
         .await?;
 
-    loop {
-        sleep(Duration::from_millis(1000)).await;
-    }
+    tokio::signal::ctrl_c().await.map_err(Box::from)
 }

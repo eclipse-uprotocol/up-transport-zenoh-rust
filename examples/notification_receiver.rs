@@ -10,12 +10,20 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  ********************************************************************************/
+
+/*!
+This example illustrates how uProtocol's Transport Layer API can be used to receive
+notifications sent by another uEntity using the Zenoh transport.
+
+This example works in conjunction with the `notifier`, which should be started in
+another terminal after having started this receiver.
+*/
+
 mod common;
 
 use async_trait::async_trait;
 use std::{str::FromStr, sync::Arc};
-use tokio::time::{sleep, Duration};
-use up_rust::{LocalUriProvider, UListener, UMessage, UTransport, UUri};
+use up_rust::{LocalUriProvider, StaticUriProvider, UListener, UMessage, UTransport, UUri};
 use up_transport_zenoh::UPTransportZenoh;
 
 struct SubscriberListener;
@@ -23,9 +31,9 @@ struct SubscriberListener;
 impl UListener for SubscriberListener {
     async fn on_receive(&self, msg: UMessage) {
         let payload = msg.payload.unwrap();
-        let value = payload.into_iter().map(|c| c as char).collect::<String>();
-        let uri = msg.attributes.unwrap().source.unwrap().to_string();
-        println!("Receiving notification '{value}' from {uri}");
+        let value = String::from_utf8(payload.to_vec()).unwrap();
+        let uri = msg.attributes.unwrap().source.unwrap().to_uri(false);
+        println!("Received notification [source: {uri}, payload: {value}]");
     }
 }
 
@@ -33,26 +41,30 @@ impl UListener for SubscriberListener {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // initiate logging
     UPTransportZenoh::try_init_log_from_env();
+
     println!("uProtocol notification receiver example");
-    let receiver = UPTransportZenoh::builder("//receiver/2/1/0")
-        .expect("invalid URI")
+    let uri_provider = StaticUriProvider::new("receiver", 0x10_ab10, 1);
+    let transport = UPTransportZenoh::builder(uri_provider.get_authority())
+        .expect("invalid authority name")
         .with_config(common::get_zenoh_config())
         .build()
         .await?;
 
-    // create uuri
-    let source_uuri = UUri::from_str("//notification/1/1/8001")?;
+    let source_filter = UUri::from_str("//*/FFFFA1B2/1/8001")?;
+    let sink_filter = uri_provider.get_source_uri();
 
-    println!("Register the listener...");
-    receiver
+    println!(
+        "Registering notification listener [source filter: {}, sink filter: {}]",
+        source_filter.to_uri(false),
+        sink_filter.to_uri(false)
+    );
+    transport
         .register_listener(
-            &source_uuri,
-            Some(&receiver.get_source_uri()),
+            &source_filter,
+            Some(&sink_filter),
             Arc::new(SubscriberListener {}),
         )
         .await?;
 
-    loop {
-        sleep(Duration::from_millis(1000)).await;
-    }
+    tokio::signal::ctrl_c().await.map_err(Box::from)
 }

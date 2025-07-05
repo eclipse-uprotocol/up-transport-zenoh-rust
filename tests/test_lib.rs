@@ -22,8 +22,10 @@ pub fn before_test() {
 
 /// # Errors
 /// Will return `Err` if unable to create `UPTransportZenoh`
-pub async fn create_up_transport_zenoh(uri: &str) -> Result<UPTransportZenoh, UStatus> {
-    let builder = UPTransportZenoh::builder(uri).map_err(|e| {
+pub async fn create_up_transport_zenoh(
+    local_authority_name: &str,
+) -> Result<UPTransportZenoh, UStatus> {
+    let builder = UPTransportZenoh::builder(local_authority_name).map_err(|e| {
         UStatus::fail_with_code(UCode::INVALID_ARGUMENT, format!("Invalid URI: {e}"))
     })?;
     builder.build().await

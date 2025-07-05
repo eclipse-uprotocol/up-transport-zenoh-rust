@@ -11,14 +11,13 @@
  * SPDX-License-Identifier: Apache-2.0
  ********************************************************************************/
 mod listener_registry;
-pub mod uri_provider;
 pub mod utransport;
 
-use std::{fmt::Display, sync::Arc};
+use std::sync::Arc;
 
 use listener_registry::ListenerRegistry;
 use tracing::error;
-use up_rust::{UCode, UStatus, UUri};
+use up_rust::{UCode, UStatus};
 // Re-export Zenoh config
 pub use zenoh::config as zenoh_config;
 #[cfg(feature = "zenoh-unstable")]
@@ -31,7 +30,7 @@ const DEFAULT_MAX_LISTENERS: usize = 100;
 pub struct UPTransportZenoh {
     session: Arc<Session>,
     subscribers: ListenerRegistry,
-    local_uri: UUri,
+    local_authority: String,
 }
 
 impl UPTransportZenoh {
@@ -45,38 +44,23 @@ impl UPTransportZenoh {
     ///
     /// Returns an error if the URI contains an empty or wildcard authority name
     /// or has a non-zero resource ID.
-    pub fn builder<U>(local_uri: U) -> Result<UPTransportZenohBuilder, UStatus>
-    where
-        U: TryInto<UUri>,
-        U::Error: Display,
-    {
-        UPTransportZenohBuilder::new(local_uri)
+    pub fn builder<U: Into<String>>(
+        local_authority: U,
+    ) -> Result<UPTransportZenohBuilder, UStatus> {
+        UPTransportZenohBuilder::new(local_authority)
     }
 
     fn init_with_session(
         session: Session,
-        local_uri: UUri,
+        local_authority: String,
         max_listeners: usize,
-    ) -> Result<UPTransportZenoh, UStatus> {
-        // Need to make sure the authority is always non-empty
-        if local_uri.has_empty_authority() {
-            let msg = "Empty authority is not allowed".to_string();
-            error!("{msg}");
-            return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg));
-        }
-        // Make sure the resource ID is always 0
-        if local_uri.resource_id != 0 {
-            let msg = "Resource ID must be 0".to_string();
-            error!("{msg}");
-            return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg));
-        }
+    ) -> UPTransportZenoh {
         let session_to_use = Arc::new(session);
-        // Return UPTransportZenoh
-        Ok(UPTransportZenoh {
+        UPTransportZenoh {
             session: session_to_use.clone(),
             subscribers: ListenerRegistry::new(session_to_use, max_listeners),
-            local_uri,
-        })
+            local_authority,
+        }
     }
 
     /// Enables a tracing formatter subscriber that is initialized from the `RUST_LOG` environment variable.
@@ -89,35 +73,34 @@ impl UPTransportZenoh {
 pub struct UPTransportZenohBuilder {
     config: Option<zenoh_config::Config>,
     config_path: Option<String>,
-    uri: UUri,
+    local_authority: String,
     max_listeners: usize,
     #[cfg(feature = "zenoh-unstable")]
     runtime: Option<ZRuntime>,
 }
 
 impl UPTransportZenohBuilder {
-    /// Creates a new builder with the given local URI.
-    fn new<U>(local_uri: U) -> Result<Self, UStatus>
-    where
-        U: TryInto<UUri>,
-        U::Error: Display,
-    {
-        let uri = local_uri.try_into().map_err(|err| {
-            let msg = format!("Invalid URI: {err}");
-            UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg)
-        })?;
+    /// Creates a new builder with the given local authority.
+    fn new<U: Into<String>>(local_authority: U) -> Result<Self, UStatus> {
+        let authority_name = local_authority.into();
+        // TODO: provide a helper function in up-rust crate to validate an authority name
+        let uri =
+            up_rust::UUri::try_from_parts(authority_name.as_str(), 1, 1, 0).map_err(|err| {
+                UStatus::fail_with_code(
+                    UCode::INVALID_ARGUMENT,
+                    format!("Invalid authority name: {err}"),
+                )
+            })?;
         if uri.has_empty_authority() || uri.has_wildcard_authority() {
-            let msg = "URI must have non-empty, non-wildcard authority name";
-            return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg));
-        }
-        if uri.resource_id != 0 {
-            let msg = "URI must have resource ID 0".to_string();
-            return Err(UStatus::fail_with_code(UCode::INVALID_ARGUMENT, msg));
+            return Err(UStatus::fail_with_code(
+                UCode::INVALID_ARGUMENT,
+                "Authority name must be non-empty and must not be the wildcard authority name",
+            ));
         }
         Ok(UPTransportZenohBuilder {
             config: None,
             config_path: None,
-            uri,
+            local_authority: authority_name,
             max_listeners: DEFAULT_MAX_LISTENERS,
             #[cfg(feature = "zenoh-unstable")]
             runtime: None,
@@ -181,8 +164,8 @@ impl UPTransportZenohBuilder {
     /// # async fn main() {
     /// use up_transport_zenoh::{zenoh_config, UPTransportZenoh};
     ///
-    /// assert!(UPTransportZenoh::builder("//MyAuthName/ABCD/1/0")
-    ///    .expect("Invalid URI")
+    /// assert!(UPTransportZenoh::builder("MyAuthority")
+    ///    .expect("Invalid authority name")
     ///    .with_config(zenoh_config::Config::default())
     ///    .with_max_listeners(10)
     ///    .build()
@@ -211,7 +194,11 @@ impl UPTransportZenohBuilder {
                 UStatus::fail_with_code(UCode::INTERNAL, msg)
             })?;
 
-            return UPTransportZenoh::init_with_session(session, self.uri, self.max_listeners);
+            return Ok(UPTransportZenoh::init_with_session(
+                session,
+                self.local_authority,
+                self.max_listeners,
+            ));
         }
 
         let config = match (self.config_path.as_ref(), self.config.as_ref()) {
@@ -237,7 +224,11 @@ impl UPTransportZenohBuilder {
             UStatus::fail_with_code(UCode::INTERNAL, msg)
         })?;
 
-        UPTransportZenoh::init_with_session(session, self.uri, self.max_listeners)
+        Ok(UPTransportZenoh::init_with_session(
+            session,
+            self.local_authority,
+            self.max_listeners,
+        ))
     }
 }
 
@@ -245,20 +236,14 @@ impl UPTransportZenohBuilder {
 mod tests {
     use super::*;
     use test_case::test_case;
-    use up_rust::UUri;
 
-    #[test_case("//vehicle1/AABB/7/0" => true; "succeeds for valid URI")]
-    #[test_case(UUri::try_from_parts("vehicle1", 0xAABB, 0x07, 0x00).unwrap() => true; "succeeds for valid UUri")]
-    #[test_case("This is not a UUri" => false; "fails for invalid URI")]
-    #[test_case("/AABB/7/0" => false; "fails for empty UAuthority")]
-    #[test_case("//vehicle1/AABB/7/1" => false; "fails for non-zero resource ID")]
+    #[test_case("vehicle1" => true; "succeeds for valid authority name")]
+    #[test_case("This is not an authority name" => false; "fails for invalid authority name")]
+    #[test_case("" => false; "fails for empty authority name")]
+    #[test_case("*" => false; "fails for wildcard authority name")]
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_new_up_transport_zenoh<U>(uri: U) -> bool
-    where
-        U: TryInto<UUri>,
-        U::Error: Display,
-    {
-        if let Ok(builder) = UPTransportZenoh::builder(uri) {
+    async fn test_getting_a_builder<S: Into<String>>(local_authority: S) -> bool {
+        if let Ok(builder) = UPTransportZenoh::builder(local_authority) {
             builder.build().await.is_ok()
         } else {
             false

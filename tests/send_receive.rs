@@ -42,8 +42,7 @@ async fn register_listener_and_send(
     source_filter: &UUri,
     sink_filter: Option<&UUri>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let local_uuri = UUri::try_from_parts(authority, 0xABC, 1, 0)?;
-    let transport = test_lib::create_up_transport_zenoh(local_uuri.to_uri(false).as_str()).await?;
+    let transport = test_lib::create_up_transport_zenoh(authority).await?;
 
     let notify = Arc::new(Notify::new());
     let listener = Arc::new(MessageHandler(umessage.clone(), notify.clone()));
@@ -270,8 +269,7 @@ async fn test_expired_rpc_request_message_is_not_delivered_to_listener() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_unregister_listener_stops_processing_of_messages() {
-    let local_uuri = UUri::try_from_parts("vehicle", 0xABC, 1, 0).expect("invalid local URI");
-    let transport = test_lib::create_up_transport_zenoh(local_uuri.to_uri(false).as_str())
+    let transport = test_lib::create_up_transport_zenoh("vehicle")
         .await
         .expect("failed to create transport");
 
@@ -320,8 +318,7 @@ async fn test_unregister_listener_stops_processing_of_messages() {
 #[tokio::test(flavor = "multi_thread")]
 // [utest->dsn~utransport-registerlistener-listener-reuse~1]
 async fn test_same_listener_can_be_registered_for_multiple_filters() {
-    let local_uuri = UUri::try_from_parts("vehicle", 0xABC, 1, 0).expect("invalid local URI");
-    let transport = test_lib::create_up_transport_zenoh(local_uuri.to_uri(false).as_str())
+    let transport = test_lib::create_up_transport_zenoh("vehicle")
         .await
         .expect("failed to create transport");
 
@@ -377,8 +374,7 @@ async fn test_same_listener_can_be_registered_for_multiple_filters() {
 #[tokio::test(flavor = "multi_thread")]
 // [utest->dsn~utransport-registerlistener-number-of-listeners~1]
 async fn test_multiple_listeners_can_be_registered_for_the_same_filter() {
-    let local_uuri = UUri::try_from_parts("vehicle", 0xABC, 1, 0).expect("invalid local URI");
-    let transport = test_lib::create_up_transport_zenoh(local_uuri.to_uri(false).as_str())
+    let transport = test_lib::create_up_transport_zenoh("vehicle")
         .await
         .expect("failed to create transport");
 

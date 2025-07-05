@@ -10,11 +10,19 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  ********************************************************************************/
+
+/*!
+This example illustrates how uProtocol's Transport Layer API can be used to subscribe
+to messages that are published to a topic using the Zenoh transport.
+
+This example works in conjunction with the `publisher`, which should be started in
+another terminal after having started this subscriber.
+*/
+
 mod common;
 
 use async_trait::async_trait;
 use std::{str::FromStr, sync::Arc};
-use tokio::time::{sleep, Duration};
 use up_rust::{UListener, UMessage, UTransport, UUri};
 use up_transport_zenoh::UPTransportZenoh;
 
@@ -23,9 +31,9 @@ struct SubscriberListener;
 impl UListener for SubscriberListener {
     async fn on_receive(&self, msg: UMessage) {
         let payload = msg.payload.unwrap();
-        let value = payload.into_iter().map(|c| c as char).collect::<String>();
-        let uri = msg.attributes.unwrap().source.unwrap().to_string();
-        println!("Receiving {value} from {uri}");
+        let value = String::from_utf8(payload.to_vec()).unwrap();
+        let uri = msg.attributes.unwrap().source.unwrap().to_uri(false);
+        println!("Received message [topic: {uri}, payload: {value}]");
     }
 }
 
@@ -35,21 +43,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     UPTransportZenoh::try_init_log_from_env();
 
     println!("uProtocol subscriber example");
-    let subscriber = UPTransportZenoh::builder("//subscriber/2/1/0")
-        .expect("invalid URI")
+    let transport = UPTransportZenoh::builder("subscriber")
+        .expect("invalid authority name")
         .with_config(common::get_zenoh_config())
         .build()
         .await?;
 
     // create uuri
-    let uuri = UUri::from_str("//publisher/1/1/8001")?;
+    let source_filter = UUri::from_str("//*/FFFFB1DA/1/8001")?;
 
-    println!("Register the listener...");
-    subscriber
-        .register_listener(&uuri, None, Arc::new(SubscriberListener {}))
+    println!(
+        "Registering message listener [source filter: {}]",
+        source_filter.to_uri(false)
+    );
+    transport
+        .register_listener(&source_filter, None, Arc::new(SubscriberListener {}))
         .await?;
 
-    loop {
-        sleep(Duration::from_millis(1000)).await;
-    }
+    tokio::signal::ctrl_c().await.map_err(Box::from)
 }
