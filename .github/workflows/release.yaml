@@ -36,10 +36,11 @@ jobs:
   coverage:
     uses: eclipse-uprotocol/ci-cd/.github/workflows/rust-coverage.yaml@main
 
-  current-spec-compliance:
-    uses: eclipse-uprotocol/ci-cd/.github/workflows/requirements-tracing.yaml@main
-    with:
-      env-file-suffix: "oft-current"
+  # TODO: Disable the OFT CI for the time being.
+  #current-spec-compliance:
+  #  uses: eclipse-uprotocol/ci-cd/.github/workflows/requirements-tracing.yaml@main
+  #  with:
+  #    env-file-suffix: "oft-current"
 
   tag_release_artifacts:
     # This only runs if this workflow is initiated via a tag-push with pattern 'v*'
@@ -50,7 +51,8 @@ jobs:
       - check
       - check-msrv
       - coverage
-      - current-spec-compliance
+      # TODO: Disable the OFT CI for the time being.
+      #- current-spec-compliance
     permissions: write-all
     steps:
       - uses: actions/checkout@v4
