@@ -37,9 +37,27 @@ jobs:
     uses: eclipse-uprotocol/ci-cd/.github/workflows/rust-coverage.yaml@main
 
   current-spec-compliance:
-    uses: eclipse-uprotocol/ci-cd/.github/workflows/requirements-tracing.yaml@main
-    with:
-      env-file-suffix: "oft-current"
+    runs-on: ubuntu-latest
+    # we do not invoke the corresponding job from ci-cd repo
+    # because we do not want the job to fail if not all requirements
+    # are covered (yet)
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+      - name: "Determine OpenFastTrace file patterns from .env file"
+        uses: xom9ikk/dotenv@v2.3.0
+        with:
+          mode: "oft-current"
+          load-mode: strict
+        # this will run OFT and upload the results
+      - name: Run OpenFastTrace
+        id: run-oft
+        uses: eclipse-uprotocol/ci-cd/.github/actions/run-oft@main
+        with:
+          file-patterns: "${{ env.OFT_FILE_PATTERNS }}"
+          tags: "${{ env.OFT_TAGS_}}"
+  
 
   tag_release_artifacts:
     # This only runs if this workflow is initiated via a tag-push with pattern 'v*'
@@ -57,6 +75,12 @@ jobs:
         with:
           submodules: "recursive"
 
+      - name: "Determine uProtocol Specification file patterns from .env file"
+        uses: xom9ikk/dotenv@v2.3.0
+        with:
+          mode: "oft-current"
+          load-mode: strict
+  
       # Requirements Tracing report - we later need the download_url output of the upload step
       - name: Download requirements tracing report
         uses: actions/download-artifact@v4
@@ -114,7 +138,7 @@ jobs:
       - name: Gather uProtocol Specification documents
         shell: bash
         run: |
-          tar cvz --file up-spec.tar.gz ${{ vars.UP_SPEC_OPEN_FAST_TRACE_FILE_PATTERNS }}
+          tar cvz --file up-spec.tar.gz ${{ env.UP_SPEC_FILE_PATTERNS }}
       - name: Upload relevant uProtocol Spec files to release
         uses: svenstaro/upload-release-action@v2
         id: upload_up_spec
@@ -122,7 +146,7 @@ jobs:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: up-spec.tar.gz
           tag: ${{ github.ref }}
-
+  
       - name: Gets latest created release info
         id: latest_release_info
         uses: joutvhu/get-release@v1
