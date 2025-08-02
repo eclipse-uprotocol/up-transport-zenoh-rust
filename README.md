@@ -1,6 +1,6 @@
 # Rust based Eclipse Zenoh&trade; Transport Library for Eclipse uProtocol&trade;
 
-This crate implements the Zenoh transport as specified in [uProtocol v1.6.0-alpha.5](https://github.com/eclipse-uprotocol/up-spec/tree/v1.6.0-alpha.5).
+This crate implements the Zenoh transport as specified in [uProtocol v1.6.0-alpha.6](https://github.com/eclipse-uprotocol/up-spec/tree/v1.6.0-alpha.6).
 
 ## Getting started
 
