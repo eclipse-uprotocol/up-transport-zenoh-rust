@@ -41,9 +41,9 @@ jobs:
       working-directory: ${{github.workspace}}
       run: |
         cargo tree --all-features --locked -e no-build,no-dev --prefix none --no-dedupe \
-          | sed -n '2~1p' \
           | sort -u \
           | grep -v '^[[:space:]]*$' \
+          | grep -v up-transport-zenoh-rust \
           | sed -E 's|([^ ]+) v([^ ]+).*|crate/cratesio/-/\1/\2|' \
           > DEPS.txt
     - name: Run Eclipse Dash Licenses tool
