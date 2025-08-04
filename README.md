@@ -69,7 +69,7 @@ Covers:
 ### Supported Message Delivery Methods
 `uman~supported-message-delivery-methods~1`
 
-The transport provided by this crate supports the [push delivery method](https://github.com/eclipse-uprotocol/up-spec/blob/v1.6.0-alpha.5/up-l1/README.adoc#5-message-delivery) only.
+The transport provided by this crate supports the [push delivery method](https://github.com/eclipse-uprotocol/up-spec/blob/v1.6.0-alpha.6/up-l1/README.adoc#5-message-delivery) only.
 The `UPTransportZenoh::receive` function therefore always returns `UCode::UNIMPLEMENTED`.
 
 Covers:
