@@ -26,18 +26,22 @@ use std::{str::FromStr, sync::Arc};
 use up_rust::{UListener, UMessage, UTransport, UUri};
 use up_transport_zenoh::UPTransportZenoh;
 
-struct SubscriberListener;
+struct SubscriberListener(tokio::runtime::Runtime);
 #[async_trait]
 impl UListener for SubscriberListener {
     async fn on_receive(&self, msg: UMessage) {
-        let payload = msg.payload.unwrap();
-        let value = String::from_utf8(payload.to_vec()).unwrap();
-        let uri = msg.attributes.unwrap().source.unwrap().to_uri(false);
-        println!("Received message [topic: {uri}, payload: {value}]");
+        // Offload processing of the message to a dedicated tokio runtime using
+        // threads not used by Zenoh.
+        self.0.spawn(async move {
+            let payload = msg.payload.unwrap();
+            let value = String::from_utf8(payload.to_vec()).unwrap();
+            let uri = msg.attributes.unwrap().source.unwrap().to_uri(false);
+            println!("Received message [topic: {uri}, payload: {value}]");
+        });
     }
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // initiate logging
     UPTransportZenoh::try_init_log_from_env();
@@ -56,8 +60,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "Registering message listener [source filter: {}]",
         source_filter.to_uri(false)
     );
+
+    let message_processing_rt = tokio::runtime::Builder::new_multi_thread()
+        .thread_name("message-processing")
+        .worker_threads(1)
+        .build()?;
     transport
-        .register_listener(&source_filter, None, Arc::new(SubscriberListener {}))
+        .register_listener(
+            &source_filter,
+            None,
+            Arc::new(SubscriberListener(message_processing_rt)),
+        )
         .await?;
 
     tokio::signal::ctrl_c().await.map_err(Box::from)

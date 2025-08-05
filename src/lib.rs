@@ -10,6 +10,22 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  ********************************************************************************/
+
+/*!
+This crate provides an implementation of the Eclipse Zenoh &trade; uProtocol Transport.
+The transport uses Zenoh's publish-subscribe mechanism to exchange messages. It is
+designed to be used in conjunction with the [up-rust](https://crates.io/crates/up_rust)
+crate, which provides the uProtocol message types and utilities.
+
+The transport is designed to run in the context of a [tokio `Runtime`] which
+needs to be configured outside of the transport according to the
+processing requirements of the use case at hand. The transport does
+not make any implicit assumptions about the number of threads available
+and does not spawn any threads itself.
+
+[tokio `Runtime`]: https://docs.rs/tokio/latest/tokio/runtime/index.html
+*/
+
 mod listener_registry;
 pub mod utransport;
 
@@ -27,6 +43,20 @@ use zenoh::Session;
 const UPROTOCOL_MAJOR_VERSION: u8 = 1;
 const DEFAULT_MAX_LISTENERS: usize = 100;
 
+/// An Eclipse Zenoh &trade; based uProtocol transport implementation.
+///
+/// The transport registers callbacks on the Zenoh runtime for listeners that
+/// are being registered using `up_rust::UTransport::register_listener`.
+///
+/// <div class="warning">
+///
+/// The registered listeners are being invoked sequentially on the **same thread**
+/// that the callback is being executed on. Implementers of listeners are therefore
+/// **strongly advised** to move non-trivial processing logic to **another/dedicated
+/// thread**, if necessary. Please refer to `subscriber` and `notification_receiver`
+/// in the examples directory for how this can be done.
+///
+/// </div>
 pub struct UPTransportZenoh {
     session: Arc<Session>,
     subscribers: ListenerRegistry,
