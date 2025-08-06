@@ -78,12 +78,14 @@ Covers:
 ### Authentication & Authorization
 `uman~auth-configuration~1`
 
-The transport provided by this crate can be configured with credentials that the transport will provide to the Zenoh router during connection establishment. A [_username_ and _password_](https://zenoh.io/docs/manual/user-password/) can be specified in the Zenoh config file that is passed into the `UPTransportZenoh::new` function to create a new transport instance.
+The transport provided by this crate can be configured with credentials that the transport will provide to the Zenoh router during connection establishment. A [_username_ and _password_](https://zenoh.io/docs/manual/user-password/) can be specified in the Zenoh config file that is passed into the `UPTransportZenohBuilder::with_config_file` function.
 
-Access to resources can be configured in the Zenoh config file by means of [Access Control Lists](https://zenoh.io/docs/manual/access-control/).
+Access to resources can be configured in the Zenoh (peer's or router's) config file by means of [Access Control Lists](https://zenoh.io/docs/manual/access-control/).
+The [authorization integration tests](./tests/authorization.rs) illustrate, how ACLs can be used to restrict a client's authority to put and subscribe to messages using corresponding rule sets.
 
 Covers:
-- `req~utransport-send-error-permission-denied~2`
+- `req~utransport-send-prevent-address-spoofing~1`
+- `req~utransport-registerlistener-prevent-unauthorized-access~1`
 
 ### Maximum number of listeners
 `uman~max-listeners-configuration~1`
@@ -116,15 +118,16 @@ Needs: impl, itest
 
 In general, uProtocol entities are only allowed to send messages on their own behalf. Certain specific uEntities acting as a uProtocol Streamer also need to send messages _on behalf of_ other uEntities in order to fulfill their original purpose of routing messages hence and forth between different transports. Making these authoritzation decisions requires the (proven) establishment of an _identity_ and its _authorities_.
 
-The Zenoh transport delegates all authorization decisions to the Zenoh router that the transport is configured to connect to. For this purpose, the transport supports configuration of credentials which are being used during connection establishment. The Zenoh router uses the provided credentials to establish the client's identity and its associated authorities. Whenever the uEntity sends a message via the router or registers a subscriber for a key pattern, the router verifies, if the client is authorized to publish using the key or receive messages matching the key pattern.
+The Zenoh transport delegates all authorization decisions to the Zenoh router (or peer) that the transport is configured to connect to. For this purpose, the transport supports configuration of credentials which are being used during connection establishment. The Zenoh router uses the provided credentials to establish the client's identity and its associated authorities. Whenever the uEntity sends a message via the router or registers a subscriber for a key pattern, the router verifies that the client is authorized to publish using the key or receive messages matching the key pattern.
 
 Rationale:
 The Zenoh transport is implemented as a library that is linked to the (custom) code that implements a uEntity's functionality. It is therefore not feasible to perform the authentication and authoritzation within the transport library code, because uEntities can not be forced to actually utilize one of uProtocol's transport libraries but may instead chooose to implement the binding to the transport protocol themselves.
 
 Covers:
-- `req~utransport-send-error-permission-denied~2`
+- `req~utransport-send-prevent-address-spoofing~1`
+- `req~utransport-registerlistener-prevent-unauthorized-access~1`
 
-Needs: impl, utest
+Needs: itest
 
 ## Change Log
 

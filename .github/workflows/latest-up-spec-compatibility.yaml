@@ -69,13 +69,9 @@ jobs:
         with: 
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@v2
-      - uses: taiki-e/install-action@nextest
       - name: Run tests
         run: |
-          # Using nextest because it's faster than built-in test
-          cargo nextest run --all-features
-          # but it cannot execute doc tests
-          cargo test --doc --all-features
+          cargo test --all-features
 
       # This step will only be run if the tests in the previous step have succeeded.
       # In that case, we use the exit code produced by the OFT run as the job's

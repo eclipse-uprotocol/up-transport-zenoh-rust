@@ -15,7 +15,7 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use protobuf::Message;
 use std::sync::Arc;
-use tracing::{debug, error};
+use tracing::{debug, error, trace};
 use up_rust::{
     ComparableListener, UAttributes, UAttributesValidators, UCode, UListener, UMessage, UPriority,
     UStatus, UTransport, UUri,
@@ -125,6 +125,7 @@ impl UPTransportZenoh {
             // [impl->dsn~up-transport-zenoh-attributes-mapping~1]
             .attachment(attachment)
             .await
+            .inspect(|()| trace!("putting message with key: {zenoh_key}"))
             .map_err(|e| {
                 UStatus::fail_with_code(
                     UCode::INTERNAL,
