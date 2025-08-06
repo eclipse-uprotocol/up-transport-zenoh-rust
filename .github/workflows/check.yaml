@@ -28,10 +28,7 @@ on:
     outputs:
       test_results_url:
         description: "URL of the test results artifact"
-        value: ${{ jobs.nextest.outputs.test_results_url }}
-      doctest_results_url:
-        description: "URL of the doctest results artifact"
-        value: ${{ jobs.doctest.outputs.test_results_url }}
+        value: ${{ jobs.test.outputs.test_results_url }}
   workflow_dispatch:
 
 concurrency:
@@ -120,12 +117,14 @@ jobs:
         with:
           args: "--cache --max-cache-age 1d --verbose --no-progress --exclude-path './target/' --exclude-path './up-spec/' -- './**/*.md' './**/*.rs' './**/*.adoc'"
 
-  nextest:
+  test:
+    # Subset of feature-combos, on only one OS - more complete testing in test-featurematrix.yaml
     outputs:
       test_results_url: ${{ steps.test_results.outputs.artifact-url }}
     runs-on: ubuntu-latest
-    env: 
-      NEXTEST_EXPERIMENTAL_LIBTEST_JSON: 1
+    strategy:
+      matrix:
+        feature-flags: ["", "--no-default-features", "--all-features"]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -133,38 +132,19 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with: 
           toolchain: ${{ env.RUST_TOOLCHAIN }}
-      - uses: Swatinem/rust-cache@v2
-      # Using nextest because it's faster than built-in test
-      - uses: taiki-e/install-action@nextest
-      - name: Run cargo nextest
+      - name: Run lib tests
         run: |
-          cargo nextest run --message-format libtest-json-plus > testresults.json
+          mkdir -p ${GITHUB_WORKSPACE}/target
+          RUSTC_BOOTSTRAP=1 cargo test --no-fail-fast --all-targets ${{ matrix.feature-flags }} -- -Z unstable-options --format junit --report-time > ${GITHUB_WORKSPACE}/target/lib-test-results.xml
+      - name: Run doc tests
+        run: |
+          RUSTC_BOOTSTRAP=1 cargo test --no-fail-fast --doc ${{ matrix.feature-flags }} -- -Z unstable-options --format junit --report-time > ${GITHUB_WORKSPACE}/target/doc-test-results.xml
+
       - name: Upload all-features test results artifact
         id: test_results
+        if: matrix.feature-flags == '--all-features'
         uses: actions/upload-artifact@v4
         with:
           name: test-results
-          path: testresults.json
-
-  doctest:
-    # Run doctests separately, as nextest doesn't yet (https://github.com/nextest-rs/nextest/issues/16)
-    outputs:
-      test_results_url: ${{ steps.doctest_results.outputs.artifact-url }}
-    runs-on: ubuntu-latest
-    env:
-      RUSTDOCFLAGS: -Dwarnings
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: "recursive"
-      - uses: dtolnay/rust-toolchain@master
-        with: 
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-      - name: Run doc tests
-        run: |
-          RUSTC_BOOTSTRAP=1 cargo test --doc --all-features -- -Z unstable-options --format json --report-time > doctestresults--all-features.json
-      - name: Upload doctest results artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: doctest-results
-          path: doctestresults--all-features.json
+          # include all test result files
+          path: target/*-results.xml

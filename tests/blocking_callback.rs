@@ -47,7 +47,7 @@ async fn test_blocking_user_callback() {
     // create subscriber
     let topic = UUri::try_from_parts("vehicle", 0xaa0, 1, 0x8500).expect("invalid topic");
     let (tx, mut rx) = tokio::sync::mpsc::channel(5);
-    let transport = test_lib::create_up_transport_zenoh(topic.authority_name().as_str())
+    let transport = test_lib::create_up_transport_zenoh(topic.authority_name().as_str(), None)
         .await
         .expect("failed to create transport");
     transport
