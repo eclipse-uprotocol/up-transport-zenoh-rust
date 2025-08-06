@@ -11,35 +11,13 @@
  * SPDX-License-Identifier: Apache-2.0
  ********************************************************************************/
 
-use std::{
-    collections::HashMap,
-    sync::{Arc, LazyLock},
-};
+use std::{collections::HashMap, sync::Arc};
 
 use protobuf::Message;
-use tokio::{runtime::Runtime, sync::Mutex};
+use tokio::sync::Mutex;
 use tracing::{debug, enabled, info, warn, Level};
 use up_rust::{ComparableListener, UAttributes, UCode, UListener, UMessage, UStatus};
 use zenoh::{bytes::ZBytes, pubsub::Subscriber, sample::Sample, Session};
-
-const THREAD_NUM: usize = 10;
-
-// Create a separate tokio Runtime for running the callback
-static CB_RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
-    tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(THREAD_NUM)
-        .enable_all()
-        .build()
-        .expect("Unable to create callback runtime")
-});
-
-#[inline]
-fn spawn_nonblock_callback(listener: &ComparableListener, listener_msg: UMessage) {
-    let listener = listener.clone();
-    CB_RUNTIME.spawn(async move {
-        listener.on_receive(listener_msg).await;
-    });
-}
 
 fn attachment_to_uattributes(attachment: &ZBytes) -> anyhow::Result<UAttributes> {
     if attachment.len() < 2 {
@@ -116,9 +94,11 @@ impl ListenerRegistry {
             ));
         }
 
+        let listener_to_invoke_in_callback = comparable_listener.clone();
+
         // Setup callback
-        let listener_cloned = comparable_listener.clone();
         let callback = move |sample: Sample| {
+            let listener_cloned = listener_to_invoke_in_callback.clone();
             // Get the UAttribute from Zenoh user attachment
             let Some(attachment) = sample.attachment() else {
                 warn!(
@@ -144,7 +124,18 @@ impl ListenerRegistry {
                     payload: Some(sample.payload().to_bytes().to_vec().into()),
                     ..Default::default()
                 };
-                spawn_nonblock_callback(&listener_cloned, msg);
+                // Note that we are invoking the listener in a dedicated task
+                // to avoid blocking the Zenoh callback thread
+                // while still using Zenoh's underlying tokio runtime.
+                // It is the responsibility of the listener to offload the
+                // processing of the message to a dedicated tokio runtime or thread,
+                // if necessary.
+                // This is a deliberate design choice to let implementers of
+                // `UListener` decide how to handle incoming messages and use
+                // a custom tokio runtime configuration.
+                tokio::spawn(async move {
+                    listener_cloned.on_receive(msg).await;
+                });
             } else if enabled!(Level::DEBUG) {
                 if let Some(id) = attributes.id.as_ref() {
                     if let (Some(ts), Some(ttl)) = (id.get_time(), attributes.ttl) {
