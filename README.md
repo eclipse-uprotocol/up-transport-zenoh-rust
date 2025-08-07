@@ -1,6 +1,6 @@
 # Rust based Eclipse Zenoh&trade; Transport Library for Eclipse uProtocol&trade;
 
-This crate implements the Zenoh transport as specified in [uProtocol v1.6.0-alpha.6](https://github.com/eclipse-uprotocol/up-spec/blob/v1.6.0-alpha.6).
+This crate implements the Zenoh transport as specified in [uProtocol v1.6.0-alpha.6](https://github.com/eclipse-uprotocol/up-spec/tree/v1.6.0-alpha.6).
 
 ## Getting started
 
@@ -48,12 +48,11 @@ The example configuration file is located in the [config folder](config).
 
 Most developers will want to create an instance of the *UPTransportZenoh* struct and use it with the Communication Level API and its default implementation which are provided by the *up-rust* library.
 
-The libraries need to be added to the `[dependencies]` section of the `Cargo.toml` file:
+Both libraries need to be added as dependencies to your crate, e.g. using the following commands:
 
-```toml
-[dependencies]
-up-rust = { version = "0.7" }
-up-transport-zenoh = { version = "0.8" }
+```sh
+cargo add up-rust
+cargo add up-transport-zenoh
 ```
 
 Please refer to the [publisher](/examples/publisher.rs) and [subscriber](/examples/subscriber.rs) examples to see how to initialize and use the transport.
