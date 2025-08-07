@@ -48,12 +48,11 @@ The example configuration file is located in the [config folder](config).
 
 Most developers will want to create an instance of the *UPTransportZenoh* struct and use it with the Communication Level API and its default implementation which are provided by the *up-rust* library.
 
-The libraries need to be added to the `[dependencies]` section of the `Cargo.toml` file:
+Both libraries need to be added as dependencies to your crate, e.g. using the following commands:
 
-```toml
-[dependencies]
-up-rust = { version = "0.6" }
-up-transport-zenoh = { version = "0.7" }
+```sh
+cargo add up-rust
+cargo add up-transport-zenoh
 ```
 
 Please refer to the [publisher](/examples/publisher.rs) and [subscriber](/examples/subscriber.rs) examples to see how to initialize and use the transport.
