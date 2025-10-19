@@ -218,7 +218,7 @@ impl UPTransportZenohBuilder {
                     "Zenoh Runtime is used, but Zenoh config path is also provided",
                 ));
             }
-            let session = zenoh::session::init(runtime).await.map_err(|err| {
+            let session = zenoh::session::init(runtime.into()).await.map_err(|err| {
                 let msg = "Unable to open Zenoh session";
                 error!("{msg}: {err}");
                 UStatus::fail_with_code(UCode::INTERNAL, msg)
