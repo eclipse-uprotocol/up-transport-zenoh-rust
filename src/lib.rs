@@ -27,18 +27,16 @@ and does not spawn any threads itself.
 */
 
 mod listener_registry;
-pub mod utransport;
+pub(crate) mod utransport;
 
 use std::sync::Arc;
 
 use listener_registry::ListenerRegistry;
 use tracing::error;
-use up_rust::{UCode, UStatus};
+use up_rust::{UCode, UStatus, UUri};
+use zenoh::{Config, Session};
 // Re-export Zenoh config
 pub use zenoh::config as zenoh_config;
-#[cfg(feature = "zenoh-unstable")]
-use zenoh::internal::runtime::Runtime as ZRuntime;
-use zenoh::Session;
 
 const UPROTOCOL_MAJOR_VERSION: u8 = 1;
 const DEFAULT_MAX_LISTENERS: usize = 100;
@@ -76,8 +74,46 @@ impl UPTransportZenoh {
     /// or has a non-zero resource ID.
     pub fn builder<U: Into<String>>(
         local_authority: U,
-    ) -> Result<UPTransportZenohBuilder, UStatus> {
-        UPTransportZenohBuilder::new(local_authority)
+    ) -> Result<UPTransportZenohBuilder<InitialBuilderState>, UStatus> {
+        let authority_name = local_authority.into();
+        if authority_name.is_empty() || &authority_name == "*" {
+            return Err(UStatus::fail_with_code(
+                UCode::INVALID_ARGUMENT,
+                "Authority name must be non-empty and must not be the wildcard authority name",
+            ));
+        }
+
+        UUri::verify_authority(&authority_name).map_err(|err| {
+            UStatus::fail_with_code(
+                UCode::INVALID_ARGUMENT,
+                format!("Invalid authority name: {err}"),
+            )
+        })?;
+
+        Ok(UPTransportZenohBuilder {
+            common: Box::new(CommonProperties {
+                local_authority: authority_name,
+                max_listeners: DEFAULT_MAX_LISTENERS,
+            }),
+            extra: InitialBuilderState,
+        })
+    }
+
+    async fn init_with_config(
+        config: Config,
+        local_authority: String,
+        max_listeners: usize,
+    ) -> Result<UPTransportZenoh, UStatus> {
+        let session = zenoh::open(config).await.map_err(|err| {
+            let msg = "Failed to open Zenoh session";
+            error!("{msg}: {err}");
+            UStatus::fail_with_code(UCode::INTERNAL, msg)
+        })?;
+        Ok(Self::init_with_session(
+            session,
+            local_authority,
+            max_listeners,
+        ))
     }
 
     fn init_with_session(
@@ -99,85 +135,78 @@ impl UPTransportZenoh {
     }
 }
 
-#[must_use]
-pub struct UPTransportZenohBuilder {
-    config: Option<zenoh_config::Config>,
-    config_path: Option<String>,
+struct CommonProperties {
     local_authority: String,
     max_listeners: usize,
-    #[cfg(feature = "zenoh-unstable")]
-    runtime: Option<ZRuntime>,
 }
 
-impl UPTransportZenohBuilder {
-    /// Creates a new builder with the given local authority.
-    fn new<U: Into<String>>(local_authority: U) -> Result<Self, UStatus> {
-        let authority_name = local_authority.into();
-        // TODO: provide a helper function in up-rust crate to validate an authority name
-        let uri =
-            up_rust::UUri::try_from_parts(authority_name.as_str(), 1, 1, 0).map_err(|err| {
-                UStatus::fail_with_code(
-                    UCode::INVALID_ARGUMENT,
-                    format!("Invalid authority name: {err}"),
-                )
-            })?;
-        if uri.has_empty_authority() || uri.has_wildcard_authority() {
-            return Err(UStatus::fail_with_code(
-                UCode::INVALID_ARGUMENT,
-                "Authority name must be non-empty and must not be the wildcard authority name",
-            ));
-        }
-        Ok(UPTransportZenohBuilder {
-            config: None,
-            config_path: None,
-            local_authority: authority_name,
-            max_listeners: DEFAULT_MAX_LISTENERS,
-            #[cfg(feature = "zenoh-unstable")]
-            runtime: None,
-        })
-    }
+pub struct InitialBuilderState;
+pub struct ConfigBuilderState {
+    config: zenoh_config::Config,
+}
+pub struct ConfigPathBuilderState {
+    config_path: String,
+}
 
+pub struct SessionBuilderState {
+    zenoh_session: Session,
+}
+
+pub trait BuilderState {}
+impl BuilderState for InitialBuilderState {}
+impl BuilderState for ConfigBuilderState {}
+impl BuilderState for ConfigPathBuilderState {}
+impl BuilderState for SessionBuilderState {}
+
+pub struct UPTransportZenohBuilder<S: BuilderState> {
+    common: Box<CommonProperties>,
+    extra: S,
+}
+
+impl UPTransportZenohBuilder<InitialBuilderState> {
     /// Sets the Zenoh configuration to use for the transport.
     ///
-    /// Setting the configuration using this function is mutually exclusive with `with_config_path`.
-    ///
     /// Please refer to the [Zenoh documentation](https://zenoh.io/docs/manual/configuration/) for details.
-    pub fn with_config(mut self, config: zenoh_config::Config) -> Self {
-        self.config = Some(config);
-        self
+    #[must_use]
+    pub fn with_config(
+        self,
+        config: zenoh_config::Config,
+    ) -> UPTransportZenohBuilder<ConfigBuilderState> {
+        UPTransportZenohBuilder {
+            common: self.common,
+            extra: ConfigBuilderState { config },
+        }
     }
 
     /// Sets the path to a Zenoh configuration file to use for the transport.
     ///
-    /// Setting the configuration using this function is mutually exclusive with `with_config`.
-    ///
     /// Please refer to the [Zenoh documentation](https://zenoh.io/docs/manual/configuration/) for details.
-    pub fn with_config_path(mut self, config_path: String) -> Self {
-        self.config_path = Some(config_path);
-        self
+    #[must_use]
+    pub fn with_config_path(
+        self,
+        config_path: String,
+    ) -> UPTransportZenohBuilder<ConfigPathBuilderState> {
+        UPTransportZenohBuilder {
+            common: self.common,
+            extra: ConfigPathBuilderState { config_path },
+        }
     }
 
-    /// Sets the maximum number of listeners that can be registered with this transport.
-    /// If not set explicitly, the default value is 100.
-    pub fn with_max_listeners(mut self, max_listeners: usize) -> Self {
-        self.max_listeners = max_listeners;
-        self
+    /// Sets an existing Zenoh session to use for the transport.
+    #[must_use]
+    pub fn with_session(
+        self,
+        zenoh_session: Session,
+    ) -> UPTransportZenohBuilder<SessionBuilderState> {
+        UPTransportZenohBuilder {
+            common: self.common,
+            extra: SessionBuilderState { zenoh_session },
+        }
     }
+}
 
-    /// Sets the Zenoh Runtime to use for the transport.
-    ///
-    /// Setting the runtime using this function is mutually exclusive
-    /// with `with_config` and `with_config_path`.
-    #[cfg(feature = "zenoh-unstable")]
-    pub fn with_runtime(&mut self, runtime: ZRuntime) -> &mut Self {
-        self.runtime = Some(runtime);
-        self
-    }
-
+impl UPTransportZenohBuilder<ConfigBuilderState> {
     /// Creates the transport based on the provided configuration properties.
-    ///
-    /// If neither `with_config` nor `with_config_path` has been invoked,
-    /// the default Zenoh configuration will be used.
     ///
     /// # Returns
     ///
@@ -194,7 +223,7 @@ impl UPTransportZenohBuilder {
     /// # async fn main() {
     /// use up_transport_zenoh::{zenoh_config, UPTransportZenoh};
     ///
-    /// assert!(UPTransportZenoh::builder("MyAuthority")
+    /// assert!(UPTransportZenoh::builder("local_authority")
     ///    .expect("Invalid authority name")
     ///    .with_config(zenoh_config::Config::default())
     ///    .with_max_listeners(10)
@@ -204,61 +233,100 @@ impl UPTransportZenohBuilder {
     /// # }
     /// ```
     pub async fn build(self) -> Result<UPTransportZenoh, UStatus> {
-        #[cfg(feature = "zenoh-unstable")]
-        if let Some(runtime) = self.runtime {
-            if self.config.is_some() {
-                return Err(UStatus::fail_with_code(
-                    UCode::INVALID_ARGUMENT,
-                    "Zenoh Runtime is used, but Zenoh config is also provided",
-                ));
-            }
-            if self.config_path.is_some() {
-                return Err(UStatus::fail_with_code(
-                    UCode::INVALID_ARGUMENT,
-                    "Zenoh Runtime is used, but Zenoh config path is also provided",
-                ));
-            }
-            let session = zenoh::session::init(runtime.into()).await.map_err(|err| {
-                let msg = "Unable to open Zenoh session";
-                error!("{msg}: {err}");
-                UStatus::fail_with_code(UCode::INTERNAL, msg)
-            })?;
+        UPTransportZenoh::init_with_config(
+            self.extra.config,
+            self.common.local_authority,
+            self.common.max_listeners,
+        )
+        .await
+    }
+}
 
-            return Ok(UPTransportZenoh::init_with_session(
-                session,
-                self.local_authority,
-                self.max_listeners,
-            ));
-        }
-
-        let config = match (self.config_path.as_ref(), self.config.as_ref()) {
-            (None, None) => zenoh_config::Config::default(),
-            (Some(_), Some(_)) => {
-                return Err(UStatus::fail_with_code(
-                    UCode::INVALID_ARGUMENT,
-                    "Either Zenoh config or config file path may be provided, not both",
-                ));
-            }
-            (Some(config_path), None) => {
-                let config = zenoh_config::Config::from_file(config_path).map_err(|e| {
-                    error!("Failed to load Zenoh config from file: {e}");
-                    UStatus::fail_with_code(UCode::INVALID_ARGUMENT, e.to_string())
-                })?;
-                config
-            }
-            (None, Some(config)) => config.clone(),
-        };
-        let session = zenoh::open(config).await.map_err(|err| {
-            let msg = "Failed to open Zenoh session";
-            error!("{msg}: {err}");
-            UStatus::fail_with_code(UCode::INTERNAL, msg)
+impl UPTransportZenohBuilder<ConfigPathBuilderState> {
+    /// Creates the transport based on the provided configuration file.
+    ///
+    /// # Returns
+    ///
+    /// The newly created transport instance. Note that the builder consumes itself.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the transport cannot be created, e.g. because the configuration
+    /// file cannot be read or is invalid.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// #[tokio::main]
+    /// # async fn main() {
+    /// use up_transport_zenoh::UPTransportZenoh;
+    ///
+    /// assert!(UPTransportZenoh::builder("local_authority")
+    ///    .expect("Invalid authority name")
+    ///    .with_config_path("non-existing-config.json5".to_string())
+    ///    .build()
+    ///    .await
+    ///    .is_err_and(|e| e.get_code() == up_rust::UCode::INVALID_ARGUMENT));
+    /// # }
+    /// ```
+    pub async fn build(self) -> Result<UPTransportZenoh, UStatus> {
+        let config = zenoh_config::Config::from_file(self.extra.config_path).map_err(|e| {
+            error!("Failed to load Zenoh config from file: {e}");
+            UStatus::fail_with_code(UCode::INVALID_ARGUMENT, e.to_string())
         })?;
+        UPTransportZenoh::init_with_config(
+            config,
+            self.common.local_authority,
+            self.common.max_listeners,
+        )
+        .await
+    }
+}
 
+impl UPTransportZenohBuilder<SessionBuilderState> {
+    /// Creates the transport based on the provided configuration file.
+    ///
+    /// # Returns
+    ///
+    /// The newly created transport instance. Note that the builder consumes itself.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the transport cannot be created.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// #[tokio::main]
+    /// # async fn main() {
+    /// use up_transport_zenoh::UPTransportZenoh;
+    /// use zenoh::config::Config;
+    ///
+    /// let zenoh_session = zenoh::open(Config::default()).await.expect("Failed to open Zenoh session");
+    /// assert!(UPTransportZenoh::builder("local_authority")
+    ///    .expect("Invalid authority name")
+    ///    .with_session(zenoh_session)
+    ///    .with_max_listeners(10)
+    ///    .build()
+    ///    .is_ok());
+    /// # }
+    /// ```
+    pub fn build(self) -> Result<UPTransportZenoh, UStatus> {
         Ok(UPTransportZenoh::init_with_session(
-            session,
-            self.local_authority,
-            self.max_listeners,
+            self.extra.zenoh_session,
+            self.common.local_authority,
+            self.common.max_listeners,
         ))
+    }
+}
+
+impl<S: BuilderState> UPTransportZenohBuilder<S> {
+    /// Sets the maximum number of listeners that can be registered with this transport.
+    /// If not set explicitly, the default value is 100.
+    #[must_use]
+    pub fn with_max_listeners(mut self, max_listeners: usize) -> Self {
+        self.common.max_listeners = max_listeners;
+        self
     }
 }
 
@@ -274,7 +342,11 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_getting_a_builder<S: Into<String>>(local_authority: S) -> bool {
         if let Ok(builder) = UPTransportZenoh::builder(local_authority) {
-            builder.build().await.is_ok()
+            builder
+                .with_config(zenoh_config::Config::default())
+                .build()
+                .await
+                .is_ok()
         } else {
             false
         }
