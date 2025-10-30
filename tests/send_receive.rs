@@ -12,8 +12,9 @@
  ********************************************************************************/
 mod test_lib;
 
-use async_trait::async_trait;
 use std::{str::FromStr, sync::Arc};
+
+use async_trait::async_trait;
 use tokio::{sync::Notify, time::Duration};
 use tracing::info;
 use up_rust::{

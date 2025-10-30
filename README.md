@@ -11,8 +11,6 @@ This crate implements the Zenoh transport as specified in [uProtocol v1.6.0-alph
 cargo clippy --all-targets
 # Build
 cargo build
-# Optional: Build with feature `zenoh-unstable` in uStreamer use case
-cargo build --features zenoh-unstable
 # Run test
 cargo test
 # Test coverage

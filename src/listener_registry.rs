@@ -16,7 +16,9 @@ use std::{collections::HashMap, sync::Arc};
 use protobuf::Message;
 use tokio::sync::Mutex;
 use tracing::{debug, enabled, info, warn, Level};
-use up_rust::{ComparableListener, UAttributes, UCode, UListener, UMessage, UStatus};
+use up_rust::{
+    ComparableListener, UAttributes, UAttributesValidators, UCode, UListener, UMessage, UStatus,
+};
 use zenoh::{bytes::ZBytes, pubsub::Subscriber, sample::Sample, Session};
 
 fn attachment_to_uattributes(attachment: &ZBytes) -> anyhow::Result<UAttributes> {
@@ -41,7 +43,9 @@ fn attachment_to_uattributes(attachment: &ZBytes) -> anyhow::Result<UAttributes>
     }
     // Get the attributes
     let uattributes = UAttributes::parse_from_bytes(&attachment_bytes[1..])?;
-    Ok(uattributes)
+    // [impl->dsn~utransport-registerlistener-discard-invalid-messages~1]
+    let validator = UAttributesValidators::get_validator_for_attributes(&uattributes);
+    Ok(validator.validate(&uattributes).map(|()| uattributes)?)
 }
 
 // mapping of (Zenoh Key expression, Message Listener) ->  Zenoh Subscriber
@@ -108,9 +112,9 @@ impl ListenerRegistry {
                 return;
             };
             let attributes = match attachment_to_uattributes(attachment) {
-                Ok(attribs) => attribs,
+                Ok(attr) => attr,
                 Err(e) => {
-                    warn!("Unable to transform attachment to UAttributes: {e:?}");
+                    warn!("Unable to transform attachment to valid UAttributes: {e:?}");
                     return;
                 }
             };
@@ -201,7 +205,7 @@ impl ListenerRegistry {
 mod tests {
 
     use super::*;
-    use up_rust::MockUListener;
+    use up_rust::{MockUListener, UMessageType, UUri, UUID};
 
     #[tokio::test(flavor = "multi_thread")]
     // [utest->dsn~utransport-registerlistener-idempotent~1]
@@ -227,5 +231,33 @@ mod tests {
             assert!(locked_subscribers
                 .contains_key(&("key1".to_string(), ComparableListener::new(listener))));
         }
+    }
+
+    #[test_case::test_case(
+        UAttributes {
+            type_: UMessageType::UMESSAGE_TYPE_PUBLISH.into(),
+            id: Some(UUID::build()).into(),
+            source: Some(UUri::try_from_parts("source", 0xAA1, 0x01, 0x9000).expect("failed to create source")).into(),
+            ..Default::default()
+        } => true;
+        "valid PUBLISH attributes"
+    )]
+    #[test_case::test_case(
+        UAttributes {
+            type_: UMessageType::UMESSAGE_TYPE_PUBLISH.into(),
+            id: Some(UUID::build()).into(),
+            // source is missing
+            ..Default::default()
+        } => false;
+        "invalid PUBLISH attributes"
+    )]
+    #[tokio::test(flavor = "multi_thread")]
+    // [utest->dsn~utransport-registerlistener-discard-invalid-messages~1]
+    async fn test_attachment_to_uattributes_fails_for_invalid_attributes(
+        attribs: UAttributes,
+    ) -> bool {
+        let attachment = crate::utransport::uattributes_to_attachment(&attribs)
+            .expect("failed to create attachment from invalid UAttributes");
+        attachment_to_uattributes(&attachment).is_ok()
     }
 }
