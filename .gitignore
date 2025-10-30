@@ -1,3 +1,8 @@
 # Ignore compiled files
 target
 .vscode
+.lycheecache
+
+# temporary files created by Dash license checker
+DASH_SUMMARY.*
+DEPS.*
