@@ -225,7 +225,6 @@ mod tests {
     use super::*;
     use test_case::test_case;
     use up_rust::{MockUListener, UCode, UMessageBuilder, UMessageType, UUri};
-    use zenoh::Config;
 
     #[test]
     // [utest->dsn~up-transport-zenoh-attributes-mapping~1]
@@ -314,7 +313,6 @@ mod tests {
     async fn test_receive_fails_due_to_unimplemented() {
         let up_transport_zenoh = UPTransportZenoh::builder("vehicle1")
             .expect("invalid authority name")
-            .with_config(Config::default())
             .build()
             .await
             .expect("failed to create transport");
@@ -347,7 +345,6 @@ mod tests {
     ) {
         let up_transport_zenoh = UPTransportZenoh::builder("vehicle1")
             .expect("invalid authority name")
-            .with_config(Config::default())
             .build()
             .await
             .expect("failed to create transport");
@@ -378,7 +375,6 @@ mod tests {
         let up_transport_zenoh = UPTransportZenoh::builder("vehicle1")
             .expect("invalid authority name")
             .with_max_listeners(1)
-            .with_config(Config::default())
             .build()
             .await
             .expect("failed to create transport");
@@ -410,7 +406,6 @@ mod tests {
     async fn test_register_and_unregister(source_filter_uri: &str, sink_filter_uri: Option<&str>) {
         let up_transport_zenoh = UPTransportZenoh::builder("vehicle1")
             .expect("invalid authority name")
-            .with_config(Config::default())
             .build()
             .await
             .expect("failed to create transport");
@@ -463,7 +458,6 @@ mod tests {
     async fn test_send_fails_for_invalid_attributes() {
         let up_transport_zenoh = UPTransportZenoh::builder("vehicle2")
             .expect("invalid authority name")
-            .with_config(Config::default())
             .build()
             .await
             .expect("failed to create transport");
