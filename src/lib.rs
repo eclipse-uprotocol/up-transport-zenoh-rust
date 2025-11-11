@@ -142,7 +142,7 @@ struct CommonProperties {
 
 pub enum BuilderState {
     Initial,
-    Config(zenoh_config::Config),
+    Config(Box<zenoh_config::Config>),
     ConfigPath(String),
     Session(Session),
 }
@@ -177,7 +177,7 @@ impl UPTransportZenohBuilder {
     pub fn with_config(self, config: zenoh_config::Config) -> UPTransportZenohBuilder {
         UPTransportZenohBuilder {
             common: self.common,
-            extra: BuilderState::Config(config),
+            extra: BuilderState::Config(Box::new(config)),
         }
     }
 
@@ -273,7 +273,7 @@ impl UPTransportZenohBuilder {
             }
             BuilderState::Config(config) => {
                 UPTransportZenoh::init_with_config(
-                    config,
+                    *config,
                     self.common.local_authority,
                     self.common.max_listeners,
                 )
