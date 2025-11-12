@@ -74,7 +74,7 @@ impl UPTransportZenoh {
     /// or has a non-zero resource ID.
     pub fn builder<U: Into<String>>(
         local_authority: U,
-    ) -> Result<UPTransportZenohBuilder, UStatus> {
+    ) -> Result<UPTransportZenohBuilder<InitialBuilderState>, UStatus> {
         let authority_name = local_authority.into();
         if authority_name.is_empty() || &authority_name == "*" {
             return Err(UStatus::fail_with_code(
@@ -95,7 +95,7 @@ impl UPTransportZenoh {
                 local_authority: authority_name,
                 max_listeners: DEFAULT_MAX_LISTENERS,
             }),
-            extra: BuilderState::Initial,
+            extra: InitialBuilderState,
         })
     }
 
@@ -140,19 +140,23 @@ struct CommonProperties {
     max_listeners: usize,
 }
 
-pub enum BuilderState {
-    Initial,
+pub struct InitialBuilderState;
+pub enum ConfiguredBuilderState {
     Config(Box<zenoh_config::Config>),
     ConfigPath(String),
     Session(Session),
 }
 
-pub struct UPTransportZenohBuilder {
+pub trait BuilderState {}
+impl BuilderState for InitialBuilderState {}
+impl BuilderState for ConfiguredBuilderState {}
+
+pub struct UPTransportZenohBuilder<S: BuilderState> {
     common: Box<CommonProperties>,
-    extra: BuilderState,
+    extra: S,
 }
 
-impl UPTransportZenohBuilder {
+impl UPTransportZenohBuilder<InitialBuilderState> {
     /// Sets the Zenoh configuration to use for the transport.
     ///
     /// Please refer to the [Zenoh documentation](https://zenoh.io/docs/manual/configuration/) for details.
@@ -174,10 +178,13 @@ impl UPTransportZenohBuilder {
     /// # }
     /// ```
     #[must_use]
-    pub fn with_config(self, config: zenoh_config::Config) -> UPTransportZenohBuilder {
+    pub fn with_config(
+        self,
+        config: zenoh_config::Config,
+    ) -> UPTransportZenohBuilder<ConfiguredBuilderState> {
         UPTransportZenohBuilder {
             common: self.common,
-            extra: BuilderState::Config(Box::new(config)),
+            extra: ConfiguredBuilderState::Config(Box::new(config)),
         }
     }
 
@@ -201,10 +208,13 @@ impl UPTransportZenohBuilder {
     /// # }
     /// ```
     #[must_use]
-    pub fn with_config_path(self, config_path: String) -> UPTransportZenohBuilder {
+    pub fn with_config_path(
+        self,
+        config_path: String,
+    ) -> UPTransportZenohBuilder<ConfiguredBuilderState> {
         UPTransportZenohBuilder {
             common: self.common,
-            extra: BuilderState::ConfigPath(config_path),
+            extra: ConfiguredBuilderState::ConfigPath(config_path),
         }
     }
 
@@ -229,14 +239,17 @@ impl UPTransportZenohBuilder {
     /// # }
     /// ```
     #[must_use]
-    pub fn with_session(self, zenoh_session: Session) -> UPTransportZenohBuilder {
+    pub fn with_session(
+        self,
+        zenoh_session: Session,
+    ) -> UPTransportZenohBuilder<ConfiguredBuilderState> {
         UPTransportZenohBuilder {
             common: self.common,
-            extra: BuilderState::Session(zenoh_session),
+            extra: ConfiguredBuilderState::Session(zenoh_session),
         }
     }
 
-    /// Creates the Zenoh transport.
+    /// Creates the Zenoh transport with the default configuration.
     ///
     /// # Returns
     ///
@@ -262,16 +275,29 @@ impl UPTransportZenohBuilder {
     /// # }
     /// ```
     pub async fn build(self) -> Result<UPTransportZenoh, UStatus> {
+        UPTransportZenoh::init_with_config(
+            zenoh_config::Config::default(),
+            self.common.local_authority,
+            self.common.max_listeners,
+        )
+        .await
+    }
+}
+
+impl UPTransportZenohBuilder<ConfiguredBuilderState> {
+    /// Creates the Zenoh transport with the provided configuration properties, configuration file or Zenoh Session.
+    ///
+    /// # Returns
+    ///
+    /// The newly created transport instance. Note that the builder consumes itself.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the transport cannot be created.
+    ///
+    pub async fn build(self) -> Result<UPTransportZenoh, UStatus> {
         match self.extra {
-            BuilderState::Initial => {
-                UPTransportZenoh::init_with_config(
-                    zenoh_config::Config::default(),
-                    self.common.local_authority,
-                    self.common.max_listeners,
-                )
-                .await
-            }
-            BuilderState::Config(config) => {
+            ConfiguredBuilderState::Config(config) => {
                 UPTransportZenoh::init_with_config(
                     *config,
                     self.common.local_authority,
@@ -279,7 +305,7 @@ impl UPTransportZenohBuilder {
                 )
                 .await
             }
-            BuilderState::ConfigPath(config_path) => {
+            ConfiguredBuilderState::ConfigPath(config_path) => {
                 let config = zenoh_config::Config::from_file(config_path).map_err(|e| {
                     error!("Failed to load Zenoh config from file: {e}");
                     UStatus::fail_with_code(UCode::INVALID_ARGUMENT, e.to_string())
@@ -291,14 +317,18 @@ impl UPTransportZenohBuilder {
                 )
                 .await
             }
-            BuilderState::Session(zenoh_session) => Ok(UPTransportZenoh::init_with_session(
-                zenoh_session,
-                self.common.local_authority,
-                self.common.max_listeners,
-            )),
+            ConfiguredBuilderState::Session(zenoh_session) => {
+                Ok(UPTransportZenoh::init_with_session(
+                    zenoh_session,
+                    self.common.local_authority,
+                    self.common.max_listeners,
+                ))
+            }
         }
     }
+}
 
+impl<S: BuilderState> UPTransportZenohBuilder<S> {
     /// Sets the maximum number of listeners that can be registered with this transport.
     /// If not set explicitly, the default value is 100.
     #[must_use]
