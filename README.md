@@ -53,7 +53,7 @@ cargo add up-rust
 cargo add up-transport-zenoh
 ```
 
-Please refer to the [publisher](/examples/publisher.rs) and [subscriber](/examples/subscriber.rs) examples to see how to initialize and use the transport.
+Please refer to the [publisher](examples/publisher.rs) and [subscriber](examples/subscriber.rs) examples to see how to initialize and use the transport.
 
 ### Supported Service Classes
 `uman~supported-service-classes~1`
