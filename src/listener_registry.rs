@@ -194,7 +194,7 @@ impl ListenerRegistry {
             // [impl->dsn~utransport-unregisterlistener-error-notfound~1]
             return Err(UStatus::fail_with_code(
                 UCode::NOT_FOUND,
-                format!("No such listener registered for key expression: {key_expr}",),
+                format!("No such listener registered for key expression: {key_expr}"),
             ));
         }
         Ok(())

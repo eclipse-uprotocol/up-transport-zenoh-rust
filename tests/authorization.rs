@@ -243,7 +243,7 @@ async fn test_send_message_to_peer(msg: UMessage, credentials: &str) -> bool {
         client_transport.send(msg).await.is_ok(),
         "failed to send message"
     );
-    tokio::time::timeout(Duration::from_millis(1000), message_received.notified())
+    tokio::time::timeout(Duration::from_secs(1), message_received.notified())
         .await
         .is_ok()
 }
@@ -309,7 +309,7 @@ async fn test_subscribe_for_messages_from_peer(sink_filter_uri: &str, credential
         .await
         .expect("Failed to send RPC request");
 
-    tokio::time::timeout(Duration::from_millis(1000), request_received.notified())
+    tokio::time::timeout(Duration::from_secs(1), request_received.notified())
         .await
         .is_ok()
 }
