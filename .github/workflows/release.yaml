@@ -42,11 +42,11 @@ jobs:
     # because we do not want the job to fail if not all requirements
     # are covered (yet)
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           submodules: "recursive"
       - name: "Determine OpenFastTrace file patterns from .env file"
-        uses: xom9ikk/dotenv@v2.3.0
+        uses: xom9ikk/dotenv@ac290ca23a42155a0cba1031d23afa46240116a9 # v2.3.0
         with:
           mode: "oft-current"
           load-mode: strict
@@ -71,19 +71,19 @@ jobs:
       - current-spec-compliance
     permissions: write-all
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           submodules: "recursive"
 
       - name: "Determine uProtocol Specification file patterns from .env file"
-        uses: xom9ikk/dotenv@v2.3.0
+        uses: xom9ikk/dotenv@ac290ca23a42155a0cba1031d23afa46240116a9 # v2.3.0
         with:
           mode: "oft-current"
           load-mode: strict
   
       # Requirements Tracing report - we later need the download_url output of the upload step
       - name: Download requirements tracing report
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: tracing-report-html
           path: dist/tracing/
@@ -98,7 +98,7 @@ jobs:
 
       # Test report - we later need the download_url output of the upload step
       - name: Download test report
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: test-results
           path: dist/tests/
@@ -113,7 +113,7 @@ jobs:
 
       # Test coverage - we later need the download_url output of the upload step
       - name: Download test coverage
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: code-coverage-html
           path: dist/codecov/
@@ -149,12 +149,12 @@ jobs:
   
       - name: Gets latest created release info
         id: latest_release_info
-        uses: joutvhu/get-release@v1
+        uses: joutvhu/get-release@8c3531bba0d249f5e7c3d7e1954d34db9edf2a90 # v1.0.4
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     
       - name: Collect quality artifacts
-        uses: eclipse-dash/quevee@v1
+        uses: eclipse-dash/quevee@b62d7faa1cf68654758754aaed8616b19f227583 # v1.0.0
         id: quevee_manifest
         with:          
           release_url: ${{ steps.latest_release_info.outputs.html_url }}
@@ -179,7 +179,7 @@ jobs:
     env: 
       CRATES_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           submodules: "recursive"
 
