@@ -42,10 +42,10 @@ jobs:
     uses: ./.github/workflows/check.yaml
 
   check-msrv:
-    uses: eclipse-uprotocol/ci-cd/.github/workflows/rust-verify-msrv.yaml@ad3f99eac0675c714f08c473412dae14d9fecaa8
+    uses: eclipse-uprotocol/ci-cd/.github/workflows/rust-verify-msrv.yaml@ad3f99eac0675c714f08c473412dae14d9fecaa8 # main
 
   coverage:
-    uses: eclipse-uprotocol/ci-cd/.github/workflows/rust-coverage.yaml@ad3f99eac0675c714f08c473412dae14d9fecaa8
+    uses: eclipse-uprotocol/ci-cd/.github/workflows/rust-coverage.yaml@ad3f99eac0675c714f08c473412dae14d9fecaa8 # main
 
   current-spec-compliance:
     runs-on: ubuntu-latest
@@ -66,7 +66,7 @@ jobs:
         # this will run OFT and upload the results
       - name: Run OpenFastTrace
         id: run-oft
-        uses: eclipse-uprotocol/ci-cd/.github/actions/run-oft@ad3f99eac0675c714f08c473412dae14d9fecaa8
+        uses: eclipse-uprotocol/ci-cd/.github/actions/run-oft@ad3f99eac0675c714f08c473412dae14d9fecaa8 # main
         with:
           file-patterns: "${{ env.OFT_FILE_PATTERNS }}"
           tags: "${{ env.OFT_TAGS_}}"
