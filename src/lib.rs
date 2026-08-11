@@ -32,7 +32,7 @@ pub(crate) mod utransport;
 use std::sync::Arc;
 
 use listener_registry::ListenerRegistry;
-use tracing::error;
+use tracing::{error, info, warn};
 use up_rust::{UCode, UStatus, UUri};
 use zenoh::{Config, Session};
 // Re-export Zenoh config
@@ -40,6 +40,12 @@ pub use zenoh::config as zenoh_config;
 
 const UPROTOCOL_MAJOR_VERSION: u8 = 1;
 const DEFAULT_MAX_LISTENERS: usize = 100;
+const EXISTING_SESSION_USAGE_MESSAGE_PREFIX: &str =
+    "Using an existing Zenoh session for the transport.";
+const COMPRESSION_ENABLED_FOR_UNICAST_MESSAGE_PREFIX: &str =
+    "Compression for the unicast transport is enabled in the Zenoh configuration";
+const COMPRESSION_ENABLED_FOR_MULTICAST_MESSAGE_PREFIX: &str =
+    "Compression for the multicast transport is enabled in the Zenoh configuration";
 
 /// An Eclipse Zenoh &trade; based uProtocol transport implementation.
 ///
@@ -99,34 +105,74 @@ impl UPTransportZenoh {
         })
     }
 
+    fn read_bool_config(config: &Config, key: &str) -> Result<bool, UStatus> {
+        let Ok(value) = config.get_json(key) else {
+            return Err(UStatus::fail_with_code(
+                UCode::INTERNAL,
+                format!("Failed to read Zenoh config value for {key}"),
+            ));
+        };
+        let Ok(bool_value) = value.parse::<bool>() else {
+            return Err(UStatus::fail_with_code(
+                UCode::INTERNAL,
+                format!("Failed to parse Zenoh config value for {key} into a boolean"),
+            ));
+        };
+        Ok(bool_value)
+    }
+
     async fn init_with_config(
         config: Config,
         local_authority: String,
         max_listeners: usize,
     ) -> Result<UPTransportZenoh, UStatus> {
+        if Self::read_bool_config(&config, "/transport/unicast/compression/enabled")?
+        {
+            warn!(
+                "{} (\"/transport/unicast/compression/enabled\"). Note that Zenoh uses the lz4_flex crate for compression in a version that is affected by RUSTSEC-2026-0041, which may result in data leakage.",
+                COMPRESSION_ENABLED_FOR_UNICAST_MESSAGE_PREFIX
+            );
+        }
+
+        if Self::read_bool_config(&config, "/transport/multicast/compression/enabled")? {
+            warn!(
+                "{} (\"/transport/multicast/compression/enabled\"). Note that Zenoh uses the lz4_flex crate for compression in a version that is affected by RUSTSEC-2026-0041, which may result in data leakage.",
+                COMPRESSION_ENABLED_FOR_MULTICAST_MESSAGE_PREFIX
+            );
+        }
+
         let session = zenoh::open(config).await.map_err(|err| {
             let msg = "Failed to open Zenoh session";
             error!("{msg}: {err}");
             UStatus::fail_with_code(UCode::INTERNAL, msg)
         })?;
-        Ok(Self::init_with_session(
+        Self::init_with_session(
             session,
             local_authority,
             max_listeners,
-        ))
+            // no need to warn about compression here, since we already did that above
+            false,
+        )
     }
 
     fn init_with_session(
         session: Session,
         local_authority: String,
         max_listeners: usize,
-    ) -> UPTransportZenoh {
+        warn_on_compression_enabled: bool,
+    ) -> Result<UPTransportZenoh, UStatus> {
+        if warn_on_compression_enabled {
+            info!(
+                "{} Please be aware that Zenoh uses the lz4_flex crate in a version that is affected by RUST-SEC-2026-0041, which may result in data leakage when compression is enabled for Zenoh. It is therefore strongly recommended to disable compression in the Zenoh configuration when using this transport.",
+                EXISTING_SESSION_USAGE_MESSAGE_PREFIX
+            );
+        }
         let session_to_use = Arc::new(session);
-        UPTransportZenoh {
+        Ok(UPTransportZenoh {
             session: session_to_use.clone(),
             subscribers: ListenerRegistry::new(session_to_use, max_listeners),
             local_authority,
-        }
+        })
     }
 
     /// Enables a tracing formatter subscriber that is initialized from the `RUST_LOG` environment variable.
@@ -167,6 +213,12 @@ impl UPTransportZenohBuilder<InitialBuilderState> {
     /// Sets the Zenoh configuration to use for the transport.
     ///
     /// Please refer to the [Zenoh documentation](https://zenoh.io/docs/manual/configuration/) for details.
+    ///
+    /// **Note**: Zenoh uses the lz4_flex crate in a version that is affected by
+    /// [RUSTSEC-2026-0041](https://rustsec.org/advisories/RUSTSEC-2026-0041),
+    /// which may result in data leakage when compression is enabled for Zenoh.
+    /// It is therefore strongly recommended to disable compression in the Zenoh configuration when
+    /// using this transport.
     #[must_use]
     pub fn with_config(
         self,
@@ -181,6 +233,12 @@ impl UPTransportZenohBuilder<InitialBuilderState> {
     /// Sets the path to a Zenoh configuration file to use for the transport.
     ///
     /// Please refer to the [Zenoh documentation](https://zenoh.io/docs/manual/configuration/) for details.
+    ///
+    /// **Note**: Zenoh uses the lz4_flex crate in a version that is affected by
+    /// [RUSTSEC-2026-0041](https://rustsec.org/advisories/RUSTSEC-2026-0041),
+    /// which may result in data leakage when compression is enabled for Zenoh.
+    /// It is therefore strongly recommended to disable compression in the Zenoh configuration when
+    /// using this transport.
     #[must_use]
     pub fn with_config_path(
         self,
@@ -193,6 +251,12 @@ impl UPTransportZenohBuilder<InitialBuilderState> {
     }
 
     /// Sets an existing Zenoh session to use for the transport.
+    ///
+    /// **Note**: Zenoh uses the lz4_flex crate in a version that is affected by
+    /// [RUSTSEC-2026-0041](https://rustsec.org/advisories/RUSTSEC-2026-0041),
+    /// which may result in data leakage when compression is enabled for Zenoh.
+    /// It is therefore strongly recommended to disable compression in the Zenoh configuration when
+    /// using this transport.
     #[must_use]
     pub fn with_session(
         self,
@@ -300,7 +364,7 @@ impl UPTransportZenohBuilder<SessionBuilderState> {
     /// #[tokio::main]
     /// # async fn main() {
     /// use up_transport_zenoh::UPTransportZenoh;
-    /// use zenoh::config::Config;
+    /// use zenoh::{Config, Session};
     ///
     /// let zenoh_session = zenoh::open(Config::default()).await.expect("Failed to open Zenoh session");
     /// assert!(UPTransportZenoh::builder("local_authority")
@@ -312,11 +376,12 @@ impl UPTransportZenohBuilder<SessionBuilderState> {
     /// # }
     /// ```
     pub fn build(self) -> Result<UPTransportZenoh, UStatus> {
-        Ok(UPTransportZenoh::init_with_session(
+        UPTransportZenoh::init_with_session(
             self.extra.zenoh_session,
             self.common.local_authority,
             self.common.max_listeners,
-        ))
+            true, // warn about compression enabled in existing session
+        )
     }
 }
 
@@ -333,7 +398,130 @@ impl<S: BuilderState> UPTransportZenohBuilder<S> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io;
+    use std::sync::{Arc, Mutex};
     use test_case::test_case;
+    use tracing_subscriber::fmt::MakeWriter;
+
+    #[derive(Clone, Default)]
+    struct SharedLogBuffer {
+        bytes: Arc<Mutex<Vec<u8>>>,
+    }
+
+    impl SharedLogBuffer {
+        fn contents(&self) -> String {
+            String::from_utf8(self.bytes.lock().expect("log buffer poisoned").clone())
+                .expect("log output should be valid UTF-8")
+        }
+    }
+
+    struct SharedLogWriter {
+        bytes: Arc<Mutex<Vec<u8>>>,
+    }
+
+    impl io::Write for SharedLogWriter {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.bytes
+                .lock()
+                .expect("log buffer poisoned")
+                .extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl<'a> MakeWriter<'a> for SharedLogBuffer {
+        type Writer = SharedLogWriter;
+
+        fn make_writer(&'a self) -> Self::Writer {
+            SharedLogWriter {
+                bytes: Arc::clone(&self.bytes),
+            }
+        }
+    }
+
+    #[test_case(
+        "/transport/unicast/compression/enabled",
+        COMPRESSION_ENABLED_FOR_UNICAST_MESSAGE_PREFIX;
+        "emits warning for unicast compression"
+    )]
+    #[test_case(
+        "/transport/multicast/compression/enabled",
+        COMPRESSION_ENABLED_FOR_MULTICAST_MESSAGE_PREFIX;
+        "emits warning for multicast compression"
+    )]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[serial_test::serial]
+    async fn test_builder_emits_warning_for_config_with_compression_enabled(
+        compression_key_expr: &str,
+        expected_message: &str,
+    ) {
+        let logs = SharedLogBuffer::default();
+        let subscriber = tracing_subscriber::fmt()
+            .with_writer(logs.clone())
+            .with_max_level(tracing::Level::WARN)
+            .with_ansi(false)
+            .without_time()
+            .finish();
+
+        let _guard = tracing::subscriber::set_default(subscriber);
+
+        let mut config = zenoh_config::Config::default();
+        config
+            .insert_json5(compression_key_expr, "true")
+            .expect("Failed to set compression enabled in config");
+
+        let result = UPTransportZenoh::builder("local_authority")
+            .expect("failed to create builder")
+            .with_config(config)
+            .build()
+            .await;
+
+        assert!(result.is_ok(), "builder should succeed and emit a warning");
+
+        let output = logs.contents();
+        assert!(
+            output.contains(expected_message),
+            "captured logs:\n{output}"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[serial_test::serial]
+    async fn test_builder_emits_info_when_using_existing_session() {
+        let logs = SharedLogBuffer::default();
+        let subscriber = tracing_subscriber::fmt()
+            .with_writer(logs.clone())
+            .with_max_level(tracing::Level::INFO)
+            .with_ansi(false)
+            .without_time()
+            .finish();
+
+        let _guard = tracing::subscriber::set_default(subscriber);
+
+        let session = zenoh::open(zenoh_config::Config::default())
+            .await
+            .expect("Failed to open Zenoh session");
+
+        let result = UPTransportZenoh::builder("local_authority")
+            .expect("failed to create builder")
+            .with_session(session)
+            .build();
+
+        assert!(
+            result.is_ok(),
+            "builder should succeed and emit an info message"
+        );
+
+        let output = logs.contents();
+        assert!(
+            output.contains(EXISTING_SESSION_USAGE_MESSAGE_PREFIX),
+            "captured logs:\n{output}"
+        );
+    }
 
     #[test_case("vehicle1" => true; "succeeds for valid authority name")]
     #[test_case("This is not an authority name" => false; "fails for invalid authority name")]

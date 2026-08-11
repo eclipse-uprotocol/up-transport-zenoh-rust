@@ -41,13 +41,14 @@ wildcards = "deny"
 skip = [
 ]
 skip-tree = [
-    { crate = "zenoh@1.9.0", reason = "zenoh notoriously uses multiple different versions of crates" },
+    { crate = "zenoh@1.9.0", reason = "Zenoh notoriously uses multiple different versions of crates" },
     { crate = "protobuf-codegen@3.7.2", reason = "only used as part of the build process" },
 ]
 
 [advisories]
 ignore = [
-    { id = "RUSTSEC-2023-0071", reason = "there currently is no version of the rsa crate available that fixes this vulnerability" },
-    { id = "RUSTSEC-2024-0436", reason = "there is no better alternative of the crate, and the codebase has been stable for a long time" },
-    { id = "RUSTSEC-2025-0134", reason = "zenoh needs to remove its dependency on this crate; based on the RUSTSEC description, there should be no imminent risk involved in the short term" },
+    { id = "RUSTSEC-2023-0071", reason = "There currently is no version of the rsa crate available that fixes this vulnerability" },
+    { id = "RUSTSEC-2024-0436", reason = "The paste crate is no longer maintained; we accept this risk for the time being, until zenoh has replaced it with something else" },
+    { id = "RUSTSEC-2025-0134", reason = "Zenoh needs to remove its dependency on rustl_pemfile; however, based on the RUSTSEC description, there should be no imminent risk involved in the short term" },
+    { id = "RUSTSEC-2026-0041", reason = "The lz4_flex crate is used by Zenoh for compressing data that is transmitted via the network. However, this is an optional feature that needs to be enabled explicitly by clients. This transport does not itself enable compression and logs warning messages if a client enables it." },
 ]

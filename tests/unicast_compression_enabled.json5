@@ -1,0 +1,22 @@
+// This file is used to test behavior when the transport is being created with Zenoh Config that uses
+// compression for unicast.
+{
+  // Configure internal transport parameters
+  transport: {
+    unicast: {
+      // Enables compression on unicast communications.
+      // Compression capabilities are negotiated during session establishment.
+      // If both Zenoh nodes support compression, then compression is activated.
+      compression: {
+        enabled: true,
+      },
+    },
+    multicast: {
+      // Enables compression on multicast communication.
+      // Default to false for Zenoh-to-Zenoh-Pico out-of-the-box compatibility.
+      compression: {
+        enabled: false,
+      },
+    },
+  },
+}
